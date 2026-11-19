@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Snapshot } from '../../../backend/packages/shared/src/protocol';
+import type { Snapshot } from '../../../packages/shared/src/protocol';
 
 test('two browsers receive the room and observe server-confirmed player movement', async ({ page, browser, request }) => {
   expect(await (await request.get('/healthz')).json()).toMatchObject({ status: 'ok' });

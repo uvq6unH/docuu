@@ -7,7 +7,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     browserName: 'chromium',
-    channel: 'chrome',
+    ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}),
     baseURL: 'http://127.0.0.1:5174',
     viewport: { width: 1440, height: 900 },
     screenshot: 'only-on-failure',

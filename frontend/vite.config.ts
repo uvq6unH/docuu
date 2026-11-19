@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const target = env.DEV_SERVER_ORIGIN ?? 'http://127.0.0.1:3001';
   return {
     server: {
-      fs: { allow: ['./', '../packages/shared/maps', '../packages/shared/src', '../backend/packages/shared/src/protocol.ts'].map(path => fileURLToPath(new URL(path, import.meta.url))) },
+      fs: { allow: ['./', '../packages/shared/maps', '../packages/shared/src'].map(path => fileURLToPath(new URL(path, import.meta.url))) },
       port: 5173,
       strictPort: true,
       proxy: {

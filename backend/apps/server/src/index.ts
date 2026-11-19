@@ -3,9 +3,10 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
 import { setupMockServer } from './mock/mockServer.js';
+import { RoomManager } from './rooms/roomManager.js';
 
 const PORT = Number(process.env.PORT) || 3001;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || '*';
 
 const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
@@ -26,8 +27,11 @@ const io = new SocketIOServer(server, {
   },
 });
 
-// Initialize mock snapshot broadcaster for independent client development
+// 1. Initialize Mock snapshot server for independent client / regression development
 const mockServer = setupMockServer(io);
+
+// 2. Initialize Real Room Manager for Lobby (N01) & Tick Simulation (N02)
+const roomManager = new RoomManager(io);
 
 server.listen(PORT, () => {
   console.log(`[Server] Server listening on http://localhost:${PORT}`);

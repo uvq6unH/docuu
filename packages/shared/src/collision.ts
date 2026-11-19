@@ -55,3 +55,48 @@ export function moveCapsule(start: Vec3, delta: Vec3, height: number, world: Sta
   }
   return { pos, grounded, ceiling };
 }
+
+/**
+ * Tests ray intersection against a box using the Slab Method.
+ */
+export function rayIntersectsBox(from: Vec3, to: Vec3, box: MapBox): boolean {
+  let tMin = 0.0;
+  let tMax = 1.0;
+
+  for (let i = 0; i < 3; i++) {
+    const boxMin = box.center[i]! - box.size[i]! / 2;
+    const boxMax = box.center[i]! + box.size[i]! / 2;
+    const p1 = from[i]!;
+    const p2 = to[i]!;
+    const d = p2 - p1;
+
+    if (Math.abs(d) < 1e-9) {
+      if (p1 < boxMin || p1 > boxMax) return false;
+    } else {
+      const invD = 1.0 / d;
+      let t1 = (boxMin - p1) * invD;
+      let t2 = (boxMax - p1) * invD;
+      if (t1 > t2) {
+        const tmp = t1;
+        t1 = t2;
+        t2 = tmp;
+      }
+      tMin = Math.max(tMin, t1);
+      tMax = Math.min(tMax, t2);
+      if (tMin > tMax) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Line of Sight (LOS) raycast against static colliders.
+ * Bushes and hide zones do not block line of sight.
+ */
+export function checkLineOfSight(from: Vec3, to: Vec3, colliders: MapBox[]): boolean {
+  for (const box of colliders) {
+    if (box.id.toLowerCase().includes('bush') || box.id.toLowerCase().includes('_hide')) continue;
+    if (rayIntersectsBox(from, to, box)) return false;
+  }
+  return true;
+}

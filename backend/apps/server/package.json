@@ -8,10 +8,11 @@
     "start": "node dist/index.js",
     "dev": "node dist/index.js",
     "dev:mock": "node dist/index.js --mock",
+    "test": "node --test tests/rooms.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@folk-tag/shared": "*",
+    "@folk-tag/shared": "file:../../../packages/shared",
     "cors": "^2.8.5",
     "express": "^4.21.1",
     "socket.io": "^4.8.1"
@@ -20,6 +21,7 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.1",
+    "socket.io-client": "^4.8.4",
     "typescript": "^5.6.3"
   }
 }

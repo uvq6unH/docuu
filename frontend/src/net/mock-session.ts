@@ -3,7 +3,7 @@ import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, type Scene } from '
 import {
   CLIENT_EVENTS, SERVER_EVENTS, PROTOCOL_VERSION,
   type InputFrame, type RoomState, type Snapshot,
-} from '../../../backend/packages/shared/src/protocol';
+} from '../../../packages/shared/src/protocol';
 import type { InputState } from '../input/state';
 
 export function connectMock(scene: Scene, onSnapshot: (snapshot: Snapshot) => void, onStatus: (message: string) => void) {
