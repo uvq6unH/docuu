@@ -4,6 +4,9 @@ import { readFileSync, existsSync } from 'node:fs';
 import {
   PROTOCOL_VERSION,
   GAME_RULES,
+  GameRules,
+  createGameRules,
+  RULES_VERSION,
   CLIENT_EVENTS,
   SERVER_EVENTS,
   AckResponse,
@@ -51,6 +54,7 @@ export class RoomManager {
   private socketBindings: Map<string, { roomCode: string; playerId: string }> = new Map();
   private rateLimiter: SocketRateLimiter = new SocketRateLimiter();
   private cleanupTimer: NodeJS.Timeout | null = null;
+  private activeRules: GameRules = GAME_RULES;
 
   constructor(io: SocketIOServer, db: DatabaseManager | null = null) {
     this.io = io;
@@ -163,7 +167,7 @@ export class RoomManager {
             const playerId = `p-${randomBytes(4).toString('hex')}`;
             const resumeToken = randomBytes(16).toString('hex');
 
-            const room = new Room(roomCode, playerId, OFFICIAL_MAP_HASH);
+            const room = new Room(roomCode, playerId, OFFICIAL_MAP_HASH, this.activeRules);
             if (this.db) {
               room.setDatabase(this.db);
               this.db.createRoom({
@@ -659,6 +663,24 @@ export class RoomManager {
         p95TickMs: Math.round(p95Tick * 100) / 100,
       },
     };
+  }
+
+  public getRules(): { rulesVersion: number; rules: GameRules } {
+    return { rulesVersion: RULES_VERSION, rules: this.activeRules };
+  }
+
+  public setRules(rules: GameRules): void {
+    this.activeRules = rules;
+  }
+
+  public tuneRules(overrides: Partial<GameRules>): GameRules {
+    this.activeRules = createGameRules({ ...this.activeRules, ...overrides });
+    return this.activeRules;
+  }
+
+  public resetRules(): GameRules {
+    this.activeRules = GAME_RULES;
+    return this.activeRules;
   }
 
   public destroy(): void {

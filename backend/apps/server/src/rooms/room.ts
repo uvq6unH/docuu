@@ -1,6 +1,9 @@
 import { Socket } from 'socket.io';
 import {
   GAME_RULES,
+  GameRules,
+  MovementRules,
+  movementRulesFromGameRules,
   Snapshot,
   PlayerView,
   SelfPlayerView,
@@ -87,24 +90,35 @@ export class Room {
   public matchId: string;
   public mapHash: string;
   public readonly protocolVersion: number = 1;
+  public rules: GameRules;
+  private movementRules: MovementRules;
+  private matchStartedAt: number = 0;
   public players: Map<string, PlayerSession> = new Map();
   public matchResult: MatchResult | null = null;
 
   private simTimer: NodeJS.Timeout | null = null;
   private db: DatabaseManager | null = null;
   private tick: number = 0;
-  private remainingMs: number = GAME_RULES.PHASE_DURATION_PLAYING_MS;
+  private remainingMs: number;
   private monotonicLastTime: number = Date.now();
   private tickDurations: number[] = [];
   private totalTicksCount = 0;
   private maxTickTimeMs = 0;
   private lastTickTimeMs = 0;
 
-  constructor(roomCode: string, hostPlayerId: string, mapHash: string) {
+  constructor(
+    roomCode: string,
+    hostPlayerId: string,
+    mapHash: string,
+    rules: GameRules = GAME_RULES
+  ) {
     this.roomCode = roomCode;
     this.hostId = hostPlayerId;
     this.mapHash = mapHash;
+    this.rules = rules;
+    this.movementRules = movementRulesFromGameRules(rules);
     this.matchId = `match-${roomCode}-${Date.now()}`;
+    this.remainingMs = rules.PHASE_DURATION_PLAYING_MS;
   }
 
   public setDatabase(db: DatabaseManager): void {
@@ -195,17 +209,18 @@ export class Room {
   }
 
   public startMatch(): boolean {
-    if (this.players.size !== GAME_RULES.REQUIRED_PLAYERS) return false;
+    if (this.players.size !== this.rules.REQUIRED_PLAYERS) return false;
     for (const player of this.players.values()) {
       if (!player.ready) return false;
     }
 
     this.matchResult = null;
     this.guardId = null;
+    this.matchStartedAt = Date.now();
 
     // Assign roles: 2 Police, 4 Robbers
     const list = Array.from(this.players.values());
-    const policeCount = GAME_RULES.POLICE_COUNT;
+    const policeCount = this.rules.POLICE_COUNT;
     list.forEach((p, index) => {
       if (index < policeCount) {
         p.role = 'POLICE';
@@ -214,7 +229,7 @@ export class Room {
         if (p.isCaptain) {
           this.captainId = p.id;
         }
-        p.movementState = initialMovement(officialVillageMap.spawns.police[index]!);
+        p.movementState = initialMovement(officialVillageMap.spawns.police[index]!, this.movementRules);
       } else {
         p.role = 'ROBBER';
         p.isCaptain = false;
@@ -226,13 +241,13 @@ export class Room {
         p.rescueNeedsRelease = false;
         p.hideCrouchMs = 0;
         const robberIdx = index - policeCount;
-        p.movementState = initialMovement(officialVillageMap.spawns.robber[robberIdx]!);
+        p.movementState = initialMovement(officialVillageMap.spawns.robber[robberIdx]!, this.movementRules);
       }
     });
 
     this.phase = 'JAIL_SELECTION';
     this.selectedJailId = null;
-    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_JAIL_SELECTION_MS);
+    this.remainingMs = Number(this.rules.PHASE_DURATION_JAIL_SELECTION_MS);
 
     if (this.db) {
       this.db.createMatch({
@@ -266,7 +281,7 @@ export class Room {
 
     this.selectedJailId = jailId;
     this.phase = 'HEAD_START';
-    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_HEAD_START_MS);
+    this.remainingMs = Number(this.rules.PHASE_DURATION_HEAD_START_MS);
     this.db?.updateMatch(this.matchId, { selectedJailId: jailId, phase: 'HEAD_START' });
     const phaseEvent: GameEvent = {
       eventId: `phase-${this.tick}-HEAD_START`,
@@ -286,8 +301,9 @@ export class Room {
     this.selectedJailId = null;
     this.guardId = null;
     this.matchResult = null;
+    this.matchStartedAt = 0;
     this.matchId = `match-${this.roomCode}-${Date.now()}`;
-    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_PLAYING_MS);
+    this.remainingMs = Number(this.rules.PHASE_DURATION_PLAYING_MS);
     this.tick = 0;
 
     for (const session of this.players.values()) {
@@ -376,8 +392,11 @@ export class Room {
   public abortMatch(reason = 'DISCONNECT_TIMEOUT', disconnectedPlayerId?: string): void {
     if (this.phase === 'RESULT') return;
     this.phase = 'RESULT';
-    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+    this.remainingMs = Number(this.rules.PHASE_DURATION_RESULT_MS);
     this.matchResult = { winner: 'ABORTED', reason };
+    const durationSeconds = this.matchStartedAt > 0
+      ? Math.max(0, Math.round((Date.now() - this.matchStartedAt) / 1000))
+      : 0;
     const event: GameEvent = {
       eventId: `abort-${this.tick}-${Date.now()}`,
       tick: this.tick,
@@ -391,6 +410,7 @@ export class Room {
         winner: 'ABORTED',
         winReason: reason,
         endedAt: Date.now(),
+        durationSeconds,
       });
       this.db.recordGameEvent({
         eventId: event.eventId,
@@ -451,7 +471,7 @@ export class Room {
     // 30Hz simulation loop (timestep = 1000/30 ≈ 33.33ms)
     this.simTimer = setInterval(() => {
       this.step();
-    }, GAME_RULES.SIMULATION_TIMESTEP_MS);
+    }, this.rules.SIMULATION_TIMESTEP_MS);
   }
 
   public stop(): void {
@@ -474,7 +494,7 @@ export class Room {
    */
   public step(stepDtMs?: number): void {
     const t0 = performance.now();
-    const dtMs = stepDtMs ?? GAME_RULES.SIMULATION_TIMESTEP_MS;
+    const dtMs = stepDtMs ?? this.rules.SIMULATION_TIMESTEP_MS;
     const now = Date.now();
     this.tick++;
 
@@ -484,7 +504,7 @@ export class Room {
       if (this.phase === 'JAIL_SELECTION') {
         if (!this.selectedJailId) this.selectedJailId = 'J1';
         this.phase = 'HEAD_START';
-        this.remainingMs = Number(GAME_RULES.PHASE_DURATION_HEAD_START_MS);
+        this.remainingMs = Number(this.rules.PHASE_DURATION_HEAD_START_MS);
         this.db?.updateMatch(this.matchId, { selectedJailId: this.selectedJailId, phase: this.phase });
         const phaseEvent: GameEvent = {
           eventId: `phase-${this.tick}-HEAD_START`,
@@ -495,7 +515,7 @@ export class Room {
         this.broadcastEvent(phaseEvent);
       } else if (this.phase === 'HEAD_START') {
         this.phase = 'PLAYING';
-        this.remainingMs = Number(GAME_RULES.PHASE_DURATION_PLAYING_MS);
+        this.remainingMs = Number(this.rules.PHASE_DURATION_PLAYING_MS);
         this.db?.updateMatch(this.matchId, { phase: this.phase });
         const phaseEvent: GameEvent = {
           eventId: `phase-${this.tick}-PLAYING`,
@@ -507,8 +527,11 @@ export class Room {
       } else if (this.phase === 'PLAYING') {
         // Time expired: Robbers win
         this.phase = 'RESULT';
-        this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+        this.remainingMs = Number(this.rules.PHASE_DURATION_RESULT_MS);
         this.matchResult = { winner: 'ROBBER', reason: 'TIME_EXPIRED' };
+        const durationSeconds = this.matchStartedAt > 0
+          ? Math.max(0, Math.round((Date.now() - this.matchStartedAt) / 1000))
+          : 0;
         const resultEvent: GameEvent = {
           eventId: `result-${this.tick}`,
           tick: this.tick,
@@ -522,6 +545,7 @@ export class Room {
             winner: 'ROBBER',
             winReason: 'TIME_EXPIRED',
             endedAt: Date.now(),
+            durationSeconds,
           });
           this.db.recordGameEvent({
             eventId: resultEvent.eventId,
@@ -548,7 +572,7 @@ export class Room {
       if (!session.role) continue;
 
       const isStale =
-        session.socket === null || now - session.lastInputTimestamp > GAME_RULES.INPUT_STALE_TIMEOUT_MS;
+        session.socket === null || now - session.lastInputTimestamp > this.rules.INPUT_STALE_TIMEOUT_MS;
 
       let intent: MovementIntent = {
         moveX: 0,
@@ -560,7 +584,7 @@ export class Room {
       };
 
       if (!isStale && session.inputQueue.length > 0) {
-        const framesToProcess = session.inputQueue.splice(0, GAME_RULES.MAX_CATCHUP_STEPS);
+        const framesToProcess = session.inputQueue.splice(0, this.rules.MAX_CATCHUP_STEPS);
         for (const frame of framesToProcess) {
           if (frame.seq <= session.lastProcessedSeq) continue;
           session.lastProcessedSeq = frame.seq;
@@ -620,7 +644,8 @@ export class Room {
           session.movementState,
           intent,
           session.role as MovementRole,
-          officialVillageMap
+          officialVillageMap,
+          this.movementRules
         );
       }
 
@@ -631,13 +656,13 @@ export class Room {
           !session.movementState.sprinting &&
           isCapsuleInHideZone(
             session.movementState.pos,
-            GAME_RULES.CAPSULE_HEIGHT_CROUCHING,
+            this.rules.CAPSULE_HEIGHT_CROUCHING,
             officialVillageMap.hideZones
           );
 
         if (inZone) {
           session.hideCrouchMs += dtMs;
-          if (session.hideCrouchMs >= GAME_RULES.HIDE_CROUCH_TRIGGER_MS) {
+          if (session.hideCrouchMs >= this.rules.HIDE_CROUCH_TRIGGER_MS) {
             session.state = 'HIDDEN';
           }
         } else {
@@ -652,7 +677,7 @@ export class Room {
       if (session.role === 'POLICE') {
         if (this.phase === 'PLAYING') {
           const dist = getDistanceToJailCenter(session.movementState.pos, activeJail.center);
-          if (dist <= GAME_RULES.GUARD_ZONE_RADIUS_M) {
+          if (dist <= this.rules.GUARD_ZONE_RADIUS_M) {
             if (this.guardId === session.id) {
               session.guard = true;
             } else if (this.guardId === null) {
@@ -681,7 +706,7 @@ export class Room {
               session.movementState.pos = clampPositionOutsideGuardZone(
                 session.movementState.pos,
                 activeJail.center,
-                GAME_RULES.GUARD_ZONE_RADIUS_M
+                this.rules.GUARD_ZONE_RADIUS_M
               );
               session.guard = false;
             }
@@ -738,7 +763,7 @@ export class Room {
     if (this.phase === 'PLAYING') {
       captureAttempts.sort((a, b) => a.policeId.localeCompare(b.policeId));
       const captureCooldownTicks = Math.ceil(
-        GAME_RULES.CAPTURE_COOLDOWN_MS / GAME_RULES.SIMULATION_TIMESTEP_MS
+        this.rules.CAPTURE_COOLDOWN_MS / this.rules.SIMULATION_TIMESTEP_MS
       );
 
       for (const attempt of captureAttempts) {
@@ -781,7 +806,8 @@ export class Room {
             robbers,
             officialVillageMap.colliders,
             activeJail,
-            occupiedSlots
+            occupiedSlots,
+            this.rules
           );
 
           if (
@@ -835,8 +861,11 @@ export class Room {
             );
             if (unjailedRobbers.length === 0) {
               this.phase = 'RESULT';
-              this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+              this.remainingMs = Number(this.rules.PHASE_DURATION_RESULT_MS);
               this.matchResult = { winner: 'POLICE', reason: 'ALL_ROBBERS_JAILED' };
+              const durationSeconds = this.matchStartedAt > 0
+                ? Math.max(0, Math.round((Date.now() - this.matchStartedAt) / 1000))
+                : 0;
               const resultEvent: GameEvent = {
                 eventId: `result-${this.tick}`,
                 tick: this.tick,
@@ -851,6 +880,7 @@ export class Room {
                   winner: 'POLICE',
                   winReason: 'ALL_ROBBERS_JAILED',
                   endedAt: Date.now(),
+                  durationSeconds,
                 });
                 this.db.recordGameEvent({
                   eventId: resultEvent.eventId,
@@ -907,12 +937,13 @@ export class Room {
           const eligibility = checkRescueEligibility(
             rescuerActor,
             activeJail,
-            officialVillageMap.colliders
+            officialVillageMap.colliders,
+            this.rules
           );
 
           if (eligibility.eligible && eligibility.anchorIndex !== undefined) {
             robber.rescueProgressMs += dtMs;
-            if (robber.rescueProgressMs >= GAME_RULES.RESCUE_REQUIRED_HOLD_MS) {
+            if (robber.rescueProgressMs >= this.rules.RESCUE_REQUIRED_HOLD_MS) {
               completedRescuers.push({ session: robber, anchorIndex: eligibility.anchorIndex });
             }
           } else {
@@ -944,7 +975,7 @@ export class Room {
 
             if (releasedSession) {
               releasedSession.state = 'IMMUNE';
-              releasedSession.immuneRemainingMs = Number(GAME_RULES.RESCUE_IMMUNITY_DURATION_MS);
+              releasedSession.immuneRemainingMs = Number(this.rules.RESCUE_IMMUNITY_DURATION_MS);
               releasedSession.timeJailedMs = 0;
               releasedSession.jailSlotIndex = undefined;
               releasedSession.movementState.pos = [...releasePos];
@@ -1021,7 +1052,8 @@ export class Room {
         const canSee = canPoliceSeeRobber(
           session.movementState.pos,
           other.movementState.pos,
-          other.state
+          other.state,
+          this.rules.HIDDEN_VISIBILITY_PROXIMITY_M
         );
         if (!canSee) {
           continue; // Hidden beyond 2m -> omit completely from police snapshot

@@ -71,6 +71,41 @@ export interface GameEventRecord {
   created_at: number;
 }
 
+export interface JailBalanceStat {
+  jailId: string;
+  totalMatches: number;
+  policeWins: number;
+  robberWins: number;
+  policeWinRate: number;
+  robberWinRate: number;
+  avgDurationSeconds: number;
+  avgCaptures: number;
+  avgRescues: number;
+}
+
+export interface BalanceTelemetry {
+  sampleSize: number;
+  completedMatches: number;
+  abortedMatches: number;
+  policeWins: number;
+  robberWins: number;
+  policeWinRate: number;
+  robberWinRate: number;
+  avgDurationSeconds: number;
+  avgCapturesPerMatch: number;
+  avgRescuesPerMatch: number;
+  matchesWithRescuePercent: number;
+  avgFirstCaptureTimeSeconds: number | null;
+  byJail: Record<string, JailBalanceStat>;
+  evaluation: {
+    targetWinRateMet: boolean;
+    firstCaptureTargetMet: boolean;
+    rescueTargetMet: boolean;
+    isBalanced: boolean;
+    recommendations: string[];
+  };
+}
+
 export class DatabaseManager {
   private db: DatabaseSync;
   public readonly path: string;
@@ -463,6 +498,161 @@ export class DatabaseManager {
   public getMatchEvents(matchId: string): GameEventRecord[] {
     const stmt = this.db.prepare('SELECT * FROM game_events WHERE match_id = ? ORDER BY tick ASC, id ASC');
     return stmt.all(matchId) as unknown as GameEventRecord[];
+  }
+
+  // --- Balance Telemetry & Analytics (T01) ---
+
+  public getBalanceStats(): BalanceTelemetry {
+    const allMatches = this.db.prepare('SELECT * FROM matches').all() as unknown as MatchRecord[];
+    const completedMatches = allMatches.filter(
+      (m) => m.phase === 'RESULT' && (m.winner === 'POLICE' || m.winner === 'ROBBER')
+    );
+    const abortedMatches = allMatches.filter((m) => m.winner === 'ABORTED').length;
+
+    const policeWins = completedMatches.filter((m) => m.winner === 'POLICE').length;
+    const robberWins = completedMatches.filter((m) => m.winner === 'ROBBER').length;
+    const completedCount = completedMatches.length;
+
+    const policeWinRate = completedCount > 0 ? Math.round((policeWins / completedCount) * 1000) / 10 : 0;
+    const robberWinRate = completedCount > 0 ? Math.round((robberWins / completedCount) * 1000) / 10 : 0;
+
+    const totalDuration = completedMatches.reduce((acc, m) => acc + (m.duration_seconds || 0), 0);
+    const avgDurationSeconds = completedCount > 0 ? Math.round((totalDuration / completedCount) * 10) / 10 : 0;
+
+    const totalCaptures = completedMatches.reduce((acc, m) => acc + (m.total_captures || 0), 0);
+    const avgCapturesPerMatch = completedCount > 0 ? Math.round((totalCaptures / completedCount) * 10) / 10 : 0;
+
+    const totalRescues = completedMatches.reduce((acc, m) => acc + (m.total_rescues || 0), 0);
+    const avgRescuesPerMatch = completedCount > 0 ? Math.round((totalRescues / completedCount) * 10) / 10 : 0;
+
+    const matchesWithRescue = completedMatches.filter((m) => m.total_rescues > 0).length;
+    const matchesWithRescuePercent = completedCount > 0 ? Math.round((matchesWithRescue / completedCount) * 1000) / 10 : 0;
+
+    // First capture time analysis
+    const firstCapturesStmt = this.db.prepare(`
+      SELECT ge.match_id, MIN(ge.tick) as first_tick, MIN(ge.created_at) as first_capture_time, m.started_at
+      FROM game_events ge
+      JOIN matches m ON ge.match_id = m.match_id
+      WHERE ge.event_type = 'CAPTURE' AND m.phase = 'RESULT' AND m.winner IN ('POLICE', 'ROBBER')
+      GROUP BY ge.match_id
+    `);
+    const firstCaptures = firstCapturesStmt.all() as {
+      match_id: string;
+      first_tick: number;
+      first_capture_time: number;
+      started_at: number;
+    }[];
+
+    let avgFirstCaptureTimeSeconds: number | null = null;
+    if (firstCaptures.length > 0) {
+      const sumTimes = firstCaptures.reduce((acc, fc) => {
+        const timeSec = fc.first_tick > 0 ? fc.first_tick / 30 : Math.max(0, (fc.first_capture_time - fc.started_at) / 1000);
+        return acc + timeSec;
+      }, 0);
+      avgFirstCaptureTimeSeconds = Math.round((sumTimes / firstCaptures.length) * 10) / 10;
+    }
+
+    // Stats by Jail candidate
+    const byJail: Record<string, JailBalanceStat> = {};
+    const jailIds = ['J1', 'J2', 'J3'];
+    for (const jailId of jailIds) {
+      const jailMatches = completedMatches.filter((m) => m.selected_jail_id === jailId);
+      const count = jailMatches.length;
+      const pWins = jailMatches.filter((m) => m.winner === 'POLICE').length;
+      const rWins = jailMatches.filter((m) => m.winner === 'ROBBER').length;
+      const jDuration = jailMatches.reduce((acc, m) => acc + (m.duration_seconds || 0), 0);
+      const jCaptures = jailMatches.reduce((acc, m) => acc + (m.total_captures || 0), 0);
+      const jRescues = jailMatches.reduce((acc, m) => acc + (m.total_rescues || 0), 0);
+
+      byJail[jailId] = {
+        jailId,
+        totalMatches: count,
+        policeWins: pWins,
+        robberWins: rWins,
+        policeWinRate: count > 0 ? Math.round((pWins / count) * 1000) / 10 : 0,
+        robberWinRate: count > 0 ? Math.round((rWins / count) * 1000) / 10 : 0,
+        avgDurationSeconds: count > 0 ? Math.round((jDuration / count) * 10) / 10 : 0,
+        avgCaptures: count > 0 ? Math.round((jCaptures / count) * 10) / 10 : 0,
+        avgRescues: count > 0 ? Math.round((jRescues / count) * 10) / 10 : 0,
+      };
+    }
+
+    // Balance evaluation per GAMEPLAY.md:78
+    const recommendations: string[] = [];
+    let targetWinRateMet = false;
+    let firstCaptureTargetMet = false;
+    let rescueTargetMet = false;
+
+    if (completedCount >= 5) {
+      targetWinRateMet = policeWinRate >= 45 && policeWinRate <= 55;
+      if (policeWinRate > 55) {
+        recommendations.push(
+          'Tỷ lệ thắng Cảnh sát cao (>55%): Giảm tầm bắt 0.15m (CAPTURE_MAX_DISTANCE_M = 1.45) hoặc tăng hồi chiêu bắt (CAPTURE_COOLDOWN_MS = 1300).'
+        );
+      } else if (robberWinRate > 55) {
+        recommendations.push(
+          'Tỷ lệ thắng Cướp cao (>55%): Giảm tốc độ chạy nước rút của cướp 0.3m/s (ROBBER_SPRINT_SPEED = 7.2) hoặc giảm thời gian head start 5s.'
+        );
+      } else {
+        recommendations.push('Tỷ lệ thắng cân bằng trong mục tiêu 45–55%.');
+      }
+
+      if (avgFirstCaptureTimeSeconds !== null) {
+        firstCaptureTargetMet = avgFirstCaptureTimeSeconds >= 30 && avgFirstCaptureTimeSeconds <= 90;
+        if (avgFirstCaptureTimeSeconds < 30) {
+          recommendations.push('Thời gian bắt đầu tiên quá nhanh (<30s): Cân nhắc tăng thời gian trốn hoặc thêm vật cản.');
+        } else if (avgFirstCaptureTimeSeconds > 90) {
+          recommendations.push('Thời gian bắt đầu tiên quá chậm (>90s): Cân nhắc tăng tốc độ đi bộ của cảnh sát.');
+        } else {
+          recommendations.push('Thời gian bắt đầu tiên đạt chuẩn 30–90s.');
+        }
+      }
+
+      rescueTargetMet = matchesWithRescuePercent >= 50;
+      if (!rescueTargetMet) {
+        recommendations.push('Tỷ lệ trận có giải cứu thấp (<50%): Cân nhắc giảm thời gian giữ phím cứu (RESCUE_REQUIRED_HOLD_MS = 1500).');
+      } else {
+        recommendations.push('Tỷ lệ trận có giải cứu đạt chuẩn (≥50%).');
+      }
+
+      // Check jail bias
+      for (const [jId, jStat] of Object.entries(byJail)) {
+        if (jStat.totalMatches >= 3) {
+          if (Math.abs(jStat.policeWinRate - policeWinRate) >= 25) {
+            recommendations.push(
+              `Vị trí nhà giam ${jId} có độ lệch tỷ lệ thắng đáng kể so với trung bình (${jStat.policeWinRate}% vs ${policeWinRate}%).`
+            );
+          }
+        }
+      }
+    } else {
+      recommendations.push(`Cần thêm mẫu chơi thử nghiệm (hiện có ${completedCount} trận completed, khuyến nghị 20–30 trận).`);
+    }
+
+    const isBalanced = targetWinRateMet && (firstCaptureTargetMet || avgFirstCaptureTimeSeconds === null) && rescueTargetMet;
+
+    return {
+      sampleSize: allMatches.length,
+      completedMatches: completedCount,
+      abortedMatches,
+      policeWins,
+      robberWins,
+      policeWinRate,
+      robberWinRate,
+      avgDurationSeconds,
+      avgCapturesPerMatch,
+      avgRescuesPerMatch,
+      matchesWithRescuePercent,
+      avgFirstCaptureTimeSeconds,
+      byJail,
+      evaluation: {
+        targetWinRateMet,
+        firstCaptureTargetMet,
+        rescueTargetMet,
+        isBalanced,
+        recommendations,
+      },
+    };
   }
 
   // --- Teardown / Close / Health ---

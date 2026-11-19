@@ -1,6 +1,6 @@
 import type { MapBox, Vec3, JailCandidate } from './map.ts';
 import type { RobberState, Role } from './protocol.ts';
-import { GAME_RULES } from './rules.ts';
+import { GAME_RULES, type GameRules } from './rules.ts';
 import { checkLineOfSight } from './collision.ts';
 
 export interface CaptureActor {
@@ -40,8 +40,11 @@ export interface CaptureValidationResult {
 export function isRobberCapturable(
   police: CaptureActor,
   robber: CaptureTarget,
-  colliders: MapBox[]
+  colliders: MapBox[],
+  customRules?: GameRules
 ): { capturable: boolean; horizontalDist: number; angleDeg: number; failReason?: string } {
+  const r = customRules ?? GAME_RULES;
+
   // 1. Role & State checks: only non-jailed, non-immune robbers can be captured
   if (robber.role !== 'ROBBER') {
     return { capturable: false, horizontalDist: Infinity, angleDeg: 180, failReason: 'TARGET_NOT_ROBBER' };
@@ -53,21 +56,21 @@ export function isRobberCapturable(
     return { capturable: false, horizontalDist: Infinity, angleDeg: 180, failReason: 'TARGET_IMMUNE' };
   }
 
-  // 2. Horizontal center distance check (<= 1.6m)
+  // 2. Horizontal center distance check (<= 1.6m by default)
   const dx = robber.pos[0] - police.pos[0];
   const dz = robber.pos[2] - police.pos[2];
   const horizontalDist = Math.hypot(dx, dz);
-  if (horizontalDist > GAME_RULES.CAPTURE_MAX_DISTANCE_M) {
+  if (horizontalDist > r.CAPTURE_MAX_DISTANCE_M) {
     return { capturable: false, horizontalDist, angleDeg: 180, failReason: 'DISTANCE_EXCEEDED' };
   }
 
-  // 3. Vertical height difference check (<= 1.0m)
+  // 3. Vertical height difference check (<= 1.0m by default)
   const heightDelta = Math.abs(robber.pos[1] - police.pos[1]);
-  if (heightDelta > GAME_RULES.CAPTURE_MAX_HEIGHT_DELTA_M) {
+  if (heightDelta > r.CAPTURE_MAX_HEIGHT_DELTA_M) {
     return { capturable: false, horizontalDist, angleDeg: 180, failReason: 'HEIGHT_DELTA_EXCEEDED' };
   }
 
-  // 4. Horizontal facing angle check (+/- 55 degrees)
+  // 4. Horizontal facing angle check (+/- 55 degrees by default)
   // Forward unit vector where yaw = 0 points towards -Z
   const fx = -Math.sin(police.yaw);
   const fz = -Math.cos(police.yaw);
@@ -81,13 +84,13 @@ export function isRobberCapturable(
     angleDeg = (Math.acos(clampedDot) * 180) / Math.PI;
   }
 
-  if (angleDeg > GAME_RULES.CAPTURE_MAX_ANGLE_DEG) {
+  if (angleDeg > r.CAPTURE_MAX_ANGLE_DEG) {
     return { capturable: false, horizontalDist, angleDeg, failReason: 'ANGLE_EXCEEDED' };
   }
 
   // 5. Line of sight check (no wall obstruction)
-  const policeEyeY = police.pos[1] + (police.crouch ? GAME_RULES.CAMERA_HEIGHT_CROUCHING : GAME_RULES.CAMERA_HEIGHT_STANDING);
-  const robberCenterY = robber.pos[1] + (robber.crouch ? GAME_RULES.CAPSULE_HEIGHT_CROUCHING : GAME_RULES.CAPSULE_HEIGHT_STANDING) / 2;
+  const policeEyeY = police.pos[1] + (police.crouch ? r.CAMERA_HEIGHT_CROUCHING : r.CAMERA_HEIGHT_STANDING);
+  const robberCenterY = robber.pos[1] + (robber.crouch ? r.CAPSULE_HEIGHT_CROUCHING : r.CAPSULE_HEIGHT_STANDING) / 2;
   const policeEye: Vec3 = [police.pos[0], policeEyeY, police.pos[2]];
   const robberCenter: Vec3 = [robber.pos[0], robberCenterY, robber.pos[2]];
 
@@ -111,7 +114,8 @@ export function validateCapture(
   robbers: CaptureTarget[],
   colliders: MapBox[],
   activeJail: JailCandidate | undefined,
-  occupiedSlotIndices: Set<number> = new Set()
+  occupiedSlotIndices: Set<number> = new Set(),
+  customRules?: GameRules
 ): CaptureValidationResult {
   if (police.role !== 'POLICE') {
     return { valid: false, failReason: 'NOT_POLICE' };
@@ -129,7 +133,7 @@ export function validateCapture(
   const validCandidates: Candidate[] = [];
 
   for (const robber of robbers) {
-    const result = isRobberCapturable(police, robber, colliders);
+    const result = isRobberCapturable(police, robber, colliders, customRules);
     if (result.capturable) {
       validCandidates.push({ target: robber, dist: result.horizontalDist });
     }

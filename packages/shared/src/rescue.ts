@@ -1,6 +1,6 @@
 import type { Vec3, MapBox, JailCandidate } from './map.ts';
 import type { RobberState } from './protocol.ts';
-import { GAME_RULES } from './rules.ts';
+import { GAME_RULES, type GameRules } from './rules.ts';
 import { checkLineOfSight } from './collision.ts';
 import { fitsAt, StaticWorld } from './collision.ts';
 
@@ -47,8 +47,11 @@ export interface RescueEligibilityResult {
 export function checkRescueEligibility(
   rescuer: RescuerActor,
   jail: JailCandidate,
-  colliders: MapBox[]
+  colliders: MapBox[],
+  customRules?: GameRules
 ): RescueEligibilityResult {
+  const r = customRules ?? GAME_RULES;
+
   if (rescuer.role !== 'ROBBER') {
     return { eligible: false, failReason: 'NOT_ROBBER' };
   }
@@ -66,7 +69,7 @@ export function checkRescueEligibility(
   for (let i = 0; i < jail.rescueAnchors.length; i++) {
     const anchor = jail.rescueAnchors[i]!;
     const dist = Math.hypot(rescuer.pos[0] - anchor[0], rescuer.pos[2] - anchor[2]);
-    if (dist <= GAME_RULES.RESCUE_RADIUS_M && dist < bestDist) {
+    if (dist <= r.RESCUE_RADIUS_M && dist < bestDist) {
       bestDist = dist;
       bestAnchorIndex = i;
     }
@@ -93,7 +96,7 @@ export function checkRescueEligibility(
   }
 
   // 3. Line of sight check to the anchor
-  const rescuerEyeY = rescuer.pos[1] + (rescuer.crouch ? GAME_RULES.CAMERA_HEIGHT_CROUCHING : GAME_RULES.CAMERA_HEIGHT_STANDING);
+  const rescuerEyeY = rescuer.pos[1] + (rescuer.crouch ? r.CAMERA_HEIGHT_CROUCHING : r.CAMERA_HEIGHT_STANDING);
   const rescuerEye: Vec3 = [rescuer.pos[0], rescuerEyeY, rescuer.pos[2]];
   const targetPoint: Vec3 = [chosenAnchor[0], chosenAnchor[1] + 0.5, chosenAnchor[2]];
 

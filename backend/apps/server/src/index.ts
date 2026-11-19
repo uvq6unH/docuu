@@ -49,6 +49,33 @@ app.get('/api/metrics', (_req: Request, res: Response) => {
   res.status(200).json(metrics);
 });
 
+// Configurable Rules & Versioning Endpoints (T02)
+app.get('/api/rules', (_req: Request, res: Response) => {
+  const rulesData = roomManager.getRules();
+  res.status(200).json(rulesData);
+});
+
+app.post('/api/rules/tune', (req: Request, res: Response) => {
+  const overrides = req.body?.rules || req.body;
+  if (!overrides || typeof overrides !== 'object') {
+    res.status(400).json({ error: 'Invalid rules object provided' });
+    return;
+  }
+  const updatedRules = roomManager.tuneRules(overrides);
+  res.status(200).json({ ok: true, rules: updatedRules });
+});
+
+app.post('/api/rules/reset', (_req: Request, res: Response) => {
+  const resetRules = roomManager.resetRules();
+  res.status(200).json({ ok: true, rules: resetRules });
+});
+
+// Balance Telemetry & Match Statistics Endpoint (T01)
+app.get('/api/stats/balance', (_req: Request, res: Response) => {
+  const stats = db.getBalanceStats();
+  res.status(200).json(stats);
+});
+
 // REST Endpoints for match statistics and audit logs
 app.get('/api/matches', (_req: Request, res: Response) => {
   const matches = db.getRecentMatches(20);
