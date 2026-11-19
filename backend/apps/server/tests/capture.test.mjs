@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Room } from '../dist/rooms/room.js';
+import { DatabaseManager } from '../dist/db/database.js';
 import { SERVER_EVENTS } from '@folk-tag/shared';
 
 test('G02 Capture: Authoritative Room processes capture, teleports robber to J1, updates jailedCount and broadcasts event', () => {
+  const db = new DatabaseManager(':memory:');
+  db.createRoom({ roomCode: 'TEST01', hostPlayerId: 'p1', mapHash: 'mock-map-hash' });
   const room = new Room('TEST01', 'p1', 'mock-map-hash');
+  db.createMatch({ matchId: room.matchId, roomCode: 'TEST01', mapHash: 'mock-map-hash', selectedJailId: 'J1', phase: 'PLAYING' });
+  room.setDatabase(db);
   room.selectedJailId = 'J1';
   room.phase = 'PLAYING';
 
@@ -151,7 +156,14 @@ test('G02 Capture: Authoritative Room processes capture, teleports robber to J1,
     const resultEvent = events.find((e) => e.type === 'RESULT');
     assert.ok(resultEvent);
     assert.equal(resultEvent.data.winner, 'POLICE');
+
+    // Verify DB recorded all capture events and result
+    const dbEvents = db.getMatchEvents(room.matchId);
+    assert.equal(dbEvents.length, 5); // 4 captures + 1 result
+    assert.equal(dbEvents.filter((e) => e.event_type === 'CAPTURE').length, 4);
+    assert.equal(dbEvents.find((e) => e.event_type === 'RESULT')?.actor_id, null);
   } finally {
     room.stop();
+    db.close();
   }
 });

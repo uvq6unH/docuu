@@ -25,6 +25,7 @@ import {
   GameEvent,
 } from '@folk-tag/shared';
 import { officialVillageMap } from '../mock/mockServer.js';
+import type { DatabaseManager } from '../db/index.js';
 
 export interface PlayerSession {
   id: string;
@@ -61,6 +62,7 @@ export class Room {
   public players: Map<string, PlayerSession> = new Map();
 
   private simTimer: NodeJS.Timeout | null = null;
+  private db: DatabaseManager | null = null;
   private tick: number = 0;
   private remainingMs: number = GAME_RULES.PHASE_DURATION_PLAYING_MS;
   private monotonicLastTime: number = Date.now();
@@ -70,6 +72,10 @@ export class Room {
     this.hostId = hostPlayerId;
     this.mapHash = mapHash;
     this.matchId = `match-${roomCode}-${Date.now()}`;
+  }
+
+  public setDatabase(db: DatabaseManager): void {
+    this.db = db;
   }
 
   public addPlayer(
@@ -165,6 +171,27 @@ export class Room {
     this.phase = 'JAIL_SELECTION';
     this.selectedJailId = null;
     this.remainingMs = Number(GAME_RULES.PHASE_DURATION_JAIL_SELECTION_MS);
+
+    if (this.db) {
+      this.db.createMatch({
+        matchId: this.matchId,
+        roomCode: this.roomCode,
+        mapHash: this.mapHash,
+        selectedJailId: this.selectedJailId,
+        phase: this.phase,
+      });
+      for (const p of this.players.values()) {
+        if (p.role) {
+          this.db.upsertPlayerStat({
+            matchId: this.matchId,
+            playerId: p.id,
+            playerName: p.name,
+            role: p.role,
+          });
+        }
+      }
+    }
+
     this.startSimulation();
     return true;
   }
@@ -178,6 +205,7 @@ export class Room {
     this.selectedJailId = jailId;
     this.phase = 'HEAD_START';
     this.remainingMs = Number(GAME_RULES.PHASE_DURATION_HEAD_START_MS);
+    this.db?.updateMatch(this.matchId, { selectedJailId: jailId, phase: 'HEAD_START' });
     return true;
   }
 
@@ -360,6 +388,20 @@ export class Room {
                 };
                 this.broadcastEvent(captureEvent);
 
+                if (this.db) {
+                  this.db.incrementPlayerCapture(this.matchId, session.id);
+                  this.db.updateRobberState(this.matchId, captureResult.target.id, 'JAILED');
+                  this.db.recordGameEvent({
+                    eventId: captureEvent.eventId,
+                    matchId: this.matchId,
+                    tick: this.tick,
+                    eventType: 'CAPTURE',
+                    actorId: session.id,
+                    targetId: captureResult.target.id,
+                    payload: captureEvent.data,
+                  });
+                }
+
                 // Win check: all robbers jailed
                 const remainingRobbers = Array.from(this.players.values()).filter(
                   (p) => p.role === 'ROBBER' && p.state !== 'JAILED'
@@ -373,6 +415,24 @@ export class Room {
                     data: { winner: 'POLICE', reason: 'ALL_ROBBERS_JAILED' },
                   };
                   this.broadcastEvent(resultEvent);
+
+                  if (this.db) {
+                    this.db.updateMatch(this.matchId, {
+                      phase: 'RESULT',
+                      winner: 'POLICE',
+                      winReason: 'ALL_ROBBERS_JAILED',
+                      endedAt: Date.now(),
+                    });
+                    this.db.recordGameEvent({
+                      eventId: resultEvent.eventId,
+                      matchId: this.matchId,
+                      tick: this.tick,
+                      eventType: 'RESULT',
+                      actorId: null,
+                      targetId: null,
+                      payload: resultEvent.data,
+                    });
+                  }
                 }
               }
             }

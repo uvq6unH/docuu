@@ -9,6 +9,7 @@ import {
   InputFrame,
 } from '@folk-tag/shared';
 import { Room } from './room.js';
+import type { DatabaseManager } from '../db/index.js';
 
 export const OFFICIAL_MAP_HASH = '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
 
@@ -19,14 +20,16 @@ interface DedupeEntry {
 
 export class RoomManager {
   private io: SocketIOServer;
+  private db: DatabaseManager | null = null;
   private rooms: Map<string, Room> = new Map();
   // Request deduplication cache: socketId + requestId -> DedupeEntry
   private dedupeCache: Map<string, DedupeEntry> = new Map();
   // Socket -> { roomCode, playerId }
   private socketBindings: Map<string, { roomCode: string; playerId: string }> = new Map();
 
-  constructor(io: SocketIOServer) {
+  constructor(io: SocketIOServer, db: DatabaseManager | null = null) {
     this.io = io;
+    this.db = db;
     this.startCleanupInterval();
     this.registerSocketHandlers();
   }
@@ -39,6 +42,7 @@ export class RoomManager {
           this.dedupeCache.delete(key);
         }
       }
+      this.db?.cleanExpiredDeduplication();
     }, 30_000);
   }
 
@@ -73,8 +77,27 @@ export class RoomManager {
       return;
     }
 
+    if (this.db) {
+      const persistentCached = this.db.getDeduplication(requestId);
+      if (persistentCached) {
+        try {
+          const parsed = JSON.parse(persistentCached);
+          if (callback) callback(parsed as AckResponse<T>);
+          return;
+        } catch {}
+      }
+    }
+
     const res = action();
     this.dedupeCache.set(key, { response: res, timestamp: Date.now() });
+    if (this.db && res) {
+      this.db.saveDeduplication(
+        requestId,
+        (res as any).roomCode || '',
+        JSON.stringify(res),
+        GAME_RULES.REQUEST_DEDUPLICATION_TTL_MS
+      );
+    }
     if (callback) callback(res);
   }
 
@@ -109,6 +132,22 @@ export class RoomManager {
             const resumeToken = randomBytes(16).toString('hex');
 
             const room = new Room(roomCode, playerId, OFFICIAL_MAP_HASH);
+            if (this.db) {
+              room.setDatabase(this.db);
+              this.db.createRoom({
+                roomCode,
+                hostPlayerId: playerId,
+                mapHash: OFFICIAL_MAP_HASH,
+                protocolVersion: PROTOCOL_VERSION,
+              });
+              this.db.upsertPlayer({
+                id: playerId,
+                roomCode,
+                name: payload.name.trim(),
+                isHost: true,
+                resumeToken,
+              });
+            }
             this.rooms.set(roomCode, room);
 
             room.addPlayer(playerId, payload.name.trim(), socket, resumeToken, true);
@@ -167,6 +206,16 @@ export class RoomManager {
             room.addPlayer(playerId, payload.name.trim(), socket, resumeToken, false);
             this.socketBindings.set(socket.id, { roomCode: code, playerId });
 
+            if (this.db) {
+              this.db.upsertPlayer({
+                id: playerId,
+                roomCode: code,
+                name: payload.name.trim(),
+                isHost: false,
+                resumeToken,
+              });
+            }
+
             this.broadcastRoomState(room);
 
             return {
@@ -207,6 +256,17 @@ export class RoomManager {
             }
 
             room.setReady(binding.playerId, Boolean(payload.ready));
+            const p = room.players.get(binding.playerId);
+            if (p && this.db) {
+              this.db.upsertPlayer({
+                id: p.id,
+                roomCode: room.roomCode,
+                name: p.name,
+                ready: p.ready,
+                isHost: p.isHost,
+                resumeToken: p.resumeToken,
+              });
+            }
             this.broadcastRoomState(room);
             return { ok: true };
           });
@@ -235,6 +295,10 @@ export class RoomManager {
                 code: 'NOT_READY',
                 message: 'Requires exactly 6 ready players to start',
               };
+            }
+
+            if (this.db) {
+              this.db.updateRoom(room.roomCode, { phase: room.phase, captainId: room.captainId });
             }
 
             this.broadcastRoomState(room);
@@ -284,10 +348,12 @@ export class RoomManager {
             const room = this.rooms.get(binding.roomCode);
             if (room) {
               room.removePlayer(binding.playerId);
+              this.db?.removePlayer(binding.playerId);
               if (room.players.size > 0) {
                 this.broadcastRoomState(room);
               } else {
                 this.rooms.delete(binding.roomCode);
+                this.db?.closeRoom(binding.roomCode);
               }
             }
 

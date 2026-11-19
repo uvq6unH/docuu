@@ -5,15 +5,17 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ClientIO } from 'socket.io-client';
 import { RoomManager, OFFICIAL_MAP_HASH } from '../dist/rooms/roomManager.js';
+import { DatabaseManager } from '../dist/db/database.js';
 import { PROTOCOL_VERSION, CLIENT_EVENTS, SERVER_EVENTS } from '@folk-tag/shared';
 
 function createTestServer(port) {
   const app = express();
   const server = http.createServer(app);
   const io = new SocketIOServer(server, { cors: { origin: '*' } });
-  const roomManager = new RoomManager(io);
+  const db = new DatabaseManager(':memory:');
+  const roomManager = new RoomManager(io, db);
   return new Promise((resolve) => {
-    server.listen(port, () => resolve({ server, io, roomManager }));
+    server.listen(port, () => resolve({ server, io, roomManager, db }));
   });
 }
 
@@ -26,7 +28,7 @@ function connectClient(port) {
 
 test('N01 Room Lifecycle & Isolation test suite', async () => {
   const port = 3098;
-  const { server, io, roomManager } = await createTestServer(port);
+  const { server, io, roomManager, db } = await createTestServer(port);
 
   const client1 = connectClient(port);
   const client2 = connectClient(port);
@@ -52,6 +54,16 @@ test('N01 Room Lifecycle & Isolation test suite', async () => {
   assert.equal(createAck.roomCode.length, 6);
   assert.equal(typeof createAck.playerId, 'string');
   assert.equal(typeof createAck.resumeToken, 'string');
+
+  // Verify persistence in SQLite DB
+  const persistedRoom = db.getRoom(createAck.roomCode);
+  assert.ok(persistedRoom);
+  assert.equal(persistedRoom.room_code, createAck.roomCode);
+  assert.equal(persistedRoom.host_player_id, createAck.playerId);
+  const persistedPlayer = db.getPlayer(createAck.playerId);
+  assert.ok(persistedPlayer);
+  assert.equal(persistedPlayer.name, 'Alice');
+  assert.equal(persistedPlayer.is_host, 1);
 
   // 2. Request deduplication
   let dupeAck;
@@ -167,6 +179,7 @@ test('N01 Room Lifecycle & Isolation test suite', async () => {
   // 10. Clean up
   client1.disconnect();
   client2.disconnect();
+  io.close();
+  db.close();
   await new Promise((resolve) => server.close(resolve));
-  process.exit(0);
 });
