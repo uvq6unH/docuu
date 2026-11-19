@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#263d30" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Cảnh sát bắt cướp — Sân thử frontend</title>
+  </head>
+  <body>
+    <main id="app">
+      <div id="viewport" aria-label="Sân thử 3D"></div>
+      <header class="masthead">
+        <a class="wordmark" href="/">Cảnh sát<br /><strong>bắt cướp</strong></a>
+        <span class="scene-label">Sân thử frontend · Offline</span>
+      </header>
+      <section class="panel" aria-labelledby="scene-title">
+        <h1 id="scene-title">Làng Bắc Bộ</h1>
+        <p>Nhìn quanh làng để khảo sát nhà, ngõ và ba vị trí nhà giam.</p>
+        <p class="notice">Sân tập offline · Vai cướp</p>
+        <button id="enter" type="button">Vào sân tập</button>
+        <p id="status" role="status" aria-live="polite">Đang chuẩn bị cảnh 3D…</p>
+        <dl class="controls">
+          <div><dt>Chuột</dt><dd>Nhìn quanh</dd></div>
+          <div><dt>Esc</dt><dd>Thả chuột</dd></div>
+          <div><dt>W A S D</dt><dd>Di chuyển</dd></div>
+          <div><dt>Shift / Space</dt><dd>Chạy / Nhảy</dd></div>
+          <div><dt>C hoặc Ctrl</dt><dd>Cúi người</dd></div>
+        </dl>
+      </section>
+      <div class="crosshair" aria-hidden="true" hidden></div>
+      <footer><span id="stamina">Thể lực 100/100</span><output id="debug" hidden aria-label="Input debug"></output></footer>
+      <noscript>Cần bật JavaScript để hiển thị sân thử 3D.</noscript>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+

@@ -15,6 +15,7 @@ Game dân gian Việt Nam, multiplayer FPS trên trình duyệt, đồ họa low
 |---|---|
 | [GAMEPLAY.md](GAMEPLAY.md) | Luật, thông số, state machine, cân bằng |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Stack, client/server, cấu trúc code, đồng bộ |
+| [BACKEND_FE_HANDOFF.md](BACKEND_FE_HANDOFF.md) | Chuẩn map/movement đã chốt và thứ tự bàn giao backend cho FE |
 | [NETWORK_PROTOCOL.md](NETWORK_PROTOCOL.md) | Hợp đồng API/event để hai người code độc lập |
 | [MAP_AND_ASSETS.md](MAP_AND_ASSETS.md) | Tọa độ map, Blender, asset, collider |
 | [ROADMAP.md](ROADMAP.md) | 8 tuần, chia việc, tiêu chí nghiệm thu |

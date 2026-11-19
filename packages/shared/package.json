@@ -1,0 +1,20 @@
+{
+  "name": "@folk-tag/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./movement": { "types": "./dist/movement.d.ts", "import": "./dist/movement.js" },
+    "./rules": { "types": "./dist/rules.d.ts", "import": "./dist/rules.js" },
+    "./collision": { "types": "./dist/collision.d.ts", "import": "./dist/collision.js" },
+    "./map": { "types": "./dist/map.d.ts", "import": "./dist/map.js" },
+    "./maps/village-v1.json": "./maps/village-v1.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": { "typescript": "6.0.3" }
+}
+

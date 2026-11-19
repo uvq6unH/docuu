@@ -1,0 +1,57 @@
+# Bàn giao backend để ghép với frontend
+
+## Quyết định ngày 19/11/2026
+
+Nhóm chọn **map, va chạm và mô phỏng di chuyển của sân tập FE** làm bản chuẩn cho cả hai phía. Server vẫn quyết định toàn bộ trạng thái trận. Protocol v1 mà FE đang dùng với F06 tiếp tục là hợp đồng mạng. Bản backend đã đối chiếu là commit `66695d1`. Các bước bên dưới là việc cần triển khai.
+
+| Thành phần | Nguồn chuẩn từ gốc repo | Cách dùng |
+|---|---|---|
+| Bản đồ | [village-v1.json](packages/shared/maps/village-v1.json), [map.ts](packages/shared/src/map.ts) | Đọc bytes, tính SHA-256, parse JSON rồi gọi `validateMap`. Tọa độ theo mét, Y hướng lên. Slots và anchors ở tọa độ thế giới. |
+| Mô phỏng | [movement.ts](packages/shared/src/movement.ts), [collision.ts](packages/shared/src/collision.ts), [rules.ts](packages/shared/src/rules.ts) | Khởi tạo bằng `initialMovement(spawn)`. Mỗi tick gọi `stepMovement(state, intent, assignedRole, map)`; vai trò lấy từ phiên phía server. |
+| Hợp đồng mạng | [protocol.ts](backend/packages/shared/src/protocol.ts), [NETWORK_PROTOCOL.md](NETWORK_PROTOCOL.md) | Giữ tên event, đơn vị, mã lỗi và các trường ack. FE đang import module protocol trực tiếp. Khi di chuyển module, cập nhật cả hai import trong cùng thay đổi. |
+| Kiểm tra FE hiện có | [Mock session](frontend/src/net/mock-session.ts), [test hai client](frontend/tests/backend/mock.spec.ts) | MOCK01 là môi trường phát triển. Giữ đường chạy này trong lúc xây server phòng thật. |
+
+Hash chuẩn của file ở lần bàn giao này là `575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba`. Hash lúc chạy phải lấy từ bytes thực tế. Có thể kiểm tra bằng `Get-FileHash packages/shared/maps/village-v1.json -Algorithm SHA256` từ thư mục gốc.
+
+## 1. Việc đầu tiên của backend — thống nhất shared và map
+
+- Hai package hiện cùng tên `@folk-tag/shared`. Chuyển dần các consumer sang một package chung ở gốc; giữ các export protocol, hằng số phase, LOS và tiện ích server đang cần. Tách hàm hash dùng Node crypto ra khỏi entry point trình duyệt. Chuyển script build/test để checkout sạch build được shared trước server.
+- Đổi chỗ đọc map và validate trong backend sang file chính thức. Map có 39 vật thể (10 nhà, 15 cây, 4 rơm, 6 bụi, 4 rào), 29 collider, 10 hide zone, 3 ứng viên nhà giam, 6 spawn. Dùng ID theo JSON, gồm hậu tố `_box` và `_hide`. Biên sân tính từ `size`. Sáu bụi có thể tích 2 × 1,1 × 2 m theo X/Y/Z. Collider nhà giam đang hoạt động được server bổ sung theo phase.
+- Adapter input đổi `jumpId` mới thành `jumpPressed` đúng một tick. Giữ `MovementState` giữa các tick, gồm vận tốc dọc, grounded, crouched, stamina, exhausted và số tick chờ hồi. Không lấy tọa độ, thời gian bước hay role từ client.
+- Nghiệm thu bằng cùng một chuỗi input cho hai vai trên cùng spawn và map. So vị trí, vận tốc dọc, grounded và stamina từng tick, gồm nhảy rào, cúi dưới trần và chạy kiệt sức. So hash hai đầu, chạy test map/movement hiện có. Sau khi toàn bộ consumer chuyển xong mới gỡ bản trùng.
+
+## 2. N01 — mở đường cho lobby N03
+
+1. Tách chế độ server phòng thật khỏi lệnh `dev:mock`. Implement `room:create/join/leave/ready/start` và `room:state` theo bảng payload trong protocol. Trả ack qua Socket.IO callback. Chốt fixture ack create/join với FE ngay từ đầu vì tài liệu đặt thông tin phòng ở cấp ngoài còn type AckResponse có trường data tùy chọn.
+2. Room code sáu ký tự, tối đa sáu người, playerId ổn định theo phiên, host và roster do server quản lý. Kiểm tra version lúc create/join và mapHash lúc ready; trả VERSION_MISMATCH hoặc MAP_MISMATCH khi sai. Dedupe requestId 60 giây. Chỉ host được start khi đủ sáu người sẵn sàng.
+3. Nghiệm thu bằng hai phòng tách biệt, người thứ bảy bị từ chối, rời rồi vào lại không trùng ID, gửi lại cùng requestId chỉ có một hiệu ứng. Kiểm tra host/start, ready sai hash và join sai version. Bàn giao cho FE một lệnh chạy, một ví dụ ack thành công/lỗi và một room:state thực. **Đây là thời điểm FE nối lobby N03.**
+
+## 3. N02 — đồng bộ vị trí để FE làm N04
+
+- Handler `game:input` validate frame và lưu input theo phiên. Mô phỏng chạy bằng đồng hồ monotonic 30 Hz; phát snapshot theo phòng 15 Hz. Xử lý tối đa năm bước bù mỗi lượt, bỏ seq cũ, xóa input giữ phím quá 250 ms, xử lý mỗi jumpId/captureId mới tối đa một lần. Trả ack của input đã xử lý.
+- Snapshot chứa self, role, pos, vel, stamina và danh sách người khác được phép nhìn. Kiểm tra hai client nhận cùng chuyển động và không tăng quãng đường khi tăng tần suất gửi. Test đứng yên sau mất input, gói trùng, gói đảo thứ tự, rời phòng và dọn timer.
+- Trước prediction, hai đội đối chiếu việc khôi phục MovementState từ snapshot, nhất là exhausted và thời gian hồi stamina. Nếu cần thêm trường, cập nhật type, tài liệu và test tương thích trong cùng PR. **FE nghiệm thu N04 bằng hai client, ack, replay và nội suy; mock hiện nay chỉ kiểm tra đường truyền.**
+
+## 4. Các bước sau khi lobby và tick đã chạy
+
+| Ticket backend | Bàn giao để FE ghép | Nghiệm thu |
+|---|---|---|
+| G01/G02 | Pha chọn jail, head start, đồng hồ, bắt, giam, kết quả | 2 cảnh sát/4 cướp; captain chọn trong 20 s, head start 15 s, trận 5 phút. Snapshot cung cấp jailId theo vai/pha; FE vẽ jail tại tâm tương ứng. |
+| R01/R02 | Tiến độ cứu, miễn bắt, canh và dữ liệu hiển thị theo người nhận | Giữ E 2 s ở anchor hợp lệ, miễn bắt 3 s, tối đa một người canh. Kiểm tra biên nhìn thấy của người ẩn và bỏ vị trí khỏi mọi kênh gửi cho đối thủ ngoài tầm. |
+| R03/G05 | Resume token xoay vòng, snapshot đầy đủ, kết quả và rematch | Thử reconnect theo grace 30 s; giữ playerId, xóa input cũ. Chơi đủ sáu người rồi quay về lobby. |
+
+## Chạy kiểm tra từ thư mục gốc
+
+```powershell
+npm --prefix packages/shared ci
+npm --prefix packages/shared run typecheck
+npm --prefix packages/shared test
+npm --prefix packages/shared run build
+npm --prefix backend ci
+npm --prefix backend run build
+npm --prefix backend run typecheck
+npm --prefix frontend ci
+npm --prefix frontend run test:backend
+```
+
+Bài cuối dùng Chrome, tự mở backend và FE ở cổng 3017 và 5175 để kiểm tra F06. Khi bàn giao N01/N02, bổ sung integration test riêng cho server thật và giữ bài mock làm hồi quy. Bảng ticket và tiêu chí gốc nằm ở [BACKLOG.md](BACKLOG.md) và [TESTING.md](TESTING.md).
