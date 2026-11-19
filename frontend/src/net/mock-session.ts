@@ -6,7 +6,10 @@ import {
 } from '../../../packages/shared/src/protocol';
 import type { InputState } from '../input/state';
 
-export function connectMock(scene: Scene, onSnapshot: (snapshot: Snapshot) => void, onStatus: (message: string) => void) {
+export function connectMock(
+  scene: Scene, onSnapshot: (snapshot: Snapshot) => void,
+  onStatus: (message: string) => void, onRoom: (room: RoomState | null) => void,
+) {
   const socket = io({ autoConnect: false });
   const group = new Group();
   scene.add(group);
@@ -26,16 +29,19 @@ export function connectMock(scene: Scene, onSnapshot: (snapshot: Snapshot) => vo
     seq = jumpId = captureId = 0;
     group.clear();
     markers.clear();
+    onRoom(null);
     onStatus(message);
   }
   socket.on('disconnect', () => reset('Đã mất kết nối backend thử nghiệm.'));
   socket.on('connect_error', () => reset('Chưa kết nối được backend thử nghiệm. Đang thử lại…'));
   socket.on(SERVER_EVENTS.ROOM_STATE, (room: RoomState) => {
-    if (room?.protocolVersion !== PROTOCOL_VERSION || room.mapHash !== 'mock-map-hash' || room.roomCode !== 'MOCK01') {
+    if (room?.protocolVersion !== PROTOCOL_VERSION || room.roomCode !== 'MOCK01' || !Array.isArray(room.roster) ||
+        room.mapHash !== 'mock-map-hash') {
       socket.disconnect();
       reset('Backend này không phải phòng thử MOCK01 phiên bản 1.');
       return;
     }
+    onRoom(room);
     roomReady = true;
   });
   socket.on(SERVER_EVENTS.GAME_SNAPSHOT, (snapshot: Snapshot) => {

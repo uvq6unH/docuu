@@ -45,3 +45,9 @@ output { font-variant-numeric: tabular-nums; }
   .scene-label { max-width: 145px; }
 }
 fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fieldset label { display: block; font-size: 13px; margin: 4px 0; }
+
+.room-details { margin-top: 1rem; border-top: 1px solid #aab5a5; padding-top: .75rem; }
+.room-details summary { cursor: pointer; font-weight: 600; }
+.room-details ul { padding-left: 1.3rem; font-size: 13px; }
+.room-details p { margin-bottom: .25rem; }
+.room-details code { overflow-wrap: anywhere; }

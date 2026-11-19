@@ -72,14 +72,17 @@ try {
     link.textContent = mockMode ? 'Về sân offline' : 'Kết nối backend thử nghiệm';
     requireElement('.notice').after(link);
   }
+  let disposeRoomDetails: (() => void) | undefined;
   if (mockMode) {
     world.setServerJail(null);
     ready = 'Đang chờ snapshot đầu tiên…';
     button.disabled = true;
     requireElement('.scene-label').textContent = 'Backend thử nghiệm · MOCK01';
     requireElement('.notice').textContent = 'WASD để đi, C để cúi. Server thử nghiệm điều khiển vị trí.';
-    void import('./net/mock-session').then(({ connectMock }) => {
+    void Promise.all([import('./net/mock-session'), import('./net/room-details')]).then(([{ connectMock }, { mountRoomDetails }]) => {
       if (disposed) return;
+      const details = mountRoomDetails(requireElement('.panel'));
+      disposeRoomDetails = details.dispose;
       mock = connectMock(scene, snapshot => {
         world.setServerJail(snapshot.jailId);
         const self = snapshot.self;
@@ -103,7 +106,7 @@ try {
         ready = message;
         status.textContent = message;
         requireElement('.scene-label').textContent = 'Backend thử nghiệm · Mất kết nối';
-      });
+      }, details.update);
     }).catch(() => { status.textContent = 'Không tải được kết nối backend thử nghiệm.'; });
   }
   container.setAttribute('aria-busy', 'true');
@@ -162,6 +165,7 @@ try {
     disposed = true;
     removePreview?.();
     mock?.dispose();
+    disposeRoomDetails?.();
     controls.dispose();
     button.removeEventListener('click', enter);
     observer.disconnect();
