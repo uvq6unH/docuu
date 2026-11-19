@@ -1,5 +1,5 @@
 import mapUrl from '../../../packages/shared/maps/village-v1.json?url';
-import type { RoomState } from '../../../backend/packages/shared/src/protocol';
+import type { RoomState } from '../../../packages/shared/src/protocol';
 
 async function readMapDigest() {
   const response = await fetch(mapUrl);

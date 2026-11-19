@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import type { RoomState } from '../../../backend/packages/shared/src/protocol';
+import type { RoomState } from '../../../packages/shared/src/protocol';
 import { mountRoomDetails } from '../../src/net/room-details';
 
 afterEach(() => vi.unstubAllGlobals());
