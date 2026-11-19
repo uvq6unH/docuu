@@ -1,9 +1,13 @@
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DatabaseManager } from '../db/database.js';
 
-export function runPlaytestSimulation(matchCount = 25): void {
-  console.log(`[Simulation] Starting ${matchCount} automated playtest matches across jails J1, J2, J3...`);
+export function runPlaytestSimulation(matchCount = 25, dbPath?: string): void {
+  const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+  const targetDbPath = dbPath || (process.env.PERSIST_SIMULATION === 'true' ? resolve(packageRoot, 'data', 'folk_tag.db') : ':memory:');
+  console.log(`[Simulation] Starting ${matchCount} automated playtest matches across jails J1, J2, J3... (Target DB: ${targetDbPath})`);
 
-  const db = new DatabaseManager(':memory:');
+  const db = new DatabaseManager(targetDbPath);
   const jails = ['J1', 'J2', 'J3'];
 
   for (let i = 1; i <= matchCount; i++) {
