@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/socket.io': { target, ws: true },
         '/healthz': { target },
+        '/api': { target },
       },
     },
     test: {

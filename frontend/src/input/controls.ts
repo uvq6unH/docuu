@@ -3,7 +3,7 @@ import { applyLook, InputState } from './state';
 
 const CONTROL_KEYS = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ShiftLeft', 'ShiftRight', 'ControlLeft',
-  'ControlRight', 'KeyC', 'KeyE', 'Space',
+  'ControlRight', 'KeyC', 'KeyE', 'KeyF', 'Space',
 ]);
 
 export type ControlsOptions = {

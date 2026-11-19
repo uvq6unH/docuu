@@ -28,7 +28,7 @@ export class InputState {
       moveZ: axis('KeyW', 'KeyS'),
       sprint: this.held.has('ShiftLeft') || this.held.has('ShiftRight'),
       crouch: this.held.has('KeyC') || this.held.has('ControlLeft') || this.held.has('ControlRight'),
-      rescueHeld: this.held.has('KeyE'),
+      rescueHeld: this.held.has('KeyE') || this.held.has('KeyF'),
       jumpPressed: this.jumpPressed,
       capturePressed: this.capturePressed,
     };

@@ -1,7 +1,7 @@
 import mapUrl from '../../../packages/shared/maps/village-v1.json?url';
 import type { RoomState } from '../../../packages/shared/src/protocol';
 
-async function readMapDigest() {
+export async function readMapDigest() {
   const response = await fetch(mapUrl);
   if (!response.ok) throw new Error('Map unavailable');
   const digest = await crypto.subtle.digest('SHA-256', await response.arrayBuffer());

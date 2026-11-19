@@ -208,8 +208,9 @@ export class Room {
     return true;
   }
 
-  public startMatch(): boolean {
-    if (this.players.size !== this.rules.REQUIRED_PLAYERS) return false;
+  public startMatch(allowPartialRoster = true): boolean {
+    const minPlayers = allowPartialRoster ? 2 : this.rules.REQUIRED_PLAYERS;
+    if (this.players.size < minPlayers || this.players.size > this.rules.REQUIRED_PLAYERS) return false;
     for (const player of this.players.values()) {
       if (!player.ready) return false;
     }
@@ -218,9 +219,12 @@ export class Room {
     this.guardId = null;
     this.matchStartedAt = Date.now();
 
-    // Assign roles: 2 Police, 4 Robbers
+    // Assign roles: For 6 players: 2 Police, 4 Robbers. For 2-5 players: at least 1 Police, rest Robbers.
     const list = Array.from(this.players.values());
-    const policeCount = this.rules.POLICE_COUNT;
+    const policeCount =
+      this.players.size === this.rules.REQUIRED_PLAYERS
+        ? this.rules.POLICE_COUNT
+        : Math.max(1, Math.min(this.rules.POLICE_COUNT, Math.floor(this.players.size / 3) || 1));
     list.forEach((p, index) => {
       if (index < policeCount) {
         p.role = 'POLICE';

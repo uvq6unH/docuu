@@ -342,12 +342,12 @@ export class RoomManager {
               return { ok: false, code: 'NOT_HOST', message: 'Only room host can start the game' };
             }
 
-            const success = room.startMatch();
+            const success = room.startMatch(true);
             if (!success) {
               return {
                 ok: false,
                 code: 'NOT_READY',
-                message: 'Requires exactly 6 ready players to start',
+                message: 'Requires at least 2 ready players (and all players ready) to start',
               };
             }
 

@@ -5,34 +5,102 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#263d30" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Cảnh sát bắt cướp — Sân thử frontend</title>
+    <title>Cảnh sát bắt cướp — Multiplayer FPS</title>
   </head>
   <body>
     <main id="app">
       <div id="viewport" aria-label="Sân thử 3D"></div>
+      
+      <!-- In-game HUD overlay (visible during match) -->
+      <div id="hud-overlay" class="hud-overlay" hidden>
+        <div class="hud-card"><span class="hud-time" id="hud-timer">05:00</span> · <span id="hud-phase">LOBBY</span></div>
+        <div class="hud-card" id="hud-role-card">Vai trò: <span id="hud-role">Chờ trận</span></div>
+        <div class="hud-card" id="hud-jail-card">Nhà giam: <span id="hud-jail">J1</span> · Bị giam: <span id="hud-jailed-count">0/4</span></div>
+        <div class="hud-card hud-stealth" id="hud-stealth-card" hidden>🌿 ĐANG ẨN NẤP (TÀNG HÌNH)</div>
+        <div class="hud-card hud-immune" id="hud-immune-card" hidden>🛡️ MIỄN NHIỄM: <span id="hud-immune-sec">3.0</span>s</div>
+      </div>
+
+      <!-- In-game event notification toast -->
+      <div id="event-toast" class="event-toast" hidden></div>
+
       <header class="masthead">
         <a class="wordmark" href="/">Cảnh sát<br /><strong>bắt cướp</strong></a>
-        <span class="scene-label">Sân thử frontend · Offline</span>
+        <span class="scene-label">Máy chủ: Đang kết nối…</span>
       </header>
+
       <section class="panel" aria-labelledby="scene-title">
-        <h1 id="scene-title">Làng Bắc Bộ</h1>
-        <p>Nhìn quanh làng để khảo sát nhà, ngõ và ba vị trí nhà giam.</p>
-        <p class="notice">Sân tập offline · Vai cướp</p>
-        <button id="enter" type="button">Vào sân tập</button>
-        <p id="status" role="status" aria-live="polite">Đang chuẩn bị cảnh 3D…</p>
+        <h1 id="scene-title">Cảnh sát bắt cướp</h1>
+        <p class="notice">Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp</p>
+        
+        <!-- Tab Menu: Chưa vào phòng -->
+        <div id="menu-view">
+          <div class="lobby-form">
+            <label for="player-name" style="font-size: 13px; font-weight: 600;">Tên của bạn:</label>
+            <input id="player-name" type="text" maxlength="20" placeholder="Nhập tên người chơi..." />
+            
+            <button id="btn-create-room" type="button" class="btn-ready">Tạo phòng mới (Chủ phòng)</button>
+            
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <input id="join-room-code" type="text" maxlength="6" placeholder="Mã 6 chữ (VD: ABCDEF)" style="text-transform: uppercase; font-family: monospace; font-weight: 700; width: 60%;" />
+              <button id="btn-join-room" type="button" class="btn-secondary" style="width: 40%;">Vào phòng</button>
+            </div>
+            
+            <div class="lobby-actions">
+              <button id="btn-mock-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Thử nhanh MOCK01</button>
+              <button id="btn-offline-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Sân tập offline</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Room View: Đã vào phòng -->
+        <div id="room-view" hidden>
+          <div class="room-badge">
+            <span>Phòng: <strong class="badge-code" id="display-room-code">------</strong></span>
+            <button id="btn-copy-code" type="button" style="width: auto; padding: 4px 8px; font-size: 11px;">Sao chép mã</button>
+          </div>
+          
+          <ul class="roster-list" id="roster-list"></ul>
+
+          <!-- Captain Jail Selection UI in JAIL_SELECTION phase -->
+          <div id="captain-jail-picker" class="jail-picker" hidden>
+            <p style="font-size: 13px; font-weight: 700; color: #2876c9; margin-bottom: 4px;">👮 Bạn là Đội trưởng Cảnh sát! Chọn nhà giam:</p>
+            <button type="button" class="jail-btn" data-jail="J1">Chọn J1 (Trung tâm làng)</button>
+            <button type="button" class="jail-btn" data-jail="J2">Chọn J2 (Khu chuồng trại phía Tây)</button>
+            <button type="button" class="jail-btn" data-jail="J3">Chọn J3 (Bìa rừng phía Đông)</button>
+          </div>
+
+          <!-- Room Action Buttons -->
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+            <button id="btn-toggle-ready" type="button" class="btn-ready">Sẵn sàng</button>
+            <button id="btn-start-game" type="button" class="btn-ready" hidden>Bắt đầu trận đấu</button>
+            <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại ván mới (Rematch)</button>
+            <button id="btn-leave-room" type="button" class="btn-danger" style="padding: 8px 12px; font-size: 12px;">Rời phòng</button>
+          </div>
+        </div>
+
+        <button id="enter" type="button" style="margin-top: 14px;">Vào sân tập 3D</button>
+        <p id="status" role="status" aria-live="polite">Đang khởi tạo...</p>
+
         <dl class="controls">
           <div><dt>Chuột</dt><dd>Nhìn quanh</dd></div>
-          <div><dt>Esc</dt><dd>Thả chuột</dd></div>
+          <div><dt>Esc</dt><dd>Thả chuột / Menu</dd></div>
           <div><dt>W A S D</dt><dd>Di chuyển</dd></div>
-          <div><dt>Shift / Space</dt><dd>Chạy / Nhảy</dd></div>
-          <div><dt>C hoặc Ctrl</dt><dd>Cúi người</dd></div>
+          <div><dt>Shift</dt><dd>Chạy nhanh (Tốn thể lực)</dd></div>
+          <div><dt>Space</dt><dd>Nhảy vượt rào</dd></div>
+          <div><dt>C</dt><dd>Cúi / Nấp rơm (Tàng hình)</dd></div>
+          <div><dt>Chuột trái</dt><dd>Bắt cướp (Cảnh sát)</dd></div>
+          <div><dt>Giữ F hoặc E</dt><dd>Cứu cướp (2 giây)</dd></div>
         </dl>
       </section>
+
       <div class="crosshair" aria-hidden="true" hidden></div>
-      <footer><span id="stamina">Thể lực 100/100</span><output id="debug" hidden aria-label="Input debug"></output></footer>
-      <noscript>Cần bật JavaScript để hiển thị sân thử 3D.</noscript>
+      <footer>
+        <span id="stamina">Thể lực 100/100</span>
+        <span id="connection-info">Máy chủ: Đang kết nối…</span>
+        <output id="debug" hidden aria-label="Input debug"></output>
+      </footer>
+      <noscript>Cần bật JavaScript để hiển thị game 3D.</noscript>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
-

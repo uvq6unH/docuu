@@ -51,3 +51,50 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 .room-details ul { padding-left: 1.3rem; font-size: 13px; }
 .room-details p { margin-bottom: .25rem; }
 .room-details code { overflow-wrap: anywhere; }
+
+/* Real Multiplayer Lobby & In-Game UI styles */
+.lobby-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.lobby-form input { padding: 10px 12px; border: 1px solid #263d3050; border-radius: 3px; font: inherit; font-size: 14px; background: #fff; }
+.lobby-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
+.btn-secondary { background: #5a7360 !important; }
+.btn-secondary:hover { background: #4a6350 !important; }
+.btn-danger { background: #963624 !important; }
+.btn-danger:hover { background: #7c2d1e !important; }
+.btn-ready { background: #2f7a3e !important; font-size: 15px; }
+.btn-unready { background: #9a681c !important; }
+
+.room-badge { display: flex; align-items: center; justify-content: space-between; background: #e8eee2; padding: 10px 14px; border-radius: 4px; font-weight: 700; font-size: 15px; margin-bottom: 12px; border: 1px solid #c2ceba; }
+.room-badge .badge-code { color: #1f5f30; font-family: monospace; font-size: 18px; letter-spacing: 2px; }
+
+.roster-list { list-style: none; padding: 0; margin: 10px 0; border: 1px solid #263d3020; border-radius: 4px; background: #fff; max-height: 200px; overflow-y: auto; }
+.roster-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
+.roster-item:last-child { border-bottom: none; }
+.roster-item-badges { display: flex; gap: 6px; align-items: center; }
+.role-badge { padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: 700; color: #fff; }
+.role-police { background: #2876c9; }
+.role-robber { background: #ec8f32; }
+.role-none { background: #888; }
+.badge-host { background: #7a3e88; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.status-ready { color: #287a38; font-weight: 600; }
+.status-unready { color: #888; }
+
+/* In-game HUD overlay */
+.hud-overlay { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; pointer-events: none; z-index: 100; flex-wrap: wrap; justify-content: center; width: 90%; max-width: 800px; }
+.hud-card { background: rgba(38, 61, 48, 0.9); color: #fffdf4; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); }
+.hud-time { font-family: monospace; font-size: 16px; color: #fbd364; }
+.hud-stealth { background: rgba(18, 54, 25, 0.95); color: #8ef7a1; border-color: #55c46b; animation: pulse 1.5s infinite; }
+.hud-immune { background: rgba(120, 40, 20, 0.95); color: #ffd188; border-color: #e67e22; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Event announcements banner */
+.event-toast { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); background: #263d30; color: #fffdf4; padding: 10px 22px; border-radius: 6px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,0.35); z-index: 101; pointer-events: none; transition: opacity 0.3s; border: 1px solid rgba(255,255,255,0.2); }
+
+/* Jail picker buttons in JAIL_SELECTION phase */
+.jail-picker { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.jail-btn { background: #2876c9 !important; font-size: 13px; }
+.jail-btn:hover { background: #1c5ba0 !important; }
+
