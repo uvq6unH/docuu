@@ -128,6 +128,7 @@ export const CLIENT_EVENTS = {
   ROOM_LEAVE: 'room:leave',
   ROOM_READY: 'room:ready',
   ROOM_START: 'room:start',
+  ROOM_RESTART: 'room:restart',
   JAIL_SELECT: 'jail:select',
   GAME_INPUT: 'game:input',
 } as const;

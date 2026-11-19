@@ -2,6 +2,7 @@ import http from 'node:http';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
+import { PROTOCOL_VERSION } from '@folk-tag/shared';
 import { setupMockServer } from './mock/mockServer.js';
 import { RoomManager } from './rooms/roomManager.js';
 import { initDatabase } from './db/index.js';
@@ -16,9 +17,36 @@ const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
-// Lightweight HTTP health probe endpoint including database status
+// Deep HTTP health probe endpoint
 app.get('/healthz', (_req: Request, res: Response) => {
-  res.status(200).json({ status: 'ok', db: 'sqlite', timestamp: Date.now() });
+  try {
+    const isDbAlive = db.checkHealth();
+    if (!isDbAlive) {
+      res.status(503).json({ status: 'error', message: 'Database health check failed' });
+      return;
+    }
+    const mem = process.memoryUsage();
+    res.status(200).json({
+      status: 'ok',
+      db: 'sqlite',
+      version: PROTOCOL_VERSION,
+      uptimeSeconds: Math.floor(process.uptime()),
+      memory: {
+        heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
+        heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 10) / 10,
+        rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
+      },
+      timestamp: Date.now(),
+    });
+  } catch (err: any) {
+    res.status(503).json({ status: 'error', error: err?.message || 'Server error' });
+  }
+});
+
+// Server and Tick Simulation Metrics Endpoint (A04)
+app.get('/api/metrics', (_req: Request, res: Response) => {
+  const metrics = roomManager.getMetrics();
+  res.status(200).json(metrics);
 });
 
 // REST Endpoints for match statistics and audit logs
@@ -68,14 +96,24 @@ const roomManager = new RoomManager(io, db);
 server.listen(PORT, () => {
   console.log(`[Server] Server listening on http://localhost:${PORT}`);
   console.log(`[Server] Health check available at http://localhost:${PORT}/healthz`);
+  console.log(`[Server] Metrics available at http://localhost:${PORT}/api/metrics`);
   console.log(`[Server] CORS configured for origin: ${CLIENT_ORIGIN}`);
 });
 
-process.on('SIGTERM', () => {
-  console.log('[Server] SIGTERM received. Shutting down gracefully...');
+function gracefulShutdown(signal: string) {
+  console.log(`[Server] ${signal} received. Shutting down gracefully...`);
   mockServer.stop();
+  roomManager.destroy();
   db.close();
   server.close(() => {
+    console.log('[Server] HTTP and Socket.IO servers closed.');
     process.exit(0);
   });
-});
+  setTimeout(() => {
+    console.error('[Server] Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 5000).unref();
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

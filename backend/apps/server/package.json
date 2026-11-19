@@ -9,6 +9,7 @@
     "dev": "node dist/index.js",
     "dev:mock": "node dist/index.js --mock",
     "test": "node --test tests/*.test.mjs",
+    "test:load": "node dist/scripts/loadTest.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

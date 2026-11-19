@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
+import { readFileSync, existsSync } from 'node:fs';
 import {
   PROTOCOL_VERSION,
   GAME_RULES,
@@ -10,8 +11,30 @@ import {
 } from '@folk-tag/shared';
 import { Room } from './room.js';
 import type { DatabaseManager } from '../db/index.js';
+import { SocketRateLimiter } from '../security/rateLimiter.js';
+import {
+  sanitizePlayerName,
+  validateRoomCode,
+  validateInputFrame,
+} from '../security/validator.js';
 
-export const OFFICIAL_MAP_HASH = '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
+function loadCanonicalMapHash(): string {
+  try {
+    const candidates = [
+      new URL('../../../../../packages/shared/maps/village-v1.json', import.meta.url),
+      new URL('../../../../packages/shared/maps/village-v1.json', import.meta.url),
+    ];
+    for (const url of candidates) {
+      if (existsSync(url)) {
+        const bytes = readFileSync(url);
+        return createHash('sha256').update(bytes).digest('hex');
+      }
+    }
+  } catch {}
+  return '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
+}
+
+export const OFFICIAL_MAP_HASH = loadCanonicalMapHash();
 
 interface DedupeEntry {
   response: AckResponse;
@@ -26,6 +49,8 @@ export class RoomManager {
   private dedupeCache: Map<string, DedupeEntry> = new Map();
   // Socket -> { roomCode, playerId }
   private socketBindings: Map<string, { roomCode: string; playerId: string }> = new Map();
+  private rateLimiter: SocketRateLimiter = new SocketRateLimiter();
+  private cleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(io: SocketIOServer, db: DatabaseManager | null = null) {
     this.io = io;
@@ -33,8 +58,6 @@ export class RoomManager {
     this.startCleanupInterval();
     this.registerSocketHandlers();
   }
-
-  private cleanupTimer: NodeJS.Timeout | null = null;
 
   private startCleanupInterval(): void {
     this.cleanupTimer = setInterval(() => {
@@ -47,13 +70,6 @@ export class RoomManager {
       this.db?.cleanExpiredDeduplication();
     }, 30_000);
     this.cleanupTimer.unref();
-  }
-
-  public destroy(): void {
-    if (this.cleanupTimer) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
-    }
   }
 
   private generateRoomCode(): string {
@@ -125,9 +141,15 @@ export class RoomManager {
           payload: { requestId?: string; name: string; protocolVersion: number },
           ack?: (res: AckResponse) => void
         ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
-            if (!payload || typeof payload.name !== 'string' || !payload.name.trim()) {
-              return { ok: false, code: 'BAD_PAYLOAD', message: 'Player name is required' };
+            const sanitizedName = sanitizePlayerName(payload?.name);
+            if (!sanitizedName) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'Player name is required (1-24 chars)' };
             }
             if (payload.protocolVersion !== PROTOCOL_VERSION) {
               return {
@@ -153,19 +175,18 @@ export class RoomManager {
               this.db.upsertPlayer({
                 id: playerId,
                 roomCode,
-                name: payload.name.trim(),
+                name: sanitizedName,
                 isHost: true,
                 resumeToken,
               });
             }
             this.rooms.set(roomCode, room);
 
-            room.addPlayer(playerId, payload.name.trim(), socket, resumeToken, true);
+            room.addPlayer(playerId, sanitizedName, socket, resumeToken, true);
             this.socketBindings.set(socket.id, { roomCode, playerId });
 
             this.broadcastRoomState(room);
 
-            // Returns both top-level and data fields to satisfy all client consumption styles
             return {
               ok: true,
               roomCode,
@@ -184,9 +205,19 @@ export class RoomManager {
           payload: { requestId?: string; roomCode: string; name: string; protocolVersion: number },
           ack?: (res: AckResponse) => void
         ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
-            if (!payload || !payload.roomCode || !payload.name) {
-              return { ok: false, code: 'BAD_PAYLOAD', message: 'Missing join parameters' };
+            const code = validateRoomCode(payload?.roomCode);
+            if (!code) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'Invalid 6-character room code' };
+            }
+            const sanitizedName = sanitizePlayerName(payload?.name);
+            if (!sanitizedName) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'Player name is required (1-24 chars)' };
             }
             if (payload.protocolVersion !== PROTOCOL_VERSION) {
               return {
@@ -196,7 +227,6 @@ export class RoomManager {
               };
             }
 
-            const code = payload.roomCode.toUpperCase().trim();
             const room = this.rooms.get(code);
             if (!room) {
               return { ok: false, code: 'ROOM_NOT_FOUND', message: `Room ${code} not found` };
@@ -213,14 +243,14 @@ export class RoomManager {
             const playerId = `p-${randomBytes(4).toString('hex')}`;
             const resumeToken = randomBytes(16).toString('hex');
 
-            room.addPlayer(playerId, payload.name.trim(), socket, resumeToken, false);
+            room.addPlayer(playerId, sanitizedName, socket, resumeToken, false);
             this.socketBindings.set(socket.id, { roomCode: code, playerId });
 
             if (this.db) {
               this.db.upsertPlayer({
                 id: playerId,
                 roomCode: code,
-                name: payload.name.trim(),
+                name: sanitizedName,
                 isHost: false,
                 resumeToken,
               });
@@ -246,6 +276,11 @@ export class RoomManager {
           payload: { requestId?: string; ready: boolean; mapHash: string },
           ack?: (res: AckResponse) => void
         ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
             const binding = this.socketBindings.get(socket.id);
             if (!binding) {
@@ -287,6 +322,11 @@ export class RoomManager {
       socket.on(
         CLIENT_EVENTS.ROOM_START,
         (payload: { requestId?: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
             const binding = this.socketBindings.get(socket.id);
             if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not in room' };
@@ -321,6 +361,11 @@ export class RoomManager {
       socket.on(
         CLIENT_EVENTS.JAIL_SELECT,
         (payload: { requestId?: string; jailId: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
             const binding = this.socketBindings.get(socket.id);
             if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND' };
@@ -338,8 +383,17 @@ export class RoomManager {
         }
       );
 
-      // 6. game:input
-      socket.on(CLIENT_EVENTS.GAME_INPUT, (input: InputFrame) => {
+      // 6. game:input (Rate limited & Validated)
+      socket.on(CLIENT_EVENTS.GAME_INPUT, (rawInput: unknown) => {
+        if (!this.rateLimiter.checkInput(socket.id)) {
+          return; // Drop input exceeding rate limit
+        }
+
+        const input = validateInputFrame(rawInput);
+        if (!input) {
+          return; // Drop malformed packet
+        }
+
         const binding = this.socketBindings.get(socket.id);
         if (!binding) return;
         const room = this.rooms.get(binding.roomCode);
@@ -351,6 +405,11 @@ export class RoomManager {
       socket.on(
         CLIENT_EVENTS.ROOM_LEAVE,
         (payload: { requestId?: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
             const binding = this.socketBindings.get(socket.id);
             if (!binding) return { ok: true };
@@ -380,12 +439,21 @@ export class RoomManager {
           payload: { requestId?: string; roomCode: string; playerId: string; resumeToken: string },
           ack?: (res: AckResponse) => void
         ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
           this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
             if (!payload || !payload.roomCode || !payload.playerId || !payload.resumeToken) {
               return { ok: false, code: 'BAD_PAYLOAD', message: 'Missing resume credentials' };
             }
 
-            const code = payload.roomCode.toUpperCase().trim();
+            const code = validateRoomCode(payload.roomCode);
+            if (!code) {
+              return { ok: false, code: 'ROOM_NOT_FOUND', message: `Invalid room code` };
+            }
+
             const room = this.rooms.get(code);
             if (!room) {
               return { ok: false, code: 'ROOM_NOT_FOUND', message: `Room ${code} not found` };
@@ -448,9 +516,54 @@ export class RoomManager {
         }
       );
 
+      // 9. room:restart (G05 Full match restart & Rematch)
+      socket.on(
+        CLIENT_EVENTS.ROOM_RESTART,
+        (payload: { requestId?: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) {
+              return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not connected to a room' };
+            }
+
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) {
+              return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+            }
+
+            if (room.hostId !== binding.playerId) {
+              return { ok: false, code: 'NOT_HOST', message: 'Only room host can restart match' };
+            }
+
+            if (room.phase !== 'RESULT') {
+              return {
+                ok: false,
+                code: 'INVALID_PHASE',
+                message: 'Match must be in RESULT phase to restart',
+              };
+            }
+
+            const success = room.restartToLobby();
+            if (!success) {
+              return { ok: false, code: 'INVALID_PHASE', message: 'Could not restart room' };
+            }
+
+            this.broadcastRoomState(room);
+            return { ok: true };
+          });
+        }
+      );
+
       // Disconnect
       socket.on('disconnect', () => {
         const binding = this.socketBindings.get(socket.id);
+        this.rateLimiter.removeSocket(socket.id);
+
         if (!binding) return;
 
         const room = this.rooms.get(binding.roomCode);
@@ -508,5 +621,57 @@ export class RoomManager {
 
   public getRoom(roomCode: string): Room | undefined {
     return this.rooms.get(roomCode);
+  }
+
+  public getMetrics() {
+    const mem = process.memoryUsage();
+    const roomsList = Array.from(this.rooms.values());
+    const roomMetrics = roomsList.map((r) => r.getMetrics());
+
+    let totalAvg = 0;
+    let maxTick = 0;
+    let p95Tick = 0;
+
+    if (roomMetrics.length > 0) {
+      totalAvg = roomMetrics.reduce((acc, m) => acc + m.avgTickMs, 0) / roomMetrics.length;
+      maxTick = Math.max(...roomMetrics.map((m) => m.maxTickMs));
+      p95Tick = Math.max(...roomMetrics.map((m) => m.p95TickMs));
+    }
+
+    const totalPlayers = roomsList.reduce((acc, r) => acc + r.players.size, 0);
+
+    return {
+      uptimeSeconds: Math.floor(process.uptime()),
+      memory: {
+        heapUsedMb: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
+        heapTotalMb: Math.round((mem.heapTotal / 1024 / 1024) * 10) / 10,
+        rssMb: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
+      },
+      rooms: {
+        activeCount: this.rooms.size,
+        totalPlayers,
+        details: roomMetrics,
+      },
+      simulation: {
+        targetHz: GAME_RULES.SIMULATION_TICK_RATE_HZ,
+        avgTickMs: Math.round(totalAvg * 100) / 100,
+        maxTickMs: Math.round(maxTick * 100) / 100,
+        p95TickMs: Math.round(p95Tick * 100) / 100,
+      },
+    };
+  }
+
+  public destroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+    this.rateLimiter.destroy();
+    for (const room of this.rooms.values()) {
+      room.stop();
+    }
+    this.rooms.clear();
+    this.socketBindings.clear();
+    this.dedupeCache.clear();
   }
 }

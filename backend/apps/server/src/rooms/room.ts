@@ -65,6 +65,18 @@ export interface PlayerSession {
   lastYaw: number;
 }
 
+export interface RoomMetrics {
+  roomCode: string;
+  totalTicks: number;
+  lastTickMs: number;
+  avgTickMs: number;
+  maxTickMs: number;
+  p95TickMs: number;
+  p99TickMs: number;
+  phase: Phase;
+  playerCount: number;
+}
+
 export class Room {
   public readonly roomCode: string;
   public hostId: string;
@@ -83,6 +95,10 @@ export class Room {
   private tick: number = 0;
   private remainingMs: number = GAME_RULES.PHASE_DURATION_PLAYING_MS;
   private monotonicLastTime: number = Date.now();
+  private tickDurations: number[] = [];
+  private totalTicksCount = 0;
+  private maxTickTimeMs = 0;
+  private lastTickTimeMs = 0;
 
   constructor(roomCode: string, hostPlayerId: string, mapHash: string) {
     this.roomCode = roomCode;
@@ -262,6 +278,101 @@ export class Room {
     return true;
   }
 
+  public restartToLobby(): boolean {
+    if (this.phase !== 'RESULT') return false;
+
+    this.stop();
+    this.phase = 'LOBBY';
+    this.selectedJailId = null;
+    this.guardId = null;
+    this.matchResult = null;
+    this.matchId = `match-${this.roomCode}-${Date.now()}`;
+    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_PLAYING_MS);
+    this.tick = 0;
+
+    for (const session of this.players.values()) {
+      session.ready = false;
+      session.role = null;
+      session.isCaptain = false;
+      session.state = 'FREE';
+      session.guard = false;
+      session.jailSlotIndex = undefined;
+      session.timeJailedMs = 0;
+      session.immuneRemainingMs = 0;
+      session.rescueProgressMs = 0;
+      session.rescueHeld = false;
+      session.rescueNeedsRelease = false;
+      session.hideCrouchMs = 0;
+      session.inputQueue = [];
+      session.lastProcessedSeq = 0;
+      session.lastJumpId = 0;
+      session.lastCaptureId = 0;
+      session.lastCaptureAttemptTick = 0;
+      session.movementState = initialMovement([0, 0, 0]);
+    }
+
+    if (this.db) {
+      this.db.updateRoom(this.roomCode, {
+        phase: 'LOBBY',
+        captainId: null,
+        selectedJailId: null,
+      });
+      for (const p of this.players.values()) {
+        this.db.upsertPlayer({
+          id: p.id,
+          roomCode: this.roomCode,
+          name: p.name,
+          ready: false,
+          isHost: p.isHost,
+          resumeToken: p.resumeToken,
+        });
+      }
+    }
+
+    return true;
+  }
+
+  public recordTickDuration(durationMs: number): void {
+    this.totalTicksCount++;
+    this.lastTickTimeMs = durationMs;
+    if (durationMs > this.maxTickTimeMs) {
+      this.maxTickTimeMs = durationMs;
+    }
+    this.tickDurations.push(durationMs);
+    if (this.tickDurations.length > 300) {
+      this.tickDurations.shift();
+    }
+  }
+
+  public getMetrics(): RoomMetrics {
+    const count = this.tickDurations.length;
+    let avg = 0;
+    let p95 = 0;
+    let p99 = 0;
+
+    if (count > 0) {
+      const sorted = [...this.tickDurations].sort((a, b) => a - b);
+      const sum = sorted.reduce((acc, v) => acc + v, 0);
+      avg = sum / count;
+      const idx95 = Math.min(count - 1, Math.floor(count * 0.95));
+      const idx99 = Math.min(count - 1, Math.floor(count * 0.99));
+      p95 = sorted[idx95]!;
+      p99 = sorted[idx99]!;
+    }
+
+    return {
+      roomCode: this.roomCode,
+      totalTicks: this.totalTicksCount,
+      lastTickMs: Math.round(this.lastTickTimeMs * 100) / 100,
+      avgTickMs: Math.round(avg * 100) / 100,
+      maxTickMs: Math.round(this.maxTickTimeMs * 100) / 100,
+      p95TickMs: Math.round(p95 * 100) / 100,
+      p99TickMs: Math.round(p99 * 100) / 100,
+      phase: this.phase,
+      playerCount: this.players.size,
+    };
+  }
+
   public abortMatch(reason = 'DISCONNECT_TIMEOUT', disconnectedPlayerId?: string): void {
     if (this.phase === 'RESULT') return;
     this.phase = 'RESULT';
@@ -362,6 +473,7 @@ export class Room {
    * 6. Broadcast snapshots (with stealth distance filtering for police)
    */
   public step(stepDtMs?: number): void {
+    const t0 = performance.now();
     const dtMs = stepDtMs ?? GAME_RULES.SIMULATION_TIMESTEP_MS;
     const now = Date.now();
     this.tick++;
@@ -883,6 +995,9 @@ export class Room {
     if (this.tick % 2 === 0) {
       this.broadcastSnapshots();
     }
+
+    const tDuration = performance.now() - t0;
+    this.recordTickDuration(tDuration);
   }
 
   private broadcastSnapshots(): void {

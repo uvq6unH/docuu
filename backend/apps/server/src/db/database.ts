@@ -465,7 +465,16 @@ export class DatabaseManager {
     return stmt.all(matchId) as unknown as GameEventRecord[];
   }
 
-  // --- Teardown / Close ---
+  // --- Teardown / Close / Health ---
+
+  public checkHealth(): boolean {
+    try {
+      const res = this.db.prepare('SELECT 1 as alive').get() as { alive: number } | undefined;
+      return res?.alive === 1;
+    } catch {
+      return false;
+    }
+  }
 
   public close(): void {
     this.db.close();
