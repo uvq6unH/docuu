@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { Snapshot } from '../../../backend/packages/shared/src/protocol';
 
@@ -6,6 +8,14 @@ test('two browsers receive the room and observe server-confirmed player movement
   await page.goto('/');
   await page.getByRole('link', { name: 'Kết nối backend thử nghiệm' }).click();
   await expect(page.locator('.scene-label')).toContainText('police-1 · 6 nhân vật');
+  const room = page.locator('.room-details');
+  await room.locator('summary').click();
+  await expect(room.getByRole('listitem')).toHaveCount(6);
+  await expect(room.getByRole('listitem').first()).toContainText('POLICE-1 · Cảnh sát · Chủ phòng · Sẵn sàng');
+  await expect(room).toContainText('Server đang dùng hash thử nghiệm');
+  const hash = createHash('sha256').update(readFileSync('../packages/shared/maps/village-v1.json')).digest('hex');
+  await expect(room.locator('code')).toHaveText(hash);
+  await room.locator('summary').click();
   const observer = await browser.newPage();
   let remotePos: Snapshot['self']['pos'] | undefined;
   observer.on('websocket', ws => {

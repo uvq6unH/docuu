@@ -79,7 +79,7 @@ Trạng thái: `CHỜ` = chưa triển khai, dependency chưa được xác minh
 | F05 | Pointer lock, WASD/input abstraction, yaw/pitch | F04 | Chuột/phím đúng, clear on blur/unlock, cleanup | XONG LOCAL; CHỜ GHÉP WORKSPACE |
 | M03 | FPS controller tích hợp movement shared | F05, M02 | Jump/sprint/crouch đúng luật shared | ĐẠT · Chrome E2E |
 | M04 | Graybox map và debug collider overlay | F03, F04 | Layout 80m đi được, đúng metadata chung | ĐẠT · 24/24 TUYẾN ĐI BỘ |
-| N03 | Lobby và Socket.IO transport | N01 | Create/join/ready, thông báo lỗi | ĐÃ NỐI MOCK F06 · LOBBY CHỜ N01 |
+| N03 | Lobby và Socket.IO transport | N01 | Create/join/ready, thông báo lỗi | ĐÃ HIỂN THỊ ROOM:STATE VÀ HASH FE · THAO TÁC PHÒNG CHỜ N01 |
 | N04 | Prediction và remote interpolation | N02, M03 | Hai client đồng bộ, reconcile và reset buffer đúng | CHỜ N02 |
 | G03 | HUD, phase UI và chọn jail cho captain | G01, N03 | Timer/role/count/selection đúng server | CHỜ G01, N03 |
 | G04 | Capture intent và jail render | G02 | Teleport authoritative hiển thị đúng | CHỜ G02 |
@@ -283,3 +283,10 @@ Frontend đạt lint, typecheck, 37 unit test, 10 Chrome E2E offline và build. 
 Đã dựng và xuất bốn mẫu Blender trong frontend/assets/blender và frontend/public/models. Bụi cỏ 160 tam giác, rơm 280, rào 120, nhà giam 880. Cảnh đọc 14 vật thể rơm/bụi/rào từ map; mô hình nhà giam theo vị trí khảo sát offline hoặc jailId của server mock. Test xác nhận kích thước, ngân sách và ưu tiên snapshot khi chọn jail.
 
 Shared đạt typecheck, 24 test và build. Frontend đạt lint, typecheck, 42 unit test, 10 Chrome E2E, test tích hợp hai phiên với backend mock và build. Đã xem ảnh test-results/a02-jail.png. Build còn cảnh báo chunk JS 644,35 kB. Các thay đổi bàn giao mới có trong workspace local.
+
+### 19/11/2026 — N03, danh sách phòng từ F06
+
+Bộ bàn giao và package chuẩn đã có trong commit 68d1899 trên origin/main. Khi kiểm tra, main là nhánh duy nhất trên origin; backend vẫn là F06. Ở chế độ dev, chọn Kết nối backend thử nghiệm rồi mở Phòng MOCK01 để xem tên, vai, chủ phòng và ready do server phát qua room:state. Danh sách sáu nhân vật bao gồm bot. FE đọc bytes bản đồ đang phục vụ và tính SHA-256; mock-map-hash được ghi rõ là giá trị thử nghiệm. Khi mất kết nối, FE xóa thông tin phòng cũ.
+
+Phần hiển thị nằm ở src/net/room-details.ts. Test tích hợp hai phiên Chrome đã đối chiếu roster từ backend và hash trình duyệt với hash tính độc lập từ file. Bước tiếp theo là nối create/join và xử lý ack khi backend bàn giao N01 theo tài liệu ở gốc.
+Kiểm tra đạt lint, typecheck, 43 unit test, 10 Chrome E2E, một bài tích hợp hai phiên Chrome và build. Vite cảnh báo chunk JS chính 644,35 kB.
