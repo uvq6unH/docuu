@@ -41,6 +41,26 @@
       "import": "./dist/hash.js",
       "default": "./dist/hash.js"
     },
+    "./capture": {
+      "types": "./dist/capture.d.ts",
+      "import": "./dist/capture.js",
+      "default": "./dist/capture.js"
+    },
+    "./rescue": {
+      "types": "./dist/rescue.d.ts",
+      "import": "./dist/rescue.js",
+      "default": "./dist/rescue.js"
+    },
+    "./guard": {
+      "types": "./dist/guard.d.ts",
+      "import": "./dist/guard.js",
+      "default": "./dist/guard.js"
+    },
+    "./stealth": {
+      "types": "./dist/stealth.d.ts",
+      "import": "./dist/stealth.js",
+      "default": "./dist/stealth.js"
+    },
     "./maps/*": "./maps/*"
   },
   "scripts": {

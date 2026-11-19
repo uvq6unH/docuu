@@ -24,6 +24,8 @@ test('G02 Capture: Authoritative Room processes capture, teleports robber to J1,
 
   const police = room.addPlayer('police-1', 'Police 1', fakeSocket, 'tok-1', true);
   police.role = 'POLICE';
+  police.guard = true;
+  room.guardId = 'police-1';
   police.movementState.pos = [0, 0, 0]; // facing -Z (yaw = 0)
 
   const robber1 = room.addPlayer('robber-1', 'Robber 1', fakeSocket, 'tok-2');

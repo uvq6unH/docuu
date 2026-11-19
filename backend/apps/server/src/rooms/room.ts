@@ -17,12 +17,21 @@ import {
   stepMovement,
   SERVER_EVENTS,
   CLIENT_EVENTS,
-  checkLineOfSight,
   Vec3,
   validateCapture,
   CaptureActor,
   CaptureTarget,
   GameEvent,
+  MatchResult,
+  checkRescueEligibility,
+  RescuerActor,
+  selectRobberToRescue,
+  determineReleasePosition,
+  JailedRobberTarget,
+  getDistanceToJailCenter,
+  clampPositionOutsideGuardZone,
+  isCapsuleInHideZone,
+  canPoliceSeeRobber,
 } from '@folk-tag/shared';
 import { officialVillageMap } from '../mock/mockServer.js';
 import type { DatabaseManager } from '../db/index.js';
@@ -42,11 +51,18 @@ export interface PlayerSession {
   lastJumpId: number;
   lastCaptureId: number;
   lastCaptureAttemptTick: number;
-  jailSlotIndex?: number;
+  jailSlotIndex?: number | undefined;
   lastInputTimestamp: number;
   disconnectTimer: NodeJS.Timeout | null;
   state: RobberState;
   guard: boolean;
+  timeJailedMs: number;
+  immuneRemainingMs: number;
+  rescueProgressMs: number;
+  rescueHeld: boolean;
+  rescueNeedsRelease: boolean;
+  hideCrouchMs: number;
+  lastYaw: number;
 }
 
 export class Room {
@@ -60,6 +76,7 @@ export class Room {
   public mapHash: string;
   public readonly protocolVersion: number = 1;
   public players: Map<string, PlayerSession> = new Map();
+  public matchResult: MatchResult | null = null;
 
   private simTimer: NodeJS.Timeout | null = null;
   private db: DatabaseManager | null = null;
@@ -76,6 +93,14 @@ export class Room {
 
   public setDatabase(db: DatabaseManager): void {
     this.db = db;
+  }
+
+  public getCurrentTick(): number {
+    return this.tick;
+  }
+
+  public getRemainingMs(): number {
+    return this.remainingMs;
   }
 
   public addPlayer(
@@ -104,6 +129,13 @@ export class Room {
       disconnectTimer: null,
       state: 'FREE',
       guard: false,
+      timeJailedMs: 0,
+      immuneRemainingMs: 0,
+      rescueProgressMs: 0,
+      rescueHeld: false,
+      rescueNeedsRelease: false,
+      hideCrouchMs: 0,
+      lastYaw: 0,
     };
     this.players.set(id, session);
     socket.join(this.roomCode);
@@ -115,9 +147,13 @@ export class Room {
     if (!session) return;
     if (session.disconnectTimer) {
       clearTimeout(session.disconnectTimer);
+      session.disconnectTimer = null;
     }
     if (session.socket) {
       session.socket.leave(this.roomCode);
+    }
+    if (this.guardId === playerId) {
+      this.guardId = null;
     }
     this.players.delete(playerId);
 
@@ -148,12 +184,16 @@ export class Room {
       if (!player.ready) return false;
     }
 
+    this.matchResult = null;
+    this.guardId = null;
+
     // Assign roles: 2 Police, 4 Robbers
     const list = Array.from(this.players.values());
     const policeCount = GAME_RULES.POLICE_COUNT;
     list.forEach((p, index) => {
       if (index < policeCount) {
         p.role = 'POLICE';
+        p.guard = false;
         p.isCaptain = index === 0;
         if (p.isCaptain) {
           this.captainId = p.id;
@@ -163,6 +203,12 @@ export class Room {
         p.role = 'ROBBER';
         p.isCaptain = false;
         p.state = 'FREE';
+        p.timeJailedMs = 0;
+        p.immuneRemainingMs = 0;
+        p.rescueProgressMs = 0;
+        p.rescueHeld = false;
+        p.rescueNeedsRelease = false;
+        p.hideCrouchMs = 0;
         const robberIdx = index - policeCount;
         p.movementState = initialMovement(officialVillageMap.spawns.robber[robberIdx]!);
       }
@@ -206,7 +252,45 @@ export class Room {
     this.phase = 'HEAD_START';
     this.remainingMs = Number(GAME_RULES.PHASE_DURATION_HEAD_START_MS);
     this.db?.updateMatch(this.matchId, { selectedJailId: jailId, phase: 'HEAD_START' });
+    const phaseEvent: GameEvent = {
+      eventId: `phase-${this.tick}-HEAD_START`,
+      tick: this.tick,
+      type: 'PHASE',
+      data: { phase: 'HEAD_START', jailId },
+    };
+    this.broadcastEvent(phaseEvent);
     return true;
+  }
+
+  public abortMatch(reason = 'DISCONNECT_TIMEOUT', disconnectedPlayerId?: string): void {
+    if (this.phase === 'RESULT') return;
+    this.phase = 'RESULT';
+    this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+    this.matchResult = { winner: 'ABORTED', reason };
+    const event: GameEvent = {
+      eventId: `abort-${this.tick}-${Date.now()}`,
+      tick: this.tick,
+      type: 'RESULT',
+      data: { winner: 'ABORTED', reason, disconnectedPlayerId },
+    };
+    this.broadcastEvent(event);
+    if (this.db) {
+      this.db.updateMatch(this.matchId, {
+        phase: 'RESULT',
+        winner: 'ABORTED',
+        winReason: reason,
+        endedAt: Date.now(),
+      });
+      this.db.recordGameEvent({
+        eventId: event.eventId,
+        matchId: this.matchId,
+        tick: this.tick,
+        eventType: 'RESULT',
+        actorId: disconnectedPlayerId ?? null,
+        targetId: null,
+        payload: event.data,
+      });
+    }
   }
 
   public enqueueInput(playerId: string, frame: InputFrame): void {
@@ -266,51 +350,109 @@ export class Room {
     }
   }
 
-  public step(): void {
+  /**
+   * Authoritative 30Hz simulation step.
+   *
+   * Tick order per GAMEPLAY.md:
+   * 1. Timeout if deadline reached (advance phase / end match)
+   * 2. Input / movement / stealth / guard zone constraint
+   * 3. Immunity countdown & expiry
+   * 4. Capture evaluation & execution (ordered by police ID) -> police win if 4 jailed
+   * 5. Rescue evaluation & execution (ordered by robber ID) -> only 1 rescue per tick
+   * 6. Broadcast snapshots (with stealth distance filtering for police)
+   */
+  public step(stepDtMs?: number): void {
+    const dtMs = stepDtMs ?? GAME_RULES.SIMULATION_TIMESTEP_MS;
     const now = Date.now();
-    const dt = Math.min(0.1, (now - this.monotonicLastTime) / 1000);
-    this.monotonicLastTime = now;
     this.tick++;
 
-    // Advance Phase timers
-    this.remainingMs = Math.max(0, this.remainingMs - Math.floor(dt * 1000));
+    // 1. Timeout if deadline reached
+    this.remainingMs = Math.max(0, this.remainingMs - dtMs);
     if (this.remainingMs <= 0) {
       if (this.phase === 'JAIL_SELECTION') {
-        // Auto-select default jail J1 if captain didn't choose in time
         if (!this.selectedJailId) this.selectedJailId = 'J1';
         this.phase = 'HEAD_START';
         this.remainingMs = Number(GAME_RULES.PHASE_DURATION_HEAD_START_MS);
+        this.db?.updateMatch(this.matchId, { selectedJailId: this.selectedJailId, phase: this.phase });
+        const phaseEvent: GameEvent = {
+          eventId: `phase-${this.tick}-HEAD_START`,
+          tick: this.tick,
+          type: 'PHASE',
+          data: { phase: 'HEAD_START', jailId: this.selectedJailId },
+        };
+        this.broadcastEvent(phaseEvent);
       } else if (this.phase === 'HEAD_START') {
         this.phase = 'PLAYING';
         this.remainingMs = Number(GAME_RULES.PHASE_DURATION_PLAYING_MS);
+        this.db?.updateMatch(this.matchId, { phase: this.phase });
+        const phaseEvent: GameEvent = {
+          eventId: `phase-${this.tick}-PLAYING`,
+          tick: this.tick,
+          type: 'PHASE',
+          data: { phase: 'PLAYING' },
+        };
+        this.broadcastEvent(phaseEvent);
       } else if (this.phase === 'PLAYING') {
+        // Time expired: Robbers win
         this.phase = 'RESULT';
         this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+        this.matchResult = { winner: 'ROBBER', reason: 'TIME_EXPIRED' };
+        const resultEvent: GameEvent = {
+          eventId: `result-${this.tick}`,
+          tick: this.tick,
+          type: 'RESULT',
+          data: this.matchResult,
+        };
+        this.broadcastEvent(resultEvent);
+        if (this.db) {
+          this.db.updateMatch(this.matchId, {
+            phase: 'RESULT',
+            winner: 'ROBBER',
+            winReason: 'TIME_EXPIRED',
+            endedAt: Date.now(),
+          });
+          this.db.recordGameEvent({
+            eventId: resultEvent.eventId,
+            matchId: this.matchId,
+            tick: this.tick,
+            eventType: 'RESULT',
+            actorId: null,
+            targetId: null,
+            payload: resultEvent.data,
+          });
+        }
+      } else if (this.phase === 'RESULT') {
+        this.stop();
+        return;
       }
     }
 
-    // Process inputs and step movement for each player
+    const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'))!;
+
+    // 2. Input / movement / stealth / guard zone update
+    const captureAttempts: { policeId: string; yaw: number }[] = [];
+
     for (const session of this.players.values()) {
       if (!session.role) continue;
 
-      // Handle stale input timeout (250ms)
-      const isStale = now - session.lastInputTimestamp > GAME_RULES.INPUT_STALE_TIMEOUT_MS;
+      const isStale =
+        session.socket === null || now - session.lastInputTimestamp > GAME_RULES.INPUT_STALE_TIMEOUT_MS;
 
       let intent: MovementIntent = {
         moveX: 0,
         moveZ: 0,
-        yaw: 0,
+        yaw: session.lastYaw,
         jumpPressed: false,
         sprint: false,
         crouch: false,
       };
 
       if (!isStale && session.inputQueue.length > 0) {
-        // Process up to MAX_CATCHUP_STEPS per tick
         const framesToProcess = session.inputQueue.splice(0, GAME_RULES.MAX_CATCHUP_STEPS);
         for (const frame of framesToProcess) {
           if (frame.seq <= session.lastProcessedSeq) continue;
           session.lastProcessedSeq = frame.seq;
+          session.lastYaw = frame.yaw;
 
           const jumpPressed = Boolean(frame.jumpId && frame.jumpId > session.lastJumpId);
           if (frame.jumpId) session.lastJumpId = frame.jumpId;
@@ -318,124 +460,14 @@ export class Room {
           const captureTriggered = Boolean(frame.captureId && frame.captureId > session.lastCaptureId);
           if (frame.captureId) session.lastCaptureId = frame.captureId;
 
-          // G02 Authoritative Capture Validation & Execution
-          const captureCooldownTicks = Math.ceil(GAME_RULES.CAPTURE_COOLDOWN_MS / GAME_RULES.SIMULATION_TIMESTEP_MS);
           if (captureTriggered && session.role === 'POLICE' && this.phase === 'PLAYING') {
-            if (
-              session.lastCaptureAttemptTick === 0 ||
-              this.tick - session.lastCaptureAttemptTick >= captureCooldownTicks
-            ) {
-              session.lastCaptureAttemptTick = this.tick;
+            captureAttempts.push({ policeId: session.id, yaw: frame.yaw });
+          }
 
-              const policeActor: CaptureActor = {
-                id: session.id,
-                role: 'POLICE',
-                pos: session.movementState.pos,
-                yaw: frame.yaw,
-                crouch: session.movementState.crouched,
-              };
-
-              const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'))!;
-              const robbers: CaptureTarget[] = Array.from(this.players.values())
-                .filter((p) => p.role === 'ROBBER')
-                .map((p) => ({
-                  id: p.id,
-                  role: 'ROBBER' as const,
-                  pos: p.movementState.pos,
-                  crouch: p.movementState.crouched,
-                  state: p.state,
-                }));
-
-              const occupiedSlots = new Set<number>();
-              for (const p of this.players.values()) {
-                if (p.role === 'ROBBER' && p.state === 'JAILED' && p.jailSlotIndex !== undefined) {
-                  occupiedSlots.add(p.jailSlotIndex);
-                }
-              }
-
-              const captureResult = validateCapture(
-                policeActor,
-                robbers,
-                officialVillageMap.colliders,
-                activeJail,
-                occupiedSlots
-              );
-
-              if (
-                captureResult.valid &&
-                captureResult.target &&
-                captureResult.slotIndex !== undefined &&
-                captureResult.jailPos
-              ) {
-                const targetSession = this.players.get(captureResult.target.id);
-                if (targetSession) {
-                  targetSession.state = 'JAILED';
-                  targetSession.jailSlotIndex = captureResult.slotIndex;
-                  targetSession.movementState.pos = [...captureResult.jailPos];
-                  targetSession.movementState.verticalSpeed = 0;
-                }
-
-                const captureEvent: GameEvent = {
-                  eventId: `capture-${this.tick}-${captureResult.target.id}`,
-                  tick: this.tick,
-                  type: 'CAPTURE',
-                  data: {
-                    policeId: session.id,
-                    robberId: captureResult.target.id,
-                    jailId: activeJail.id,
-                    slotIndex: captureResult.slotIndex,
-                  },
-                };
-                this.broadcastEvent(captureEvent);
-
-                if (this.db) {
-                  this.db.incrementPlayerCapture(this.matchId, session.id);
-                  this.db.updateRobberState(this.matchId, captureResult.target.id, 'JAILED');
-                  this.db.recordGameEvent({
-                    eventId: captureEvent.eventId,
-                    matchId: this.matchId,
-                    tick: this.tick,
-                    eventType: 'CAPTURE',
-                    actorId: session.id,
-                    targetId: captureResult.target.id,
-                    payload: captureEvent.data,
-                  });
-                }
-
-                // Win check: all robbers jailed
-                const remainingRobbers = Array.from(this.players.values()).filter(
-                  (p) => p.role === 'ROBBER' && p.state !== 'JAILED'
-                );
-                if (remainingRobbers.length === 0) {
-                  this.phase = 'RESULT';
-                  const resultEvent: GameEvent = {
-                    eventId: `result-${this.tick}`,
-                    tick: this.tick,
-                    type: 'RESULT',
-                    data: { winner: 'POLICE', reason: 'ALL_ROBBERS_JAILED' },
-                  };
-                  this.broadcastEvent(resultEvent);
-
-                  if (this.db) {
-                    this.db.updateMatch(this.matchId, {
-                      phase: 'RESULT',
-                      winner: 'POLICE',
-                      winReason: 'ALL_ROBBERS_JAILED',
-                      endedAt: Date.now(),
-                    });
-                    this.db.recordGameEvent({
-                      eventId: resultEvent.eventId,
-                      matchId: this.matchId,
-                      tick: this.tick,
-                      eventType: 'RESULT',
-                      actorId: null,
-                      targetId: null,
-                      payload: resultEvent.data,
-                    });
-                  }
-                }
-              }
-            }
+          // Track rescue held intent
+          session.rescueHeld = Boolean(frame.rescueHeld);
+          if (!session.rescueHeld) {
+            session.rescueNeedsRelease = false;
           }
 
           const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
@@ -448,50 +480,406 @@ export class Room {
             sprint: isJailed ? false : Boolean(frame.sprint),
             crouch: Boolean(frame.crouch),
           };
-
-          // In HEAD_START phase, police cannot move
-          if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
-            intent.moveX = 0;
-            intent.moveZ = 0;
-            intent.sprint = false;
-          }
-
-          if (isJailed && session.jailSlotIndex !== undefined) {
-            const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'));
-            if (activeJail && activeJail.slots[session.jailSlotIndex]) {
-              session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
-              session.movementState.verticalSpeed = 0;
-            }
-          } else {
-            session.movementState = stepMovement(
-              session.movementState,
-              intent,
-              session.role as MovementRole,
-              officialVillageMap
-            );
-          }
         }
       } else {
-        const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
-        if (isJailed && session.jailSlotIndex !== undefined) {
-          const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'));
-          if (activeJail && activeJail.slots[session.jailSlotIndex]) {
-            session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
-            session.movementState.verticalSpeed = 0;
+        // Stale or disconnected
+        session.rescueHeld = false;
+        session.rescueNeedsRelease = false;
+      }
+
+      // Police frozen in HEAD_START
+      if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
+        intent.moveX = 0;
+        intent.moveZ = 0;
+        intent.sprint = false;
+      }
+
+      // Stepping movement
+      const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
+      if (isJailed && session.jailSlotIndex !== undefined) {
+        if (activeJail.slots[session.jailSlotIndex]) {
+          session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+          session.movementState.verticalSpeed = 0;
+          session.movementState.crouched = false;
+          session.movementState.sprinting = false;
+        }
+      } else {
+        session.movementState = stepMovement(
+          session.movementState,
+          intent,
+          session.role as MovementRole,
+          officialVillageMap
+        );
+      }
+
+      // Stealth update (robber crouching in hide zone)
+      if (session.role === 'ROBBER' && (session.state === 'FREE' || session.state === 'HIDDEN')) {
+        const inZone =
+          session.movementState.crouched &&
+          !session.movementState.sprinting &&
+          isCapsuleInHideZone(
+            session.movementState.pos,
+            GAME_RULES.CAPSULE_HEIGHT_CROUCHING,
+            officialVillageMap.hideZones
+          );
+
+        if (inZone) {
+          session.hideCrouchMs += dtMs;
+          if (session.hideCrouchMs >= GAME_RULES.HIDE_CROUCH_TRIGGER_MS) {
+            session.state = 'HIDDEN';
           }
         } else {
-          // No input or stale: simulate idle deceleration/gravity
-          session.movementState = stepMovement(
-            session.movementState,
-            intent,
-            session.role as MovementRole,
-            officialVillageMap
-          );
+          session.hideCrouchMs = 0;
+          if (session.state === 'HIDDEN') {
+            session.state = 'FREE';
+          }
+        }
+      }
+
+      // Guard zone constraint & token (Police in PLAYING phase)
+      if (session.role === 'POLICE') {
+        if (this.phase === 'PLAYING') {
+          const dist = getDistanceToJailCenter(session.movementState.pos, activeJail.center);
+          if (dist <= GAME_RULES.GUARD_ZONE_RADIUS_M) {
+            if (this.guardId === session.id) {
+              session.guard = true;
+            } else if (this.guardId === null) {
+              this.guardId = session.id;
+              session.guard = true;
+              const guardEvent: GameEvent = {
+                eventId: `guard-${this.tick}-${session.id}`,
+                tick: this.tick,
+                type: 'GUARD_CHANGED',
+                data: { guardId: session.id, jailId: activeJail.id },
+              };
+              this.broadcastEvent(guardEvent);
+              if (this.db) {
+                this.db.recordGameEvent({
+                  eventId: guardEvent.eventId,
+                  matchId: this.matchId,
+                  tick: this.tick,
+                  eventType: 'GUARD_CHANGED',
+                  actorId: session.id,
+                  targetId: null,
+                  payload: guardEvent.data,
+                });
+              }
+            } else {
+              // Another police is guard: push out to 5m boundary
+              session.movementState.pos = clampPositionOutsideGuardZone(
+                session.movementState.pos,
+                activeJail.center,
+                GAME_RULES.GUARD_ZONE_RADIUS_M
+              );
+              session.guard = false;
+            }
+          } else {
+            // Outside guard zone (> 5m)
+            if (this.guardId === session.id) {
+              this.guardId = null;
+              session.guard = false;
+              const guardEvent: GameEvent = {
+                eventId: `guard-${this.tick}-null`,
+                tick: this.tick,
+                type: 'GUARD_CHANGED',
+                data: { guardId: null, jailId: activeJail.id },
+              };
+              this.broadcastEvent(guardEvent);
+              if (this.db) {
+                this.db.recordGameEvent({
+                  eventId: guardEvent.eventId,
+                  matchId: this.matchId,
+                  tick: this.tick,
+                  eventType: 'GUARD_CHANGED',
+                  actorId: null,
+                  targetId: null,
+                  payload: guardEvent.data,
+                });
+              }
+            } else {
+              session.guard = false;
+            }
+          }
+        } else {
+          session.guard = false;
         }
       }
     }
 
-    // Broadcast snapshot every other tick (15Hz)
+    // 3. Immunity countdown & expiry
+    for (const session of this.players.values()) {
+      if (session.role === 'ROBBER') {
+        if (session.state === 'IMMUNE') {
+          session.immuneRemainingMs = Math.max(0, session.immuneRemainingMs - dtMs);
+          if (session.immuneRemainingMs <= 0) {
+            session.state = 'FREE';
+            session.immuneRemainingMs = 0;
+            this.db?.updateRobberState(this.matchId, session.id, 'FREE');
+          }
+        } else if (session.state === 'JAILED') {
+          session.timeJailedMs += dtMs;
+        }
+      }
+    }
+
+    // 4. Capture evaluation & execution (ordered by police ID)
+    if (this.phase === 'PLAYING') {
+      captureAttempts.sort((a, b) => a.policeId.localeCompare(b.policeId));
+      const captureCooldownTicks = Math.ceil(
+        GAME_RULES.CAPTURE_COOLDOWN_MS / GAME_RULES.SIMULATION_TIMESTEP_MS
+      );
+
+      for (const attempt of captureAttempts) {
+        const session = this.players.get(attempt.policeId);
+        if (!session || session.role !== 'POLICE') continue;
+
+        if (
+          session.lastCaptureAttemptTick === 0 ||
+          this.tick - session.lastCaptureAttemptTick >= captureCooldownTicks
+        ) {
+          session.lastCaptureAttemptTick = this.tick;
+
+          const policeActor: CaptureActor = {
+            id: session.id,
+            role: 'POLICE',
+            pos: session.movementState.pos,
+            yaw: attempt.yaw,
+            crouch: session.movementState.crouched,
+          };
+
+          const robbers: CaptureTarget[] = Array.from(this.players.values())
+            .filter((p) => p.role === 'ROBBER')
+            .map((p) => ({
+              id: p.id,
+              role: 'ROBBER' as const,
+              pos: p.movementState.pos,
+              crouch: p.movementState.crouched,
+              state: p.state,
+            }));
+
+          const occupiedSlots = new Set<number>();
+          for (const p of this.players.values()) {
+            if (p.role === 'ROBBER' && p.state === 'JAILED' && p.jailSlotIndex !== undefined) {
+              occupiedSlots.add(p.jailSlotIndex);
+            }
+          }
+
+          const captureResult = validateCapture(
+            policeActor,
+            robbers,
+            officialVillageMap.colliders,
+            activeJail,
+            occupiedSlots
+          );
+
+          if (
+            captureResult.valid &&
+            captureResult.target &&
+            captureResult.slotIndex !== undefined &&
+            captureResult.jailPos
+          ) {
+            const targetSession = this.players.get(captureResult.target.id);
+            if (targetSession) {
+              targetSession.state = 'JAILED';
+              targetSession.jailSlotIndex = captureResult.slotIndex;
+              targetSession.movementState.pos = [...captureResult.jailPos];
+              targetSession.movementState.verticalSpeed = 0;
+              targetSession.timeJailedMs = 0;
+              targetSession.immuneRemainingMs = 0;
+              targetSession.rescueProgressMs = 0;
+              targetSession.rescueHeld = false;
+            }
+
+            const captureEvent: GameEvent = {
+              eventId: `capture-${this.tick}-${captureResult.target.id}`,
+              tick: this.tick,
+              type: 'CAPTURE',
+              data: {
+                policeId: session.id,
+                robberId: captureResult.target.id,
+                jailId: activeJail.id,
+                slotIndex: captureResult.slotIndex,
+              },
+            };
+            this.broadcastEvent(captureEvent);
+
+            if (this.db) {
+              this.db.incrementPlayerCapture(this.matchId, session.id);
+              this.db.updateRobberState(this.matchId, captureResult.target.id, 'JAILED');
+              this.db.recordGameEvent({
+                eventId: captureEvent.eventId,
+                matchId: this.matchId,
+                tick: this.tick,
+                eventType: 'CAPTURE',
+                actorId: session.id,
+                targetId: captureResult.target.id,
+                payload: captureEvent.data,
+              });
+            }
+
+            // Win check: all 4 robbers jailed
+            const unjailedRobbers = Array.from(this.players.values()).filter(
+              (p) => p.role === 'ROBBER' && p.state !== 'JAILED'
+            );
+            if (unjailedRobbers.length === 0) {
+              this.phase = 'RESULT';
+              this.remainingMs = Number(GAME_RULES.PHASE_DURATION_RESULT_MS);
+              this.matchResult = { winner: 'POLICE', reason: 'ALL_ROBBERS_JAILED' };
+              const resultEvent: GameEvent = {
+                eventId: `result-${this.tick}`,
+                tick: this.tick,
+                type: 'RESULT',
+                data: this.matchResult,
+              };
+              this.broadcastEvent(resultEvent);
+
+              if (this.db) {
+                this.db.updateMatch(this.matchId, {
+                  phase: 'RESULT',
+                  winner: 'POLICE',
+                  winReason: 'ALL_ROBBERS_JAILED',
+                  endedAt: Date.now(),
+                });
+                this.db.recordGameEvent({
+                  eventId: resultEvent.eventId,
+                  matchId: this.matchId,
+                  tick: this.tick,
+                  eventType: 'RESULT',
+                  actorId: null,
+                  targetId: null,
+                  payload: resultEvent.data,
+                });
+              }
+              break; // End capture loop, skip rescue
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Rescue evaluation & execution (ordered by robber ID)
+    if (this.phase === 'PLAYING') {
+      const jailedRobbers = Array.from(this.players.values()).filter(
+        (p) => p.role === 'ROBBER' && p.state === 'JAILED'
+      );
+
+      if (jailedRobbers.length === 0) {
+        // No jailed robbers -> cancel any rescue progress
+        for (const p of this.players.values()) {
+          if (p.role === 'ROBBER') {
+            p.rescueProgressMs = 0;
+          }
+        }
+      } else {
+        const freeRobbers = Array.from(this.players.values())
+          .filter((p) => p.role === 'ROBBER' && (p.state === 'FREE' || p.state === 'HIDDEN'))
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        const completedRescuers: { session: PlayerSession; anchorIndex: number }[] = [];
+
+        for (const robber of freeRobbers) {
+          if (robber.rescueNeedsRelease || !robber.rescueHeld) {
+            robber.rescueProgressMs = 0;
+            continue;
+          }
+
+          const rescuerActor: RescuerActor = {
+            id: robber.id,
+            role: 'ROBBER',
+            pos: robber.movementState.pos,
+            yaw: robber.lastYaw,
+            crouch: robber.movementState.crouched,
+            state: robber.state,
+          };
+
+          const eligibility = checkRescueEligibility(
+            rescuerActor,
+            activeJail,
+            officialVillageMap.colliders
+          );
+
+          if (eligibility.eligible && eligibility.anchorIndex !== undefined) {
+            robber.rescueProgressMs += dtMs;
+            if (robber.rescueProgressMs >= GAME_RULES.RESCUE_REQUIRED_HOLD_MS) {
+              completedRescuers.push({ session: robber, anchorIndex: eligibility.anchorIndex });
+            }
+          } else {
+            robber.rescueProgressMs = 0;
+          }
+        }
+
+        // Complete at most 1 rescue per tick
+        if (completedRescuers.length > 0) {
+          const winner = completedRescuers[0]!;
+
+          const jailedTargets: JailedRobberTarget[] = jailedRobbers.map((j) => ({
+            id: j.id,
+            role: 'ROBBER',
+            pos: j.movementState.pos,
+            state: j.state,
+            timeJailedMs: j.timeJailedMs,
+            jailSlotIndex: j.jailSlotIndex,
+          }));
+
+          const robberToRescue = selectRobberToRescue(jailedTargets);
+          if (robberToRescue) {
+            const releasedSession = this.players.get(robberToRescue.id);
+            const releasePos = determineReleasePosition(
+              winner.anchorIndex,
+              activeJail,
+              officialVillageMap
+            );
+
+            if (releasedSession) {
+              releasedSession.state = 'IMMUNE';
+              releasedSession.immuneRemainingMs = Number(GAME_RULES.RESCUE_IMMUNITY_DURATION_MS);
+              releasedSession.timeJailedMs = 0;
+              releasedSession.jailSlotIndex = undefined;
+              releasedSession.movementState.pos = [...releasePos];
+              releasedSession.movementState.verticalSpeed = 0;
+            }
+
+            // Reset all robbers' rescue progress and require key release
+            for (const p of this.players.values()) {
+              if (p.role === 'ROBBER') {
+                p.rescueProgressMs = 0;
+                p.rescueNeedsRelease = true;
+              }
+            }
+
+            const rescueEvent: GameEvent = {
+              eventId: `rescue-${this.tick}-${robberToRescue.id}`,
+              tick: this.tick,
+              type: 'RESCUE',
+              data: {
+                rescuerId: winner.session.id,
+                rescuedId: robberToRescue.id,
+                jailId: activeJail.id,
+                anchorIndex: winner.anchorIndex,
+                releasePos,
+              },
+            };
+            this.broadcastEvent(rescueEvent);
+
+            if (this.db) {
+              this.db.incrementPlayerRescue(this.matchId, winner.session.id);
+              this.db.updateRobberState(this.matchId, robberToRescue.id, 'IMMUNE');
+              this.db.recordGameEvent({
+                eventId: rescueEvent.eventId,
+                matchId: this.matchId,
+                tick: this.tick,
+                eventType: 'RESCUE',
+                actorId: winner.session.id,
+                targetId: robberToRescue.id,
+                payload: rescueEvent.data,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 6. Broadcast snapshot every other tick (15Hz)
     if (this.tick % 2 === 0) {
       this.broadcastSnapshots();
     }
@@ -500,87 +888,93 @@ export class Room {
   private broadcastSnapshots(): void {
     for (const [id, session] of this.players.entries()) {
       if (!session.socket || !session.role) continue;
-
-      // Filter other players for this recipient
-      const visibleOthers: PlayerView[] = [];
-
-      for (const other of this.players.values()) {
-        if (other.id === session.id || !other.role) continue;
-
-        // Visibility filtering: hidden robber > 2m away is omitted from police view
-        if (session.role === 'POLICE' && other.role === 'ROBBER' && other.state === 'HIDDEN') {
-          const dist = Math.hypot(
-            session.movementState.pos[0] - other.movementState.pos[0],
-            session.movementState.pos[2] - other.movementState.pos[2]
-          );
-          if (dist > GAME_RULES.HIDDEN_VISIBILITY_PROXIMITY_M) {
-            continue; // Do not include in snapshot
-          }
-        }
-
-        const otherView: PlayerView = {
-          id: other.id,
-          role: other.role,
-          pos: [...other.movementState.pos],
-          yaw: 0,
-          vel: [0, other.movementState.verticalSpeed, 0],
-          crouch: other.movementState.crouched,
-          grounded: other.movementState.grounded,
-          connected: other.socket !== null && other.socket.connected,
-        };
-        if (other.role === 'ROBBER') {
-          otherView.state = other.state;
-        }
-        if (other.role === 'POLICE') {
-          otherView.guard = other.guard;
-        }
-
-        visibleOthers.push(otherView);
-      }
-
-      const selfView: SelfPlayerView = {
-        id: session.id,
-        role: session.role,
-        pos: [...session.movementState.pos],
-        yaw: 0,
-        vel: [0, session.movementState.verticalSpeed, 0],
-        crouch: session.movementState.crouched,
-        grounded: session.movementState.grounded,
-        connected: true,
-        stamina: session.movementState.stamina,
-        ackSeq: session.lastProcessedSeq,
-        ackJumpId: session.lastJumpId,
-        ackCaptureId: session.lastCaptureId,
-        immuneRemainingMs: 0,
-        rescueProgressMs: 0,
-      };
-      if (session.role === 'ROBBER') {
-        selfView.state = session.state;
-      }
-      if (session.role === 'POLICE') {
-        selfView.guard = session.guard;
-      }
-
-      const jailedCount = Array.from(this.players.values()).filter(
-        (p) => p.role === 'ROBBER' && p.state === 'JAILED'
-      ).length;
-
-      const snapshot: Snapshot = {
-        protocolVersion: 1,
-        matchId: this.matchId,
-        tick: this.tick,
-        phase: this.phase,
-        remainingMs: this.remainingMs,
-        jailId: this.phase === 'JAIL_SELECTION' && session.role === 'ROBBER' ? null : this.selectedJailId,
-        guardId: this.guardId,
-        self: selfView,
-        players: visibleOthers,
-        jailedCount,
-        result: this.phase === 'RESULT' ? { winner: 'POLICE', reason: 'Time expired' } : null,
-      };
-
-      session.socket.emit(SERVER_EVENTS.GAME_SNAPSHOT, snapshot);
+      this.sendSnapshotToPlayer(session.id);
     }
+  }
+
+  public sendSnapshotToPlayer(playerId: string): void {
+    const session = this.players.get(playerId);
+    if (!session || !session.socket || !session.role) return;
+
+    const visibleOthers: PlayerView[] = [];
+
+    for (const other of this.players.values()) {
+      if (other.id === session.id || !other.role) continue;
+
+      // Visibility filtering: hidden robber > 2m away is omitted from police view
+      if (session.role === 'POLICE' && other.role === 'ROBBER') {
+        const canSee = canPoliceSeeRobber(
+          session.movementState.pos,
+          other.movementState.pos,
+          other.state
+        );
+        if (!canSee) {
+          continue; // Hidden beyond 2m -> omit completely from police snapshot
+        }
+      }
+
+      const otherView: PlayerView = {
+        id: other.id,
+        role: other.role,
+        pos: [...other.movementState.pos],
+        yaw: other.lastYaw,
+        vel: [0, other.movementState.verticalSpeed, 0],
+        crouch: other.movementState.crouched,
+        grounded: other.movementState.grounded,
+        connected: other.socket !== null && other.socket.connected,
+      };
+      if (other.role === 'ROBBER') {
+        otherView.state = other.state;
+      }
+      if (other.role === 'POLICE') {
+        otherView.guard = other.guard;
+      }
+
+      visibleOthers.push(otherView);
+    }
+
+    const selfView: SelfPlayerView = {
+      id: session.id,
+      role: session.role,
+      pos: [...session.movementState.pos],
+      yaw: session.lastYaw,
+      vel: [0, session.movementState.verticalSpeed, 0],
+      crouch: session.movementState.crouched,
+      grounded: session.movementState.grounded,
+      connected: true,
+      stamina: session.movementState.stamina,
+      ackSeq: session.lastProcessedSeq,
+      ackJumpId: session.lastJumpId,
+      ackCaptureId: session.lastCaptureId,
+      immuneRemainingMs: session.immuneRemainingMs,
+      rescueProgressMs: session.rescueProgressMs,
+    };
+    if (session.role === 'ROBBER') {
+      selfView.state = session.state;
+    }
+    if (session.role === 'POLICE') {
+      selfView.guard = session.guard;
+    }
+
+    const jailedCount = Array.from(this.players.values()).filter(
+      (p) => p.role === 'ROBBER' && p.state === 'JAILED'
+    ).length;
+
+    const snapshot: Snapshot = {
+      protocolVersion: 1,
+      matchId: this.matchId,
+      tick: this.tick,
+      phase: this.phase,
+      remainingMs: this.remainingMs,
+      jailId: this.phase === 'JAIL_SELECTION' && session.role === 'ROBBER' ? null : this.selectedJailId,
+      guardId: this.guardId,
+      self: selfView,
+      players: visibleOthers,
+      jailedCount,
+      result: this.phase === 'RESULT' ? this.matchResult : null,
+    };
+
+    session.socket.emit(SERVER_EVENTS.GAME_SNAPSHOT, snapshot);
   }
 
   public broadcastEvent(event: GameEvent): void {

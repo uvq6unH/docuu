@@ -34,8 +34,10 @@ export class RoomManager {
     this.registerSocketHandlers();
   }
 
+  private cleanupTimer: NodeJS.Timeout | null = null;
+
   private startCleanupInterval(): void {
-    setInterval(() => {
+    this.cleanupTimer = setInterval(() => {
       const now = Date.now();
       for (const [key, entry] of this.dedupeCache.entries()) {
         if (now - entry.timestamp > GAME_RULES.REQUEST_DEDUPLICATION_TTL_MS) {
@@ -44,6 +46,14 @@ export class RoomManager {
       }
       this.db?.cleanExpiredDeduplication();
     }, 30_000);
+    this.cleanupTimer.unref();
+  }
+
+  public destroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 
   private generateRoomCode(): string {
@@ -363,6 +373,81 @@ export class RoomManager {
         }
       );
 
+      // 8. room:resume (R03 Reconnect Grace 30s)
+      socket.on(
+        CLIENT_EVENTS.ROOM_RESUME,
+        (
+          payload: { requestId?: string; roomCode: string; playerId: string; resumeToken: string },
+          ack?: (res: AckResponse) => void
+        ) => {
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            if (!payload || !payload.roomCode || !payload.playerId || !payload.resumeToken) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'Missing resume credentials' };
+            }
+
+            const code = payload.roomCode.toUpperCase().trim();
+            const room = this.rooms.get(code);
+            if (!room) {
+              return { ok: false, code: 'ROOM_NOT_FOUND', message: `Room ${code} not found` };
+            }
+
+            const player = room.players.get(payload.playerId);
+            if (!player) {
+              return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Player not found in room' };
+            }
+
+            if (player.resumeToken !== payload.resumeToken) {
+              return { ok: false, code: 'TOKEN_INVALID', message: 'Invalid resume token' };
+            }
+
+            // Valid resume! Clear disconnect grace timer
+            if (player.disconnectTimer) {
+              clearTimeout(player.disconnectTimer);
+              player.disconnectTimer = null;
+            }
+
+            // Bind new socket
+            player.socket = socket;
+            socket.join(room.roomCode);
+            this.socketBindings.set(socket.id, { roomCode: code, playerId: player.id });
+
+            // Rotate resume token
+            const newResumeToken = randomBytes(16).toString('hex');
+            player.resumeToken = newResumeToken;
+
+            if (this.db) {
+              this.db.upsertPlayer({
+                id: player.id,
+                roomCode: code,
+                name: player.name,
+                ready: player.ready,
+                isHost: player.isHost,
+                resumeToken: newResumeToken,
+              });
+            }
+
+            this.broadcastRoomState(room);
+
+            // Send immediate snapshot if in game
+            if (room.phase !== 'LOBBY') {
+              room.sendSnapshotToPlayer(player.id);
+            }
+
+            return {
+              ok: true,
+              roomCode: code,
+              playerId: player.id,
+              resumeToken: newResumeToken,
+              data: {
+                roomCode: code,
+                playerId: player.id,
+                resumeToken: newResumeToken,
+              },
+            } as any;
+          });
+        }
+      );
+
       // Disconnect
       socket.on('disconnect', () => {
         const binding = this.socketBindings.get(socket.id);
@@ -373,17 +458,47 @@ export class RoomManager {
           const player = room.players.get(binding.playerId);
           if (player) {
             player.socket = null;
-            // 30s grace period for reconnect before removing
-            player.disconnectTimer = setTimeout(() => {
+            player.inputQueue = [];
+            player.rescueHeld = false;
+
+            // Immediately release guard token if held
+            if (room.guardId === player.id) {
+              room.guardId = null;
+              player.guard = false;
+              const guardEvent = {
+                eventId: `guard-${room.getCurrentTick()}-disconnect`,
+                tick: room.getCurrentTick(),
+                type: 'GUARD_CHANGED' as const,
+                data: { guardId: null, jailId: room.selectedJailId },
+              };
+              room.broadcastEvent(guardEvent);
+            }
+
+            if (room.phase === 'LOBBY') {
+              // In lobby: drop immediately and elect next host
               room.removePlayer(binding.playerId);
+              this.db?.removePlayer(binding.playerId);
               if (room.players.size > 0) {
                 this.broadcastRoomState(room);
               } else {
                 this.rooms.delete(binding.roomCode);
+                this.db?.closeRoom(binding.roomCode);
               }
-            }, GAME_RULES.DISCONNECT_GRACE_TIMEOUT_MS);
+            } else {
+              // In match: 30s grace period
+              if (player.disconnectTimer) {
+                clearTimeout(player.disconnectTimer);
+              }
+              player.disconnectTimer = setTimeout(() => {
+                // If match hasn't finished, abort it
+                if (room.phase !== 'RESULT') {
+                  room.abortMatch('DISCONNECT_TIMEOUT', player.id);
+                  this.broadcastRoomState(room);
+                }
+              }, GAME_RULES.DISCONNECT_GRACE_TIMEOUT_MS);
+              this.broadcastRoomState(room);
+            }
           }
-          this.broadcastRoomState(room);
         }
 
         this.socketBindings.delete(socket.id);

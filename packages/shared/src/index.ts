@@ -11,3 +11,7 @@ export {
 export * from './collision.js';
 export * from './movement.js';
 export * from './capture.js';
+export * from './rescue.js';
+export * from './guard.js';
+export * from './stealth.js';
+

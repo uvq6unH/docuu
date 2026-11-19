@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS matches (
   map_hash TEXT NOT NULL,
   selected_jail_id TEXT,
   phase TEXT NOT NULL DEFAULT 'JAIL_SELECTION',
-  winner TEXT CHECK(winner IN ('POLICE', 'ROBBER') OR winner IS NULL),
+  winner TEXT CHECK(winner IN ('POLICE', 'ROBBER', 'ABORTED') OR winner IS NULL),
   win_reason TEXT,
   started_at INTEGER NOT NULL,
   ended_at INTEGER,

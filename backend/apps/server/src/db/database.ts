@@ -279,7 +279,7 @@ export class DatabaseManager {
     updates: Partial<{
       phase: string;
       selectedJailId: string | null;
-      winner: 'POLICE' | 'ROBBER' | null;
+      winner: 'POLICE' | 'ROBBER' | 'ABORTED' | null;
       winReason: string | null;
       endedAt: number;
       durationSeconds: number;
@@ -392,6 +392,25 @@ export class DatabaseManager {
       .prepare(`
         UPDATE matches
         SET total_captures = total_captures + 1
+        WHERE match_id = ?
+      `)
+      .run(matchId);
+  }
+
+  public incrementPlayerRescue(matchId: string, rescuerId: string): void {
+    const now = Date.now();
+    this.db
+      .prepare(`
+        UPDATE match_player_stats
+        SET rescues_count = rescues_count + 1, updated_at = ?
+        WHERE match_id = ? AND player_id = ?
+      `)
+      .run(now, matchId, rescuerId);
+
+    this.db
+      .prepare(`
+        UPDATE matches
+        SET total_rescues = total_rescues + 1
         WHERE match_id = ?
       `)
       .run(matchId);
