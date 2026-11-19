@@ -1,0 +1,25 @@
+{
+  "name": "@folk-tag/server",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "dev": "node dist/index.js",
+    "dev:mock": "node dist/index.js --mock",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@folk-tag/shared": "*",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.1",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "folk-tag-backend",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "dev": "npm run dev --workspace=apps/server",
+    "dev:server": "npm run dev --workspace=apps/server",
+    "dev:mock": "npm run dev:mock --workspace=apps/server"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "socket.io-client": "^4.8.4",
+    "typescript": "^5.6.3"
+  }
+}
