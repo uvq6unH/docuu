@@ -10,7 +10,11 @@ export function connectMock(
   scene: Scene, onSnapshot: (snapshot: Snapshot) => void,
   onStatus: (message: string) => void, onRoom: (room: RoomState | null) => void,
 ) {
-  const socket = io({ autoConnect: false });
+  const spawnParam = new URLSearchParams(window.location.search).get('spawn');
+  const socket = io({
+    autoConnect: false,
+    ...(spawnParam ? { query: { spawn: spawnParam } } : {}),
+  });
   const group = new Group();
   scene.add(group);
   const geometry = new CapsuleGeometry(.35, 1);

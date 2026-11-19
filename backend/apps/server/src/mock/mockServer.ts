@@ -18,6 +18,7 @@ import {
   CaptureActor,
   CaptureTarget,
   GameEvent,
+  Vec3,
 } from '@folk-tag/shared';
 import {
   INITIAL_MOCK_BOTS,
@@ -68,7 +69,27 @@ export class MockServer {
       const assignedId = this.clients.size === 0 ? 'police-1' : `robber-${Math.min(4, this.clients.size)}`;
       const role: MovementRole = assignedId.startsWith('police') ? 'POLICE' : 'ROBBER';
       const bot = this.bots.find((b) => b.id === assignedId);
-      const spawnPos = bot ? bot.pos : (role === 'POLICE' ? officialVillageMap.spawns.police[0]! : officialVillageMap.spawns.robber[0]!);
+      const isNearSpawn = socket.handshake.query.spawn === 'near';
+      const defaultSpawnPos = role === 'POLICE' ? officialVillageMap.spawns.police[0]! : officialVillageMap.spawns.robber[0]!;
+      const spawnPos: Vec3 = [...(bot ? bot.pos : defaultSpawnPos)];
+
+      if (isNearSpawn && role === 'ROBBER') {
+        const policeBot = this.bots.find((b) => b.id === 'police-1');
+        if (policeBot) {
+          policeBot.patrolSpeed = 0;
+          const fx = -Math.sin(policeBot.yaw);
+          const fz = -Math.cos(policeBot.yaw);
+          spawnPos[0] = policeBot.pos[0] + fx * 1.2;
+          spawnPos[1] = policeBot.pos[1];
+          spawnPos[2] = policeBot.pos[2] + fz * 1.2;
+        }
+      }
+
+      if (bot && isNearSpawn && role === 'ROBBER') {
+        bot.pos = [spawnPos[0], spawnPos[1], spawnPos[2]];
+        bot.baseCenter = [spawnPos[0], spawnPos[1], spawnPos[2]];
+        bot.patrolSpeed = 0;
+      }
 
       const session: ConnectedClientSession = {
         socket,
@@ -122,7 +143,10 @@ export class MockServer {
         const now = Date.now();
         if (captureTriggered && session.role === 'POLICE') {
           // Cooldown check (1.1s kể cả hụt)
-          if (now - session.lastCaptureAttemptTime >= GAME_RULES.CAPTURE_COOLDOWN_MS) {
+          if (
+            session.lastCaptureAttemptTime === 0 ||
+            now - session.lastCaptureAttemptTime >= GAME_RULES.CAPTURE_COOLDOWN_MS
+          ) {
             session.lastCaptureAttemptTime = now;
 
             const policeActor: CaptureActor = {

@@ -43,3 +43,46 @@ test('two browsers receive the room and observe server-confirmed player movement
   await page.getByRole('link', { name: 'Về sân offline' }).click();
   await expect(page.locator('.scene-label')).toContainText('Offline');
 });
+
+test('two browsers observe capture: police clicks in range, robber teleports to jail J1 and jailedCount becomes 1', async ({ page, browser }) => {
+  await page.goto('/?backend=mock');
+  await expect(page.locator('.scene-label')).toContainText('police-1');
+
+  const robberBrowser = await browser.newPage();
+  let robberSelfPos: Snapshot['self']['pos'] | undefined;
+  let robberSelfState: string | undefined;
+  let observerJailedCount = 0;
+
+  robberBrowser.on('websocket', (ws) => {
+    ws.on('framereceived', ({ payload }) => {
+      const packet = payload.toString();
+      if (!packet.startsWith('42["game:snapshot",')) return;
+      const [, snapshot] = JSON.parse(packet.slice(2)) as [string, Snapshot];
+      robberSelfPos = snapshot.self.pos;
+      robberSelfState = snapshot.self.state;
+      observerJailedCount = snapshot.jailedCount;
+    });
+  });
+
+  await robberBrowser.goto('http://127.0.0.1:5175/?backend=mock&spawn=near');
+  await expect(robberBrowser.locator('.scene-label')).toContainText('robber-1');
+
+  await expect.poll(() => robberSelfPos).toBeDefined();
+  await expect.poll(() => observerJailedCount).toBe(0);
+
+  // Police enters and clicks left mouse to capture robber
+  await page.bringToFront();
+  await page.locator('#enter').click();
+  await expect(page.locator('#status')).toContainText('Chuột đã khóa');
+
+  const canvas = page.locator('canvas');
+  await canvas.dispatchEvent('mousedown', { button: 0 });
+
+  // Both browsers observe robber in jail J1 slot 0 [-0.8, 0, -0.8] and jailedCount = 1
+  await expect.poll(() => observerJailedCount).toBe(1);
+  await expect.poll(() => robberSelfState).toBe('JAILED');
+  await expect.poll(() => robberSelfPos && Math.hypot(robberSelfPos[0] - (-0.8), robberSelfPos[2] - (-0.8))).toBeLessThan(0.01);
+
+  await page.keyboard.press('Escape');
+  await robberBrowser.close();
+});

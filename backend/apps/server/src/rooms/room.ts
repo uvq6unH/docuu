@@ -238,7 +238,7 @@ export class Room {
     }
   }
 
-  private step(): void {
+  public step(): void {
     const now = Date.now();
     const dt = Math.min(0.1, (now - this.monotonicLastTime) / 1000);
     this.monotonicLastTime = now;
@@ -293,7 +293,10 @@ export class Room {
           // G02 Authoritative Capture Validation & Execution
           const captureCooldownTicks = Math.ceil(GAME_RULES.CAPTURE_COOLDOWN_MS / GAME_RULES.SIMULATION_TIMESTEP_MS);
           if (captureTriggered && session.role === 'POLICE' && this.phase === 'PLAYING') {
-            if (this.tick - session.lastCaptureAttemptTick >= captureCooldownTicks) {
+            if (
+              session.lastCaptureAttemptTick === 0 ||
+              this.tick - session.lastCaptureAttemptTick >= captureCooldownTicks
+            ) {
               session.lastCaptureAttemptTick = this.tick;
 
               const policeActor: CaptureActor = {
