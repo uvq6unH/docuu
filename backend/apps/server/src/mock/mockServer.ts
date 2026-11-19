@@ -14,6 +14,10 @@ import {
   MovementState,
   MovementIntent,
   MovementRole,
+  validateCapture,
+  CaptureActor,
+  CaptureTarget,
+  GameEvent,
 } from '@folk-tag/shared';
 import {
   INITIAL_MOCK_BOTS,
@@ -36,6 +40,7 @@ interface ConnectedClientSession {
   ackSeq: number;
   lastJumpId: number;
   lastCaptureId: number;
+  lastCaptureAttemptTime: number;
   lastInputTime: number;
 }
 
@@ -73,6 +78,7 @@ export class MockServer {
         ackSeq: 0,
         lastJumpId: 0,
         lastCaptureId: 0,
+        lastCaptureAttemptTime: 0,
         lastInputTime: Date.now(),
       };
       this.clients.set(socket.id, session);
@@ -107,32 +113,127 @@ export class MockServer {
         if (input.jumpId) {
           session.lastJumpId = input.jumpId;
         }
+
+        const captureTriggered = Boolean(input.captureId && input.captureId > session.lastCaptureId);
         if (input.captureId) {
           session.lastCaptureId = input.captureId;
         }
 
-        const moveX = (Math.sign(input.moveX) || 0) as -1 | 0 | 1;
-        const moveZ = (Math.sign(input.moveZ) || 0) as -1 | 0 | 1;
+        const now = Date.now();
+        if (captureTriggered && session.role === 'POLICE') {
+          // Cooldown check (1.1s kể cả hụt)
+          if (now - session.lastCaptureAttemptTime >= GAME_RULES.CAPTURE_COOLDOWN_MS) {
+            session.lastCaptureAttemptTime = now;
+
+            const policeActor: CaptureActor = {
+              id: session.playerId,
+              role: 'POLICE',
+              pos: session.movementState.pos,
+              yaw: input.yaw,
+              crouch: session.movementState.crouched,
+            };
+
+            const activeJail = officialVillageMap.jails.find((j) => j.id === 'J1')!;
+            const robbers: CaptureTarget[] = this.bots
+              .filter((b) => b.role === 'ROBBER')
+              .map((b) => ({
+                id: b.id,
+                role: 'ROBBER' as const,
+                pos: b.pos,
+                crouch: b.crouch,
+                state: b.state || 'FREE',
+              }));
+
+            const occupiedSlots = new Set<number>();
+            for (const b of this.bots) {
+              if (b.role === 'ROBBER' && b.state === 'JAILED' && b.jailSlotIndex !== undefined) {
+                occupiedSlots.add(b.jailSlotIndex);
+              }
+            }
+
+            const captureResult = validateCapture(
+              policeActor,
+              robbers,
+              officialVillageMap.colliders,
+              activeJail,
+              occupiedSlots
+            );
+
+            if (
+              captureResult.valid &&
+              captureResult.target &&
+              captureResult.slotIndex !== undefined &&
+              captureResult.jailPos
+            ) {
+              const targetBot = this.bots.find((b) => b.id === captureResult.target!.id);
+              if (targetBot) {
+                targetBot.state = 'JAILED';
+                targetBot.pos = [...captureResult.jailPos];
+                targetBot.vel = [0, 0, 0];
+                targetBot.patrolSpeed = 0;
+                targetBot.jailSlotIndex = captureResult.slotIndex;
+              }
+
+              for (const clientSession of this.clients.values()) {
+                if (clientSession.playerId === captureResult.target.id) {
+                  clientSession.movementState.pos = [...captureResult.jailPos];
+                  clientSession.movementState.verticalSpeed = 0;
+                }
+              }
+
+              const event: GameEvent = {
+                eventId: `capture-${this.tick}-${captureResult.target.id}`,
+                tick: this.tick,
+                type: 'CAPTURE',
+                data: {
+                  policeId: session.playerId,
+                  robberId: captureResult.target.id,
+                  jailId: 'J1',
+                  slotIndex: captureResult.slotIndex,
+                },
+              };
+              this.io.emit(SERVER_EVENTS.GAME_EVENT, event);
+              console.log(
+                `[MockServer] Capture SUCCESS: ${session.playerId} captured ${captureResult.target.id} -> J1 slot ${captureResult.slotIndex}`
+              );
+            } else {
+              console.log(
+                `[MockServer] Capture MISSED: ${session.playerId} (reason: ${captureResult.failReason})`
+              );
+            }
+          }
+        }
+
+        // Prevent movement if this client is a jailed robber
+        const controlledBot = this.bots.find((b) => b.id === session.playerId);
+        const isJailed = session.role === 'ROBBER' && controlledBot?.state === 'JAILED';
+
+        const moveX = isJailed ? 0 : ((Math.sign(input.moveX) || 0) as -1 | 0 | 1);
+        const moveZ = isJailed ? 0 : ((Math.sign(input.moveZ) || 0) as -1 | 0 | 1);
 
         const intent: MovementIntent = {
           moveX,
           moveZ,
           yaw: input.yaw,
-          jumpPressed,
-          sprint: Boolean(input.sprint),
+          jumpPressed: isJailed ? false : jumpPressed,
+          sprint: isJailed ? false : Boolean(input.sprint),
           crouch: Boolean(input.crouch),
         };
 
-        // Advance authoritative simulation step
-        session.movementState = stepMovement(
-          session.movementState,
-          intent,
-          session.role,
-          officialVillageMap
-        );
+        if (isJailed && controlledBot) {
+          session.movementState.pos = [...controlledBot.pos];
+          session.movementState.verticalSpeed = 0;
+        } else {
+          // Advance authoritative simulation step
+          session.movementState = stepMovement(
+            session.movementState,
+            intent,
+            session.role,
+            officialVillageMap
+          );
+        }
 
         // Reflect simulated state into bot state for broadcast
-        const controlledBot = this.bots.find((b) => b.id === session.playerId);
         if (controlledBot) {
           controlledBot.pos = [...session.movementState.pos];
           controlledBot.yaw = input.yaw;
@@ -196,6 +297,9 @@ export class MockServer {
       );
 
       const otherBots = this.bots.filter((b) => b.id !== session.playerId);
+      const jailedCount = this.bots.filter(
+        (b) => b.role === 'ROBBER' && b.state === 'JAILED'
+      ).length;
 
       const snapshot: Snapshot = {
         protocolVersion: 1,
@@ -207,7 +311,7 @@ export class MockServer {
         guardId: null,
         self: selfView,
         players: otherBots.map(toPlayerView),
-        jailedCount: 0,
+        jailedCount,
         result: null,
       };
 

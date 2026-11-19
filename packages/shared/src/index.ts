@@ -10,3 +10,4 @@ export {
 } from './map.js';
 export * from './collision.js';
 export * from './movement.js';
+export * from './capture.js';

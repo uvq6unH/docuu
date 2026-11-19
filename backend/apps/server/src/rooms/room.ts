@@ -19,6 +19,10 @@ import {
   CLIENT_EVENTS,
   checkLineOfSight,
   Vec3,
+  validateCapture,
+  CaptureActor,
+  CaptureTarget,
+  GameEvent,
 } from '@folk-tag/shared';
 import { officialVillageMap } from '../mock/mockServer.js';
 
@@ -36,6 +40,8 @@ export interface PlayerSession {
   lastProcessedSeq: number;
   lastJumpId: number;
   lastCaptureId: number;
+  lastCaptureAttemptTick: number;
+  jailSlotIndex?: number;
   lastInputTimestamp: number;
   disconnectTimer: NodeJS.Timeout | null;
   state: RobberState;
@@ -87,6 +93,7 @@ export class Room {
       lastProcessedSeq: 0,
       lastJumpId: 0,
       lastCaptureId: 0,
+      lastCaptureAttemptTick: 0,
       lastInputTimestamp: Date.now(),
       disconnectTimer: null,
       state: 'FREE',
@@ -279,14 +286,103 @@ export class Room {
 
           const jumpPressed = Boolean(frame.jumpId && frame.jumpId > session.lastJumpId);
           if (frame.jumpId) session.lastJumpId = frame.jumpId;
+
+          const captureTriggered = Boolean(frame.captureId && frame.captureId > session.lastCaptureId);
           if (frame.captureId) session.lastCaptureId = frame.captureId;
 
+          // G02 Authoritative Capture Validation & Execution
+          const captureCooldownTicks = Math.ceil(GAME_RULES.CAPTURE_COOLDOWN_MS / GAME_RULES.SIMULATION_TIMESTEP_MS);
+          if (captureTriggered && session.role === 'POLICE' && this.phase === 'PLAYING') {
+            if (this.tick - session.lastCaptureAttemptTick >= captureCooldownTicks) {
+              session.lastCaptureAttemptTick = this.tick;
+
+              const policeActor: CaptureActor = {
+                id: session.id,
+                role: 'POLICE',
+                pos: session.movementState.pos,
+                yaw: frame.yaw,
+                crouch: session.movementState.crouched,
+              };
+
+              const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'))!;
+              const robbers: CaptureTarget[] = Array.from(this.players.values())
+                .filter((p) => p.role === 'ROBBER')
+                .map((p) => ({
+                  id: p.id,
+                  role: 'ROBBER' as const,
+                  pos: p.movementState.pos,
+                  crouch: p.movementState.crouched,
+                  state: p.state,
+                }));
+
+              const occupiedSlots = new Set<number>();
+              for (const p of this.players.values()) {
+                if (p.role === 'ROBBER' && p.state === 'JAILED' && p.jailSlotIndex !== undefined) {
+                  occupiedSlots.add(p.jailSlotIndex);
+                }
+              }
+
+              const captureResult = validateCapture(
+                policeActor,
+                robbers,
+                officialVillageMap.colliders,
+                activeJail,
+                occupiedSlots
+              );
+
+              if (
+                captureResult.valid &&
+                captureResult.target &&
+                captureResult.slotIndex !== undefined &&
+                captureResult.jailPos
+              ) {
+                const targetSession = this.players.get(captureResult.target.id);
+                if (targetSession) {
+                  targetSession.state = 'JAILED';
+                  targetSession.jailSlotIndex = captureResult.slotIndex;
+                  targetSession.movementState.pos = [...captureResult.jailPos];
+                  targetSession.movementState.verticalSpeed = 0;
+                }
+
+                const captureEvent: GameEvent = {
+                  eventId: `capture-${this.tick}-${captureResult.target.id}`,
+                  tick: this.tick,
+                  type: 'CAPTURE',
+                  data: {
+                    policeId: session.id,
+                    robberId: captureResult.target.id,
+                    jailId: activeJail.id,
+                    slotIndex: captureResult.slotIndex,
+                  },
+                };
+                this.broadcastEvent(captureEvent);
+
+                // Win check: all robbers jailed
+                const remainingRobbers = Array.from(this.players.values()).filter(
+                  (p) => p.role === 'ROBBER' && p.state !== 'JAILED'
+                );
+                if (remainingRobbers.length === 0) {
+                  this.phase = 'RESULT';
+                  const resultEvent: GameEvent = {
+                    eventId: `result-${this.tick}`,
+                    tick: this.tick,
+                    type: 'RESULT',
+                    data: { winner: 'POLICE', reason: 'ALL_ROBBERS_JAILED' },
+                  };
+                  this.broadcastEvent(resultEvent);
+                }
+              }
+            }
+          }
+
+          const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
+
           intent = {
-            moveX: (Math.sign(frame.moveX) || 0) as -1 | 0 | 1,
-            moveZ: (Math.sign(frame.moveZ) || 0) as -1 | 0 | 1,
+            moveX: isJailed ? 0 : ((Math.sign(frame.moveX) || 0) as -1 | 0 | 1),
+            moveZ: isJailed ? 0 : ((Math.sign(frame.moveZ) || 0) as -1 | 0 | 1),
             yaw: frame.yaw,
-            jumpPressed,
-            sprint: Boolean(frame.sprint),
+            jumpPressed: isJailed ? false : jumpPressed,
+            sprint: isJailed ? false : Boolean(frame.sprint),
             crouch: Boolean(frame.crouch),
           };
 
@@ -297,6 +393,31 @@ export class Room {
             intent.sprint = false;
           }
 
+          if (isJailed && session.jailSlotIndex !== undefined) {
+            const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'));
+            if (activeJail && activeJail.slots[session.jailSlotIndex]) {
+              session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+              session.movementState.verticalSpeed = 0;
+            }
+          } else {
+            session.movementState = stepMovement(
+              session.movementState,
+              intent,
+              session.role as MovementRole,
+              officialVillageMap
+            );
+          }
+        }
+      } else {
+        const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
+        if (isJailed && session.jailSlotIndex !== undefined) {
+          const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'));
+          if (activeJail && activeJail.slots[session.jailSlotIndex]) {
+            session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+            session.movementState.verticalSpeed = 0;
+          }
+        } else {
+          // No input or stale: simulate idle deceleration/gravity
           session.movementState = stepMovement(
             session.movementState,
             intent,
@@ -304,14 +425,6 @@ export class Room {
             officialVillageMap
           );
         }
-      } else {
-        // No input or stale: simulate idle deceleration/gravity
-        session.movementState = stepMovement(
-          session.movementState,
-          intent,
-          session.role as MovementRole,
-          officialVillageMap
-        );
       }
     }
 
@@ -404,6 +517,14 @@ export class Room {
       };
 
       session.socket.emit(SERVER_EVENTS.GAME_SNAPSHOT, snapshot);
+    }
+  }
+
+  public broadcastEvent(event: GameEvent): void {
+    for (const player of this.players.values()) {
+      if (player.socket && player.socket.connected) {
+        player.socket.emit(SERVER_EVENTS.GAME_EVENT, event);
+      }
     }
   }
 }

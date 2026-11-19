@@ -12,6 +12,7 @@ export interface MockBotState {
   guard?: boolean;
   connected: boolean;
   stamina: number;
+  jailSlotIndex?: number;
   // Patrol waypoints for realistic simulation
   baseCenter: Vec3;
   patrolRadius: number;
@@ -123,6 +124,7 @@ export const INITIAL_MOCK_BOTS: MockBotState[] = [
  */
 export function updateMockBots(bots: MockBotState[], dt: number): void {
   for (const bot of bots) {
+    if (bot.state === 'JAILED') continue;
     bot.patrolAngle += bot.patrolSpeed * dt;
     if (bot.patrolAngle > Math.PI * 2) {
       bot.patrolAngle -= Math.PI * 2;

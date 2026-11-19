@@ -8,7 +8,7 @@
     "start": "node dist/index.js",
     "dev": "node dist/index.js",
     "dev:mock": "node dist/index.js --mock",
-    "test": "node --test tests/rooms.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
