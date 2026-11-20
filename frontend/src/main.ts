@@ -8,8 +8,6 @@ import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
 import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
-import { isRobberCapturable } from '../../packages/shared/src/capture';
-import { checkRescueEligibility } from '../../packages/shared/src/rescue';
 import type { RoomState, GameEvent, Snapshot } from '../../packages/shared/src/protocol';
 import { sound } from './core/audio';
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
@@ -100,6 +98,7 @@ try {
   let currentRole: 'POLICE' | 'ROBBER' | null = null;
   let activeJailId = 'J1';
   let lastRemainingSec = -1;
+  let lastCaptureAttemptTime = 0;
 
   const surveyPosition = camera.position.clone();
   const surveyRotation = camera.rotation.clone();
@@ -258,17 +257,42 @@ try {
   function checkAimInteraction(snapshot: Snapshot | null, yaw: number) {
     let action: 'capture' | 'rescue' | null = null;
     if (snapshot?.phase === 'PLAYING') {
-      const self = snapshot.self;
-      if (self.role === 'POLICE') {
-        const police = { ...self, yaw };
-        if (snapshot.players.some(target => target.connected && target.state &&
-          isRobberCapturable(police, { ...target, state: target.state }, villageMap.colliders).capturable)) {
-          action = 'capture';
+      if (currentRole === 'POLICE') {
+        const forwardX = -Math.sin(yaw);
+        const forwardZ = -Math.cos(yaw);
+        for (const remote of session.getRemoteEntities().values()) {
+          if (remote.role !== 'ROBBER' || remote.state === 'JAILED' || remote.state === 'IMMUNE') continue;
+          const dx = remote.currentPos.x - player.pos[0];
+          const dz = remote.currentPos.z - player.pos[2];
+          const dist = Math.hypot(dx, dz);
+          const dy = Math.abs(remote.currentPos.y - player.pos[1]);
+
+          if (dist <= 2.2 && dy <= 1.2) {
+            const dot = (forwardX * dx + forwardZ * dz) / dist;
+            const angleDeg = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
+            if (angleDeg <= 65) {
+              action = 'capture';
+              break;
+            }
+          }
         }
-      } else if (snapshot.jailedCount > 0 && self.state) {
+      } else if (snapshot.jailedCount > 0 && currentRole === 'ROBBER' && snapshot.self.state !== 'JAILED') {
         const jail = villageMap.jails.find(candidate => candidate.id === snapshot.jailId);
-        if (jail && checkRescueEligibility({ ...self, role: 'ROBBER', state: self.state, yaw },
-          jail, villageMap.colliders).eligible) action = 'rescue';
+        if (jail) {
+          const forwardX = -Math.sin(yaw);
+          const forwardZ = -Math.cos(yaw);
+          for (const anchor of jail.rescueAnchors) {
+            const dist = Math.hypot(anchor[0] - player.pos[0], anchor[2] - player.pos[2]);
+            if (dist <= 1.8) {
+              const toJailX = jail.center[0] - player.pos[0];
+              const toJailZ = jail.center[2] - player.pos[2];
+              if (forwardX * toJailX + forwardZ * toJailZ >= 0) {
+                action = 'rescue';
+                break;
+              }
+            }
+          }
+        }
       }
     }
     actionPrompt.hidden = action === null;
@@ -333,14 +357,41 @@ try {
       if (session.isMock) sceneLabel.textContent = 'MOCK01 · ' + self.id + ' · ' + session.currentRoom?.roster.length + ' nhân vật';
 
       currentRole = self.role;
-      player = {
-        ...player,
-        pos: self.pos,
-        stamina: self.stamina,
-        grounded: self.grounded,
-        crouched: self.crouch,
-      };
-      previous = player;
+
+      if (self.state === 'JAILED') {
+        player = {
+          ...player,
+          pos: [...self.pos],
+          stamina: self.stamina,
+          grounded: self.grounded,
+          crouched: false,
+          verticalSpeed: 0,
+        };
+        previous = player;
+      } else {
+        // Smooth prediction error reconciliation to prevent camera hitching
+        const errX = self.pos[0] - player.pos[0];
+        const errZ = self.pos[2] - player.pos[2];
+        const errY = self.pos[1] - player.pos[1];
+        const errDist = Math.hypot(errX, errZ);
+
+        if (errDist > 1.8) {
+          // Hard snap on large server correction / teleport
+          player.pos = [...self.pos];
+          player.verticalSpeed = 0;
+          previous = player;
+        } else if (errDist > 0.03) {
+          // Gentle correction nudge towards server position
+          player.pos[0] += errX * 0.15;
+          player.pos[2] += errZ * 0.15;
+          if (Math.abs(errY) > 0.25) {
+            player.pos[1] += errY * 0.2;
+          }
+        }
+        player.stamina = self.stamina;
+        player.grounded = self.grounded;
+        player.crouched = self.crouch;
+      }
 
       // Countdown audio warning in the final 5 seconds
       const sec = Math.ceil(snapshot.remainingMs / 1000);
@@ -770,17 +821,35 @@ try {
         previous = player;
         const input = controls.input.consume();
 
+        // Immediate Client-Side Prediction: Step physics locally at 30Hz!
+        const role = currentRole || 'ROBBER';
+        const isJailed = latestSnapshot?.self?.state === 'JAILED';
+        const isPoliceFrozen = latestSnapshot?.phase === 'HEAD_START' && currentRole === 'POLICE';
+
+        if (!isJailed && !isPoliceFrozen) {
+          player = stepMovement(player, { ...input, yaw: camera.rotation.y }, role, villageMap);
+        }
+
         if (!isOffline) {
           // Stream input frame to Authoritative Server at 30Hz
           session.send(input, camera.rotation.y, camera.rotation.x);
-        } else {
-          // Offline single-player local physics
-          player = stepMovement(player, { ...input, yaw: camera.rotation.y }, 'ROBBER', villageMap);
         }
 
         // Procedural footstep audio when moving
         if (input.moveX !== 0 || input.moveZ !== 0) {
           sound.playFootstep(input.sprint, input.crouch || player.crouched);
+        }
+
+        // Capture action visual & sound feedback on client click
+        if (input.capturePressed && currentRole === 'POLICE') {
+          const now = performance.now();
+          if (now - lastCaptureAttemptTime >= 1100) {
+            lastCaptureAttemptTime = now;
+            sound.playCaptureSwing();
+            crosshair.classList.remove('swing');
+            void crosshair.offsetWidth; // trigger reflow for animation
+            crosshair.classList.add('swing');
+          }
         }
 
         accumulated -= tickMs;
