@@ -15,6 +15,9 @@ export async function loadVillageModels(village: Group, jailModel: Group, isDisp
         return;
       }
       if (asset === 'jail') {
+        scene.traverse(part => {
+          if (part instanceof Mesh) part.castShadow = part.receiveShadow = true;
+        });
         jailModel.add(scene);
         return;
       }
@@ -35,6 +38,8 @@ export async function loadVillageModels(village: Group, jailModel: Group, isDisp
       scene.traverse(part => {
         if (!(part instanceof Mesh)) return;
         const mesh = new InstancedMesh(part.geometry, part.material, placements.length);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         placements.forEach(({ matrix }, index) => {
           mesh.setMatrixAt(index, new Matrix4().multiplyMatrices(matrix, part.matrixWorld));
         });
