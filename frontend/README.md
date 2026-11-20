@@ -98,6 +98,10 @@ Chọn J1, J2 hoặc J3 trong bảng khảo sát để xem mô hình nhà giam t
 
 Quyết định dùng chung map/movement, các bước chuyển backend và tiêu chí mở lobby được ghi trong [bàn giao backend](../BACKEND_FE_HANDOFF.md).
 
+## Kết quả và chơi lại
+
+Khi ván kết thúc, bảng phòng hiển thị đội thắng và lý do do server gửi. Chủ phòng chọn **Chơi lại** để đưa mọi người về phòng chờ với cùng mã. Mỗi người bấm **Sẵn sàng** lần nữa, chủ phòng bắt đầu ván và đội trưởng chọn nhà giam mới.
+
 ## Trở lại ván sau mất kết nối
 
 Tải lại cùng tab hoặc kết nối mạng lại trong vòng 30 giây để trở về phòng đang chơi. Nếu đang bị giam, bạn sẽ thấy lại HUD nhà giam và có thể bấm vào sân để khóa chuột. Nút Rời phòng xóa phiên đã lưu trong tab. Khi server báo phiên hết hạn, màn hình tạo/vào phòng xuất hiện lại.

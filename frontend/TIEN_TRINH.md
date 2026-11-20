@@ -342,3 +342,17 @@ Kiểm tra đạt lint FE, typecheck và build của FE/shared/backend, 43 unit 
 FE đạt lint, typecheck qua build và 44 unit test. Backend build đạt. Đã chạy 4/4 bài tích hợp Chrome qua IP Wi-Fi 172.20.10.5 bằng PLAYWRIGHT_LAN_HOST, gồm phòng sáu người bắt, kết nối lại và cứu người. Các trình duyệt đều chạy trên máy chủ. Trang game cổng 5173 trả HTTP 200 và /healthz trả ok. Build FE có cảnh báo chunk chính 719,76 kB.
 
 Bước tiếp theo là mở địa chỉ Network từ máy vật lý thứ hai cùng Wi-Fi, vào phòng bằng mã, bấm Sẵn sàng và xác nhận hai máy nhìn thấy nhau di chuyển.
+
+### 20/11/2026 — Kết quả và chơi lại trong cùng phòng
+
+Người dùng đã xác nhận hai máy qua LAN nhìn thấy nhau di chuyển. FE hiện hiển thị kết quả từ snapshot trong bảng phòng, tự thả chuột và ngừng gửi input ở pha RESULT. Chủ phòng thấy nút Chơi lại, khách thấy hướng dẫn chờ. Khi server đưa phòng về lobby, FE ẩn kết quả và HUD ván cũ. Hướng dẫn đã cập nhật trong README.md.
+
+Bài Chrome mới ở tests/backend/capture.spec.ts dùng hai người và backend thật. Cảnh sát bắt cướp tại J1, cả hai thấy Cảnh sát thắng với lý do toàn bộ cướp đã bị bắt. Sau khi chủ phòng bấm Chơi lại, hai người giữ nguyên mã phòng, sẵn sàng lại, chọn J2 và cùng tới PLAYING với số bị giam 0/1. Đã đạt lint, typecheck qua build, 44 unit test FE, 5 bài tích hợp Chrome và 10 bài sân tập. Build cảnh báo chunk chính 720,50 kB. Ca hết giờ và hủy do mất kết nối chưa được nghiệm thu qua trình duyệt.
+
+Bước tiếp theo là kiểm tra một ván hết giờ với cướp còn tự do, cả hai máy cùng thấy Cướp thắng và có thể chơi lại.
+
+### 20/11/2026 — Nghiệm thu Cướp thắng khi hết giờ
+
+Đã thêm bài Chrome hai người chờ ván hết 300 giây mô phỏng. Cả hai thấy Cướp thắng và lý do hết giờ, HUD hành động ẩn, chuột được thả. Chủ phòng bấm Chơi lại, hai người giữ mã phòng, sẵn sàng lại và vào PLAYING tại J3 với số bị giam 0/1. Đã xem ảnh timeout-host.png. Bài đạt trong 7,1 phút, lint FE đạt.
+
+Lượt đầu chờ 330 giây nhưng HUD còn 14 giây nên bài hết thời gian chờ. Server dùng tick cố định để trừ đồng hồ, callback bị trễ khiến thời gian thực dài hơn luật 5 phút. Đã ghi bằng chứng trong ../BACKEND_FE_HANDOFF.md. Giới hạn chờ E2E hiện là 480 giây cho kết quả. Bước tiếp theo là sửa deadline thời gian thực ở backend theo luật, rồi chạy lại bài hết giờ để đo lại thời lượng.

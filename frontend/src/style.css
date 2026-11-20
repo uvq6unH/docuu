@@ -62,6 +62,10 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 .btn-danger:hover { background: #7c2d1e !important; }
 .btn-ready { background: #2f7a3e !important; font-size: 15px; }
 .btn-unready { background: #9a681c !important; }
+#match-result { padding: 14px 0; border-block: 1px solid #aab5a5; }
+#match-result h2 { margin: 0; font-size: 1.6rem; color: #263d30; }
+#match-result p { margin: .4rem 0; }
+#match-result button { margin-top: .6rem; }
 
 .room-badge { display: flex; align-items: center; justify-content: space-between; background: #e8eee2; padding: 10px 14px; border-radius: 4px; font-weight: 700; font-size: 15px; margin-bottom: 12px; border: 1px solid #c2ceba; }
 .room-badge .badge-code { color: #1f5f30; font-family: monospace; font-size: 18px; letter-spacing: 2px; }

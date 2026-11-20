@@ -4,6 +4,54 @@ import { io, type Socket } from 'socket.io-client';
 import { test, expect, type Page } from '@playwright/test';
 import { CLIENT_EVENTS, PROTOCOL_VERSION, type AckResponse } from '../../../packages/shared/src/protocol';
 
+test('robbers win after the full five minutes and both players can rematch', async ({ page, browser }) => {
+  test.setTimeout(600000);
+  const guest = await browser.newPage({ viewport: { width: 900, height: 650 } });
+  try {
+    await page.goto('/');
+    await page.locator('#btn-create-room').click();
+    await expect(page.locator('#display-room-code')).toHaveText(/^[A-Z2-9]{6}$/);
+    const code = (await page.locator('#display-room-code').innerText()).trim();
+    await guest.goto(page.url());
+    await guest.locator('#join-room-code').fill(code);
+    await guest.locator('#btn-join-room').click();
+    for (const jail of ['J1', 'J3']) {
+      for (const client of [page, guest]) {
+        await expect(client.locator('#display-room-code')).toHaveText(code);
+        await expect(client.locator('#match-result')).toBeHidden();
+        await expect(client.locator('#btn-toggle-ready')).toHaveText('Sẵn sàng');
+        await client.locator('#btn-toggle-ready').click();
+      }
+      await page.locator('#btn-start-game').click();
+      await page.locator('[data-jail="' + jail + '"]').click();
+      for (const client of [page, guest]) {
+        await expect(client.locator('#hud-jail')).toHaveText(jail);
+        await expect(client.locator('#hud-jailed-count')).toHaveText('0 / 1');
+        await expect(client.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
+      }
+      if (jail === 'J3') break;
+      await page.bringToFront();
+      await page.locator('#enter').click();
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement !== null)).toBe(true);
+      await expect(page.locator('#result-title')).toHaveText('Cướp thắng', { timeout: 480000 });
+      for (const client of [page, guest]) {
+        await expect(client.locator('#result-title')).toBeVisible();
+        await expect(client.locator('#result-title')).toHaveText('Cướp thắng');
+        await expect(client.locator('#result-reason')).toHaveText('Hết giờ, vẫn còn cướp tự do.');
+        await expect(client.locator('#hud-overlay')).toBeHidden();
+        await expect(client.locator('#action-prompt')).toBeHidden();
+      }
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
+      await expect(guest.locator('#result-wait')).toBeVisible();
+      await page.screenshot({ path: 'test-results/timeout-host.png' });
+      await guest.screenshot({ path: 'test-results/timeout-guest.png' });
+      await page.locator('#btn-rematch').click();
+    }
+  } finally {
+    await guest.close();
+  }
+});
+
 // Follow a clear walking route with the regular keyboard/mouse listeners.
 // Only the server can set a position or confirm the capture.
 async function approach(page: Page, x: number, z: number, radius: number) {
@@ -155,4 +203,59 @@ test('expired room credentials return the player to the menu', async ({ page }) 
   await expect(page.locator('#status')).toContainText('Phiên phòng không còn khả dụng');
   await expect(page.locator('#btn-create-room')).toBeVisible();
   expect(await page.evaluate(() => sessionStorage.getItem('folk_tag_room_v1') === null)).toBe(true);
+});
+
+test('two players finish by capture and start another match in the same room', async ({ page, browser }) => {
+  test.setTimeout(180000);
+  const guest = await browser.newPage({ viewport: { width: 900, height: 650 } });
+  try {
+    await page.goto('/');
+    await page.locator('#btn-create-room').click();
+    const codeLabel = page.locator('#display-room-code');
+    await expect(codeLabel).toHaveText(/^[A-Z2-9]{6}$/);
+    const code = (await codeLabel.innerText()).trim();
+    await guest.goto(page.url());
+    await guest.locator('#join-room-code').fill(code);
+    await guest.locator('#btn-join-room').click();
+    for (const jail of ['J1', 'J2']) {
+      for (const client of [page, guest]) {
+        await expect(client.locator('#display-room-code')).toHaveText(code);
+        await expect(client.locator('#roster-list li')).toHaveCount(2);
+        await expect(client.locator('#match-result')).toBeHidden();
+        await expect(client.locator('#btn-toggle-ready')).toHaveText('Sẵn sàng');
+        await client.locator('#btn-toggle-ready').click();
+      }
+      await page.locator('#btn-start-game').click();
+      await page.locator('[data-jail="' + jail + '"]').click();
+      for (const client of [page, guest]) {
+        await expect(client.locator('#hud-jail')).toHaveText(jail);
+        await expect(client.locator('#hud-jailed-count')).toHaveText('0 / 1');
+        await expect(client.locator('#hud-immune-card')).toBeHidden();
+        await expect(client.locator('#rescue-bar-container')).toBeHidden();
+        await expect(client.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
+      }
+      if (jail === 'J2') break;
+      await page.bringToFront();
+      await page.locator('#enter').click();
+      await approach(page, -5, -13, .8);
+      await approach(page, -23, -12, .8);
+      await approach(page, -23, 0, 1.1);
+      await expect(page.locator('#action-prompt')).toContainText('BẮT CƯỚP');
+      await page.mouse.down();
+      await page.mouse.up();
+      for (const client of [page, guest]) {
+        await expect(client.locator('#result-title')).toBeVisible();
+        await expect(client.locator('#result-title')).toHaveText('Cảnh sát thắng');
+        await expect(client.locator('#result-reason')).toHaveText('Toàn bộ cướp đã bị bắt.');
+        await expect(client.locator('#action-prompt')).toBeHidden();
+        await expect(client.locator('#hud-overlay')).toBeHidden();
+      }
+      await expect.poll(() => page.evaluate(() => document.pointerLockElement === null)).toBe(true);
+      await expect(guest.locator('#result-wait')).toBeVisible();
+      await expect(guest.locator('#btn-rematch')).toBeHidden();
+      await page.locator('#btn-rematch').click();
+    }
+  } finally {
+    await guest.close();
+  }
 });

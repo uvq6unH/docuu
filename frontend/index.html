@@ -121,6 +121,14 @@
             <button id="btn-copy-code" type="button" style="width: auto; padding: 4px 8px; font-size: 11px;">Sao chép mã</button>
           </div>
           
+          <section id="match-result" aria-labelledby="result-title" hidden>
+            <div role="status">
+              <h2 id="result-title" tabindex="-1"></h2>
+              <p id="result-reason"></p>
+            </div>
+            <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại</button>
+            <p id="result-wait" hidden>Đang chờ chủ phòng chọn chơi lại.</p>
+          </section>
           <ul class="roster-list" id="roster-list"></ul>
 
           <!-- Captain Jail Selection UI in JAIL_SELECTION phase -->
@@ -135,7 +143,6 @@
           <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
             <button id="btn-toggle-ready" type="button" class="btn-ready">Sẵn sàng</button>
             <button id="btn-start-game" type="button" class="btn-ready" hidden>Bắt đầu trận đấu</button>
-            <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại ván mới (Rematch)</button>
             <button id="btn-leave-room" type="button" class="btn-danger" style="padding: 8px 12px; font-size: 12px;">Rời phòng</button>
           </div>
         </div>

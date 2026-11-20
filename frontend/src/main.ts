@@ -48,6 +48,10 @@ const captainJailPicker = requireElement('#captain-jail-picker');
 const btnToggleReady = requireElement<HTMLButtonElement>('#btn-toggle-ready');
 const btnStartGame = requireElement<HTMLButtonElement>('#btn-start-game');
 const btnRematch = requireElement<HTMLButtonElement>('#btn-rematch');
+const resultPanel = requireElement('#match-result');
+const resultTitle = requireElement('#result-title');
+const resultReason = requireElement('#result-reason');
+const resultWait = requireElement('#result-wait');
 const btnLeaveRoom = requireElement<HTMLButtonElement>('#btn-leave-room');
 
 // HUD Elements
@@ -297,6 +301,22 @@ try {
     },
     onSnapshot(snapshot) {
       latestSnapshot = snapshot;
+      if (snapshot.phase === 'RESULT') {
+        if (snapshot.result && resultShown !== snapshot.matchId) {
+          resultShown = snapshot.matchId;
+          const { winner, reason } = snapshot.result;
+          resultTitle.textContent = winner === 'POLICE' ? 'Cảnh sát thắng' : winner === 'ROBBER' ? 'Cướp thắng' : 'Ván đấu đã hủy';
+          const reasons: Record<string, string> = {
+            ALL_ROBBERS_JAILED: 'Toàn bộ cướp đã bị bắt.',
+            TIME_EXPIRED: 'Hết giờ, vẫn còn cướp tự do.',
+            DISCONNECT_TIMEOUT: 'Người chơi mất kết nối quá thời gian cho phép.',
+          };
+          resultReason.textContent = reasons[reason] ?? reason;
+          resultPanel.hidden = false;
+          resultTitle.focus();
+        }
+        return;
+      }
       world.setServerJail(snapshot.jailId);
       activeJailId = snapshot.jailId || 'J1';
       updateJailRescueBeacons(activeJailId);
@@ -359,18 +379,6 @@ try {
         rescueBarContainer.hidden = true;
       }
 
-      // Check match result
-      if (snapshot.phase === 'RESULT' && snapshot.result && resultShown !== snapshot.matchId) {
-        resultShown = snapshot.matchId;
-        const winner = snapshot.result.winner;
-        const msg = winner === 'POLICE'
-          ? '🏆 CẢNH SÁT THẮNG! (Đã tống giam toàn bộ cướp)'
-          : winner === 'ROBBER'
-          ? '🏆 CƯỚP THẮNG! (Hết giờ, cướp đã tẩu thoát)'
-          : `Trận đấu hủy: ${snapshot.result.reason}`;
-        showToast(msg, 6000);
-      }
-
       debug.dataset.ack = String(self.ackSeq);
       debug.dataset.z = String(self.pos[2]);
     },
@@ -402,6 +410,25 @@ try {
 
   function updateRoomUI(room: RoomState | null) {
     mockDetails.update(room?.roomCode === 'MOCK01' ? room : null);
+    const finished = room?.phase === 'RESULT';
+    button.hidden = finished;
+    if (!finished) {
+      resultPanel.hidden = true;
+      resultShown = '';
+    }
+    if (!room || room.phase === 'LOBBY' || finished) {
+      controls.input.clear();
+      hudOverlay.hidden = actionPrompt.hidden = rescueBarContainer.hidden = true;
+      hudImmuneCard.hidden = hudStealthCard.hidden = true;
+      eventToast.hidden = hitFlash.hidden = true;
+      if (document.pointerLockElement) document.exitPointerLock();
+      if (!finished) {
+        viewSession = '';
+        currentRole = null;
+        lastRemainingSec = -1;
+        world.setServerJail(null);
+      }
+    }
     if (!room) {
       viewSession = '';
       menuView.hidden = false;
@@ -488,6 +515,8 @@ try {
 
     // Host rematch button (available in RESULT phase)
     btnRematch.hidden = !(isHost && room.phase === 'RESULT');
+    resultWait.hidden = !finished || isHost;
+    if (finished) notice.textContent = 'Trận đấu đã kết thúc.';
 
     // Captain jail selection (available in JAIL_SELECTION phase)
     const showJailPicker = isCaptain && room.phase === 'JAIL_SELECTION';
@@ -696,7 +725,10 @@ try {
         rescueBarContainer.hidden = true;
       }
       status.textContent = locked ? 'Chuột đã khóa. Nhấn Esc để thả / xem Menu.' : 'Chuột đã nhả. Nhấn Vào sân tập để điều khiển.';
-      if (!locked) button.focus({ preventScroll: true });
+      if (!locked && session.currentRoom?.phase === 'RESULT') {
+        status.textContent = '';
+        if (!resultPanel.hidden) resultTitle.focus({ preventScroll: true });
+      } else if (!locked) button.focus({ preventScroll: true });
     },
     onError(message) { status.textContent = message; },
   });

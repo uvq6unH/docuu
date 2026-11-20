@@ -65,3 +65,7 @@ Tái hiện riêng với Room.step() trên bản build server: đặt một cư�
 Đề nghị đội BE giữ trạng thái phím và cờ yêu cầu nhả E qua tick rỗng khi kết nối và input còn hiệu lực. Nhả E, mất kết nối, input quá hạn hoặc mất điều kiện cứu phải hủy tiến độ theo luật. Thêm test server xen tick rỗng giữa các frame giữ E trong hai giây, cùng các trường hợp nhả E, quá hạn và tiếp tục giữ sau một lần cứu. Sau khi build lại server, chạy npm run test:backend trong frontend để xác nhận số bị giam giảm, điểm thả và HUD miễn bắt trong Chrome.
 
 **Đã sửa và nghiệm thu R01 trong workspace ngày 20/11/2026.** Server giữ E qua tick rỗng khi input còn hiệu lực, hủy tiến độ khi nhả E hoặc input quá hạn, và yêu cầu nhả E sau mỗi lần cứu. Test server có trường hợp nhả và nhấn lại trong cùng một lô input. Đã đạt 19/19 test server, typecheck, build và 4/4 bài tích hợp Chrome. Bài phòng sáu người xác nhận thả đúng điểm tại J1 và HUD miễn bắt hiện rồi tắt.
+
+### 20/11/2026 — Đồng hồ ván chậm khi máy tải cao
+
+Bài Chrome hai người chờ hết giờ đã quan sát HUD còn 00:14 sau 330 giây kể từ PLAYING. Room.start() gọi step() từ setInterval, còn step() trừ remainingMs bằng SIMULATION_TIMESTEP_MS cố định. Khi callback trễ, đồng hồ ván trễ theo. Cần đối chiếu deadline thực cho phase theo GAMEPLAY.md, đồng thời giữ bước mô phỏng cố định. FE hiện chờ kết quả authoritative. Bài thử đã tăng giới hạn chờ để nghiệm thu giao diện kết quả.

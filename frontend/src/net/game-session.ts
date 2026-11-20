@@ -459,6 +459,7 @@ export class GameSession {
   }
 
   public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): void {
+    if (this.currentRoom?.phase === 'RESULT') return;
     if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return;
     if (input.jumpPressed) this.jumpId++;
     if (input.capturePressed) this.captureId++;
