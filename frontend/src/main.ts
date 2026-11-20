@@ -8,6 +8,8 @@ import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
 import { GameSession } from './net/game-session';
 import type { RoomState, GameEvent } from '../../packages/shared/src/protocol';
+import { sound } from './core/audio';
+import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 
 function requireElement<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -57,6 +59,19 @@ const hudImmuneCard = requireElement('#hud-immune-card');
 const hudImmuneSec = requireElement('#hud-immune-sec');
 const eventToast = requireElement('#event-toast');
 
+// Compass, Minimap, Prompts, and Modal Elements (T03)
+const compassCardinal = requireElement('#compass-cardinal');
+const compassJailIndicator = requireElement('#compass-jail-indicator');
+const minimapCanvas = requireElement<HTMLCanvasElement>('#hud-minimap');
+const minimapCtx = minimapCanvas.getContext('2d');
+const actionPrompt = requireElement('#action-prompt');
+const rescueBarContainer = requireElement('#rescue-bar-container');
+const rescueBarFill = requireElement('#rescue-bar-fill');
+const hitFlash = requireElement('#hit-flash');
+const helpModal = requireElement('#help-modal');
+const btnToggleHelp = requireElement<HTMLButtonElement>('#btn-toggle-help');
+const btnCloseHelp = requireElement<HTMLButtonElement>('#btn-close-help');
+
 try {
   const { scene, camera } = createScene();
   const world = villagePreview();
@@ -74,6 +89,9 @@ try {
   let isOffline = false;
   let isReady = false;
   let toastTimer: number | null = null;
+  let currentRole: 'POLICE' | 'ROBBER' | null = null;
+  let activeJailId = 'J1';
+  let lastRemainingSec = -1;
 
   const surveyPosition = camera.position.clone();
   const surveyRotation = camera.rotation.clone();
@@ -84,6 +102,28 @@ try {
   playerNameInput.addEventListener('change', () => {
     localStorage.setItem('folk_tag_name', playerNameInput.value.trim());
   });
+
+  // 3D Visual Rescue Rings at Active Jail Anchors
+  const beaconGroup = new Group();
+  scene.add(beaconGroup);
+  const ringGeo = new RingGeometry(0.35, 0.65, 32);
+  ringGeo.rotateX(-Math.PI / 2);
+  const ringMat = new MeshBasicMaterial({ color: '#52b788', side: DoubleSide, transparent: true, opacity: 0.85 });
+  const ring1 = new Mesh(ringGeo, ringMat);
+  const ring2 = new Mesh(ringGeo, ringMat);
+  beaconGroup.add(ring1);
+  beaconGroup.add(ring2);
+
+  function updateJailRescueBeacons(jailId: string) {
+    const jail = villageMap.jails.find((j) => j.id === jailId) || villageMap.jails[0]!;
+    if (jail.rescueAnchors[0]) {
+      ring1.position.set(jail.rescueAnchors[0][0], jail.rescueAnchors[0][1] + 0.05, jail.rescueAnchors[0][2]);
+    }
+    if (jail.rescueAnchors[1]) {
+      ring2.position.set(jail.rescueAnchors[1][0], jail.rescueAnchors[1][1] + 0.05, jail.rescueAnchors[1][2]);
+    }
+  }
+  updateJailRescueBeacons('J1');
 
   function showToast(message: string, durationMs = 3500) {
     if (toastTimer) clearTimeout(toastTimer);
@@ -96,11 +136,186 @@ try {
     }, durationMs);
   }
 
+  function flashScreen(type: 'flash-capture' | 'flash-rescue') {
+    hitFlash.className = `hit-flash ${type}`;
+    hitFlash.hidden = false;
+    hitFlash.style.opacity = '1';
+    window.setTimeout(() => {
+      hitFlash.style.opacity = '0';
+      window.setTimeout(() => { hitFlash.hidden = true; }, 250);
+    }, 100);
+  }
+
+  function toggleHelp(open?: boolean) {
+    const shouldOpen = open !== undefined ? open : helpModal.hidden;
+    helpModal.hidden = !shouldOpen;
+  }
+  btnToggleHelp.addEventListener('click', () => toggleHelp(true));
+  btnCloseHelp.addEventListener('click', () => toggleHelp(false));
+
   function formatRemainingTime(ms: number): string {
     const totalSec = Math.max(0, Math.ceil(ms / 1000));
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // Compass heading update
+  function updateCompass(cameraYaw: number, selfPos: [number, number, number], targetJailId: string) {
+    const deg = (Math.round((-cameraYaw * 180) / Math.PI) % 360 + 360) % 360;
+    let cardinal = 'B';
+    if (deg >= 337.5 || deg < 22.5) cardinal = 'B (Bắc)';
+    else if (deg >= 22.5 && deg < 67.5) cardinal = 'ĐB (Đông Bắc)';
+    else if (deg >= 67.5 && deg < 112.5) cardinal = 'Đ (Đông)';
+    else if (deg >= 112.5 && deg < 157.5) cardinal = 'ĐN (Đông Nam)';
+    else if (deg >= 157.5 && deg < 202.5) cardinal = 'N (Nam)';
+    else if (deg >= 202.5 && deg < 247.5) cardinal = 'TN (Tây Nam)';
+    else if (deg >= 247.5 && deg < 292.5) cardinal = 'T (Tây)';
+    else cardinal = 'TB (Tây Bắc)';
+
+    compassCardinal.textContent = `${cardinal} · ${deg}°`;
+
+    const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
+    const dist = Math.hypot(jail.center[0] - selfPos[0], jail.center[2] - selfPos[2]);
+    compassJailIndicator.textContent = `🏛️ ${jail.id}: ${Math.round(dist)}m`;
+  }
+
+  // 2D Radar Minimap (T03)
+  function renderMinimap(selfPos: [number, number, number], cameraYaw: number, targetJailId: string) {
+    if (!minimapCtx) return;
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    minimapCtx.clearRect(0, 0, w, h);
+
+    const toX = (wx: number) => ((wx + 40) / 80) * w;
+    const toY = (wz: number) => ((wz + 40) / 80) * h;
+
+    // Outer village boundary
+    minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    minimapCtx.lineWidth = 1;
+    minimapCtx.strokeRect(1, 1, w - 2, h - 2);
+
+    // Colliders (Houses)
+    minimapCtx.fillStyle = 'rgba(160, 175, 160, 0.35)';
+    for (const col of villageMap.colliders) {
+      const cx = toX(col.center[0] - col.size[0] / 2);
+      const cy = toY(col.center[2] - col.size[2] / 2);
+      const sw = (col.size[0] / 80) * w;
+      const sh = (col.size[2] / 80) * h;
+      minimapCtx.fillRect(cx, cy, sw, sh);
+    }
+
+    // Active Jail
+    const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
+    const jx = toX(jail.center[0]);
+    const jy = toY(jail.center[2]);
+    minimapCtx.fillStyle = '#f39c12';
+    minimapCtx.beginPath();
+    minimapCtx.arc(jx, jy, 4.5, 0, Math.PI * 2);
+    minimapCtx.fill();
+
+    // Remote Players
+    for (const remote of session.getRemoteEntities().values()) {
+      if (remote.role !== currentRole && remote.state === 'HIDDEN') continue;
+      const rx = toX(remote.currentPos.x);
+      const ry = toY(remote.currentPos.z);
+      minimapCtx.fillStyle = remote.role === 'POLICE' ? '#2876c9' : '#ec8f32';
+      minimapCtx.beginPath();
+      minimapCtx.arc(rx, ry, 3, 0, Math.PI * 2);
+      minimapCtx.fill();
+    }
+
+    // Self Player Pointer
+    const sx = toX(selfPos[0]);
+    const sy = toY(selfPos[2]);
+    minimapCtx.fillStyle = '#ffffff';
+    minimapCtx.beginPath();
+    minimapCtx.arc(sx, sy, 3.5, 0, Math.PI * 2);
+    minimapCtx.fill();
+
+    const forwardX = -Math.sin(cameraYaw) * 6;
+    const forwardY = -Math.cos(cameraYaw) * 6;
+    minimapCtx.strokeStyle = '#ffffff';
+    minimapCtx.lineWidth = 2;
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(sx, sy);
+    minimapCtx.lineTo(sx + forwardX, sy + forwardY);
+    minimapCtx.stroke();
+  }
+
+  // Aim Assist & Proximity Action Prompts
+  function checkAimInteraction(selfRole: 'POLICE' | 'ROBBER' | null, selfPos: [number, number, number], cameraYaw: number, targetJailId: string) {
+    if (!selfRole) {
+      actionPrompt.hidden = true;
+      crosshair.style.background = '#ffffff';
+      crosshair.style.boxShadow = '0 1px 3px #263d30';
+      return;
+    }
+
+    const forwardX = -Math.sin(cameraYaw);
+    const forwardZ = -Math.cos(cameraYaw);
+
+    if (selfRole === 'POLICE') {
+      let closestRobberDist = Infinity;
+      let foundTarget = false;
+
+      for (const remote of session.getRemoteEntities().values()) {
+        if (remote.role !== 'ROBBER' || remote.state === 'JAILED' || remote.state === 'IMMUNE') continue;
+        const dx = remote.currentPos.x - selfPos[0];
+        const dz = remote.currentPos.z - selfPos[2];
+        const dist = Math.hypot(dx, dz);
+        const dy = Math.abs(remote.currentPos.y - selfPos[1]);
+
+        if (dist <= 2.2 && dy <= 1.2 && dist < closestRobberDist) {
+          const dot = (forwardX * dx + forwardZ * dz) / dist;
+          const angleDeg = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
+          if (angleDeg <= 65) {
+            closestRobberDist = dist;
+            foundTarget = true;
+          }
+        }
+      }
+
+      if (foundTarget) {
+        actionPrompt.textContent = '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!';
+        actionPrompt.className = 'action-prompt prompt-capture';
+        actionPrompt.hidden = false;
+        crosshair.style.background = '#ff4d4d';
+        crosshair.style.boxShadow = '0 0 8px #ff4d4d';
+      } else {
+        actionPrompt.hidden = true;
+        crosshair.style.background = '#ffffff';
+        crosshair.style.boxShadow = '0 1px 3px #263d30';
+      }
+    } else if (selfRole === 'ROBBER') {
+      const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
+      let inRescueRange = false;
+
+      for (const anchor of jail.rescueAnchors) {
+        const dist = Math.hypot(anchor[0] - selfPos[0], anchor[2] - selfPos[2]);
+        if (dist <= 1.8) {
+          const toJailX = jail.center[0] - selfPos[0];
+          const toJailZ = jail.center[2] - selfPos[2];
+          const dot = forwardX * toJailX + forwardZ * toJailZ;
+          if (dot >= 0) {
+            inRescueRange = true;
+            break;
+          }
+        }
+      }
+
+      if (inRescueRange) {
+        actionPrompt.textContent = '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
+        actionPrompt.className = 'action-prompt prompt-rescue';
+        actionPrompt.hidden = false;
+        crosshair.style.background = '#52b788';
+        crosshair.style.boxShadow = '0 0 8px #52b788';
+      } else {
+        actionPrompt.hidden = true;
+        crosshair.style.background = '#ffffff';
+        crosshair.style.boxShadow = '0 1px 3px #263d30';
+      }
+    }
   }
 
   // Session Callbacks
@@ -115,9 +330,13 @@ try {
     },
     onSnapshot(snapshot) {
       world.setServerJail(snapshot.jailId);
+      activeJailId = snapshot.jailId || 'J1';
+      updateJailRescueBeacons(activeJailId);
+
       const self = snapshot.self;
       if (!self) return;
 
+      currentRole = self.role;
       player = {
         ...player,
         pos: self.pos,
@@ -126,6 +345,13 @@ try {
         crouched: self.crouch,
       };
       previous = player;
+
+      // Countdown audio warning in the final 5 seconds
+      const sec = Math.ceil(snapshot.remainingMs / 1000);
+      if (snapshot.phase === 'PLAYING' && sec <= 5 && sec > 0 && sec !== lastRemainingSec) {
+        lastRemainingSec = sec;
+        sound.playCountdownBeep(sec === 1);
+      }
 
       // Update HUD
       hudOverlay.hidden = snapshot.phase === 'LOBBY';
@@ -145,8 +371,12 @@ try {
         hudImmuneCard.hidden = true;
       }
 
-      if (self.rescueProgressMs > 0) {
-        status.textContent = `Đang giải cứu đồng đội: ${Math.round((self.rescueProgressMs / 2000) * 100)}%`;
+      // Smooth Rescue Progress Fill Bar
+      if (self.role === 'ROBBER' && self.rescueProgressMs > 0) {
+        rescueBarContainer.hidden = false;
+        rescueBarFill.style.width = `${Math.min(100, (self.rescueProgressMs / 2000) * 100)}%`;
+      } else {
+        rescueBarContainer.hidden = true;
       }
 
       // Check match result
@@ -166,10 +396,17 @@ try {
     onGameEvent(event: GameEvent) {
       if (event.type === 'CAPTURE') {
         const data = event.data as { policeId: string; robberId: string; jailId: string };
+        sound.playCaptureSound();
+        flashScreen('flash-capture');
         showToast(`🚨 Cảnh sát đã bắt cướp ${data.robberId}!`);
       } else if (event.type === 'RESCUE') {
         const data = event.data as { rescuerId: string; rescuedId: string };
+        sound.playRescueSound();
+        flashScreen('flash-rescue');
         showToast(`🔓 Cướp ${data.rescuerId} đã giải cứu đồng đội!`);
+      } else if (event.type === ('CAPTURE_MISS' as any)) {
+        sound.playCaptureMiss();
+        showToast('⚠️ Bắt hụt! Đối tượng ở ngoài tầm hoặc góc nhìn.', 1800);
       } else if (event.type === 'GUARD_CHANGED') {
         const data = event.data as { guardId: string | null };
         if (data.guardId) {
@@ -187,6 +424,8 @@ try {
       menuView.hidden = false;
       roomView.hidden = true;
       hudOverlay.hidden = true;
+      actionPrompt.hidden = true;
+      rescueBarContainer.hidden = true;
       sceneLabel.textContent = 'Máy chủ Authoritative · Chưa vào phòng';
       notice.textContent = 'Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp';
       button.textContent = 'Vào sân tập 3D';
@@ -301,20 +540,21 @@ try {
 
   btnJoinRoom.addEventListener('click', async () => {
     const code = joinRoomCodeInput.value.trim().toUpperCase();
-    const name = playerNameInput.value.trim() || 'Người chơi';
+    const name = playerNameInput.value.trim() || 'Thành viên';
     if (!code || code.length !== 6) {
-      status.textContent = 'Mã phòng phải gồm đúng 6 ký tự chữ/số.';
+      status.textContent = 'Mã phòng phải gồm 6 ký tự.';
+      status.style.color = '#963624';
       return;
     }
 
-    status.textContent = `Đang tham gia phòng ${code}…`;
+    status.textContent = `Đang kết nối phòng ${code}…`;
     btnJoinRoom.disabled = true;
 
     try {
       const res = await session.joinRoom(code, name);
       btnJoinRoom.disabled = false;
       if (!res.ok) {
-        status.textContent = `Không vào được phòng: ${res.message || res.code}`;
+        status.textContent = `Không thể vào phòng ${code}: ${res.message || res.code}`;
         status.style.color = '#963624';
         return;
       }
@@ -326,11 +566,11 @@ try {
     }
   });
 
-  btnCopyCode.addEventListener('click', () => {
-    if (session.currentRoom?.roomCode) {
-      navigator.clipboard.writeText(session.currentRoom.roomCode);
-      btnCopyCode.textContent = 'Đã chép!';
-      setTimeout(() => { btnCopyCode.textContent = 'Sao chép mã'; }, 2000);
+  btnCopyCode.addEventListener('click', async () => {
+    const code = displayRoomCode.textContent;
+    if (code && code !== '------') {
+      await navigator.clipboard.writeText(code);
+      showToast(`Đã sao chép mã phòng: ${code}`);
     }
   });
 
@@ -340,7 +580,7 @@ try {
       const res = await session.toggleReady(!isReady);
       btnToggleReady.disabled = false;
       if (!res.ok) {
-        status.textContent = `Lỗi: ${res.message || res.code}`;
+        status.textContent = `Lỗi cập nhật sẵn sàng: ${res.message || res.code}`;
       }
     } catch (err: any) {
       btnToggleReady.disabled = false;
@@ -354,7 +594,9 @@ try {
       const res = await session.startMatch();
       btnStartGame.disabled = false;
       if (!res.ok) {
-        status.textContent = `Chưa bắt đầu được: ${res.message || res.code}`;
+        status.textContent = `Không thể bắt đầu: ${res.message || res.code}`;
+      } else {
+        showToast('Trận đấu bắt đầu!');
       }
     } catch (err: any) {
       btnStartGame.disabled = false;
@@ -418,6 +660,8 @@ try {
     menuView.hidden = false;
     roomView.hidden = true;
     hudOverlay.hidden = true;
+    actionPrompt.hidden = true;
+    rescueBarContainer.hidden = true;
     sceneLabel.textContent = 'Sân tập offline';
     notice.textContent = 'Chế độ luyện tập offline · WASD di chuyển, C cúi, Shift chạy';
     status.textContent = 'Sân tập offline sẵn sàng. Nhấn Vào sân tập để khóa chuột.';
@@ -428,6 +672,9 @@ try {
   const controls = createControls({
     canvas: renderer.domElement,
     camera,
+    onToggleHelp() {
+      toggleHelp();
+    },
     onLockChange(locked) {
       if (locked && !playing) {
         surveyPosition.copy(camera.position);
@@ -448,6 +695,10 @@ try {
       accumulated = 0;
       document.body.classList.toggle('looking', locked);
       crosshair.hidden = !locked;
+      if (!locked) {
+        actionPrompt.hidden = true;
+        rescueBarContainer.hidden = true;
+      }
       status.textContent = locked ? 'Chuột đã khóa. Nhấn Esc để thả / xem Menu.' : 'Chuột đã nhả. Nhấn Vào sân tập để điều khiển.';
       if (!locked) button.focus({ preventScroll: true });
     },
@@ -492,6 +743,12 @@ try {
           // Offline single-player local physics
           player = stepMovement(player, { ...input, yaw: camera.rotation.y }, 'ROBBER', villageMap);
         }
+
+        // Procedural footstep audio when moving
+        if (input.moveX !== 0 || input.moveZ !== 0) {
+          sound.playFootstep(input.sprint, input.crouch || player.crouched);
+        }
+
         accumulated -= tickMs;
       }
 
@@ -503,6 +760,14 @@ try {
         lerp(previous.pos[2], player.pos[2])
       );
       stamina.textContent = `Thể lực ${Math.round(player.stamina)}/${movementRules.maxStamina}`;
+
+      // N04: Interpolate all remote players smoothly at 60 FPS
+      session.updateRemoteInterpolation(frameMs / 1000);
+
+      // T03: Update Compass, Minimap, and Aim Interaction
+      updateCompass(camera.rotation.y, player.pos, activeJailId);
+      renderMinimap(player.pos, camera.rotation.y, activeJailId);
+      checkAimInteraction(currentRole, player.pos, camera.rotation.y, activeJailId);
     }
 
     renderer.render(scene, camera);
@@ -516,7 +781,7 @@ try {
     }
   });
 
-  // Auto connect to server
+  // Auto connect to server (root namespace)
   session.connect();
 
   const dispose = () => {

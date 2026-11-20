@@ -114,10 +114,11 @@ const io = new SocketIOServer(server, {
   },
 });
 
-// 1. Initialize Mock snapshot server for independent client / regression development
-const mockServer = setupMockServer(io);
+// 1. Initialize Mock snapshot server on dedicated /mock namespace (or root if --mock CLI flag is passed)
+const isMockOnly = process.argv.includes('--mock') || process.env.MOCK_SERVER === 'true';
+const mockServer = setupMockServer(isMockOnly ? io : (io.of('/mock') as any));
 
-// 2. Initialize Real Room Manager for Lobby (N01) & Tick Simulation (N02) with Database
+// 2. Initialize Real Room Manager on default root namespace (/) for real multiplayer lobby & authoritative simulation
 const roomManager = new RoomManager(io, db);
 
 server.listen(PORT, () => {

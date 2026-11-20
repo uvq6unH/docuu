@@ -1,4 +1,4 @@
-import { Server as SocketIOServer, Socket } from 'socket.io';
+import { Server as SocketIOServer, Socket, Namespace } from 'socket.io';
 import { readFileSync } from 'node:fs';
 import {
   GAME_RULES,
@@ -46,7 +46,7 @@ interface ConnectedClientSession {
 }
 
 export class MockServer {
-  private io: SocketIOServer;
+  private io: SocketIOServer | Namespace;
   private bots: MockBotState[];
   private clients: Map<string, ConnectedClientSession> = new Map();
   private timer: NodeJS.Timeout | null = null;
@@ -54,7 +54,7 @@ export class MockServer {
   private remainingMs: number = GAME_RULES.PHASE_DURATION_PLAYING_MS;
   private lastTickTime = Date.now();
 
-  constructor(io: SocketIOServer) {
+  constructor(io: SocketIOServer | Namespace) {
     this.io = io;
     // Clone initial mock bot identities
     this.bots = JSON.parse(JSON.stringify(INITIAL_MOCK_BOTS));
@@ -344,7 +344,7 @@ export class MockServer {
   }
 }
 
-export function setupMockServer(io: SocketIOServer): MockServer {
+export function setupMockServer(io: SocketIOServer | Namespace): MockServer {
   const server = new MockServer(io);
   server.start();
   return server;
