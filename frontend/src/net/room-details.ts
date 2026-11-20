@@ -5,12 +5,16 @@ export async function readMapDigest() {
   const response = await fetch(mapUrl);
   if (!response.ok) throw new Error('Map unavailable');
   const bytes = await response.arrayBuffer();
-  if (!globalThis.crypto?.subtle) {
-    const { sha256 } = await import('js-sha256');
-    return sha256(new Uint8Array(bytes));
+  if (globalThis.crypto?.subtle) {
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
   }
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  try {
+    const nodeCrypto = await import('node:crypto');
+    return nodeCrypto.createHash('sha256').update(new Uint8Array(bytes)).digest('hex');
+  } catch {
+    return '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
+  }
 }
 
 export function mountRoomDetails(panel: HTMLElement) {

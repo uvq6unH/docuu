@@ -35,6 +35,32 @@ dd { margin: 0; }
 footer { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 14px 40px; background: var(--paper); border-top: 1px solid #263d3030; font-size: 12px; }
 output { font-variant-numeric: tabular-nums; }
 .crosshair { position: fixed; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px #263d30; pointer-events: none; }
+/* Capture Swing Visual Effect on Crosshair */
+.crosshair.swing {
+  animation: captureSwingAnim 0.22s ease-out;
+}
+@keyframes captureSwingAnim {
+  0% { transform: scale(1); box-shadow: 0 0 0px #ff3333; }
+  50% { transform: scale(3.2); box-shadow: 0 0 18px 6px #ff3333; background: #ff3333; }
+  100% { transform: scale(1); box-shadow: 0 1px 3px #263d30; }
+}
+
+/* Capture Cooldown Indicator */
+.capture-cooldown-badge {
+  position: fixed;
+  top: 54%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffb4b4;
+  background: rgba(180, 20, 20, 0.75);
+  padding: 2px 8px;
+  border-radius: 10px;
+  pointer-events: none;
+  border: 1px solid rgba(255, 100, 100, 0.4);
+}
+
 .looking .panel, .looking .masthead { visibility: hidden; }
 .looking footer { pointer-events: none; }
 [hidden] { display: none !important; }

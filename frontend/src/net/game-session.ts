@@ -217,11 +217,15 @@ export class GameSession {
    */
   public updateRemoteInterpolation(dtSeconds: number): void {
     if (this.entities.size === 0) return;
-    const lerpFactor = Math.min(1, Math.max(0.01, dtSeconds * 16));
+    const lerpFactor = Math.min(1, Math.max(0.01, dtSeconds * 22));
 
     for (const entity of this.entities.values()) {
-      // Smooth position lerp
-      entity.currentPos.lerp(entity.targetPos, lerpFactor);
+      // If position jumped by more than 3.0m (teleport to jail cell / respawn), snap immediately
+      if (entity.currentPos.distanceTo(entity.targetPos) > 3.0) {
+        entity.currentPos.copy(entity.targetPos);
+      } else {
+        entity.currentPos.lerp(entity.targetPos, lerpFactor);
+      }
       entity.mesh.position.copy(entity.currentPos);
 
       // Smooth yaw angle interpolation with wrapping

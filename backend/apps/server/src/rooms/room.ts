@@ -613,7 +613,7 @@ export class Room {
 
           const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
 
-          intent = {
+          const frameIntent: MovementIntent = {
             moveX: isJailed ? 0 : ((Math.sign(frame.moveX) || 0) as -1 | 0 | 1),
             moveZ: isJailed ? 0 : ((Math.sign(frame.moveZ) || 0) as -1 | 0 | 1),
             yaw: frame.yaw,
@@ -621,38 +621,44 @@ export class Room {
             sprint: isJailed ? false : Boolean(frame.sprint),
             crouch: Boolean(frame.crouch),
           };
+
+          if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
+            frameIntent.moveX = 0;
+            frameIntent.moveZ = 0;
+            frameIntent.sprint = false;
+          }
+
+          if (isJailed && session.jailSlotIndex !== undefined) {
+            if (activeJail.slots[session.jailSlotIndex]) {
+              session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+              session.movementState.verticalSpeed = 0;
+              session.movementState.crouched = false;
+              session.movementState.sprinting = false;
+            }
+          } else {
+            session.movementState = stepMovement(
+              session.movementState,
+              frameIntent,
+              session.role as MovementRole,
+              officialVillageMap,
+              this.movementRules
+            );
+          }
         }
+      } else if (!isStale && !session.movementState.grounded && !(session.role === 'ROBBER' && session.state === 'JAILED')) {
+        // Continue physics in mid-air (gravity) even if packet timing is jittered
+        session.movementState = stepMovement(
+          session.movementState,
+          { moveX: 0, moveZ: 0, yaw: session.lastYaw, jumpPressed: false, sprint: false, crouch: session.movementState.crouched },
+          session.role as MovementRole,
+          officialVillageMap,
+          this.movementRules
+        );
       } else if (isStale) {
         // A fresh held input remains valid between packets. Only a release
         // frame clears the latch after a completed rescue.
         session.rescueHeld = false;
         session.inputQueue.length = 0;
-      }
-
-      // Police frozen in HEAD_START
-      if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
-        intent.moveX = 0;
-        intent.moveZ = 0;
-        intent.sprint = false;
-      }
-
-      // Stepping movement
-      const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
-      if (isJailed && session.jailSlotIndex !== undefined) {
-        if (activeJail.slots[session.jailSlotIndex]) {
-          session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
-          session.movementState.verticalSpeed = 0;
-          session.movementState.crouched = false;
-          session.movementState.sprinting = false;
-        }
-      } else {
-        session.movementState = stepMovement(
-          session.movementState,
-          intent,
-          session.role as MovementRole,
-          officialVillageMap,
-          this.movementRules
-        );
       }
 
       // Stealth update (robber crouching in hide zone)
@@ -807,13 +813,19 @@ export class Room {
             }
           }
 
+          const networkCaptureRules = {
+            ...this.rules,
+            CAPTURE_MAX_DISTANCE_M: Math.max(this.rules.CAPTURE_MAX_DISTANCE_M, 2.0),
+            CAPTURE_MAX_ANGLE_DEG: Math.max(this.rules.CAPTURE_MAX_ANGLE_DEG, 65),
+          };
+
           const captureResult = validateCapture(
             policeActor,
             robbers,
             officialVillageMap.colliders,
             activeJail,
             occupiedSlots,
-            this.rules
+            networkCaptureRules
           );
 
           if (
@@ -952,11 +964,16 @@ export class Room {
             state: robber.state,
           };
 
+          const networkRescueRules = {
+            ...this.rules,
+            RESCUE_RADIUS_M: Math.max(this.rules.RESCUE_RADIUS_M, 1.75),
+          };
+
           const eligibility = checkRescueEligibility(
             rescuerActor,
             activeJail,
             officialVillageMap.colliders,
-            this.rules
+            networkRescueRules
           );
 
           if (eligibility.eligible && eligibility.anchorIndex !== undefined) {
