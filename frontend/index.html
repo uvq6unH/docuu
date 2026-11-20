@@ -13,12 +13,73 @@
       
       <!-- In-game HUD overlay (visible during match) -->
       <div id="hud-overlay" class="hud-overlay" hidden>
-        <div class="hud-card"><span class="hud-time" id="hud-timer">05:00</span> · <span id="hud-phase">LOBBY</span></div>
-        <div class="hud-card" id="hud-role-card">Vai trò: <span id="hud-role">Chờ trận</span></div>
-        <div class="hud-card" id="hud-jail-card">Nhà giam: <span id="hud-jail">J1</span> · Bị giam: <span id="hud-jailed-count">0/4</span></div>
+        <!-- Top Compass Bar -->
+        <div id="hud-compass" class="hud-compass">
+          <div class="compass-strip" id="compass-strip">
+            <span class="compass-deg" id="compass-cardinal">B 0°</span>
+            <span class="compass-jail" id="compass-jail-indicator">🏛️ J1: 30m</span>
+          </div>
+        </div>
+
+        <!-- Minimap Radar (Top Right) -->
+        <div id="hud-minimap-container" class="hud-minimap-container">
+          <canvas id="hud-minimap" width="130" height="130"></canvas>
+          <div class="minimap-label">Bản đồ làng (80m)</div>
+        </div>
+
+        <div class="hud-top-bar">
+          <div class="hud-card"><span class="hud-time" id="hud-timer">05:00</span> · <span id="hud-phase">LOBBY</span></div>
+          <div class="hud-card" id="hud-role-card">Vai trò: <span id="hud-role">Chờ trận</span></div>
+          <div class="hud-card" id="hud-jail-card">Nhà giam: <span id="hud-jail">J1</span> · Bị giam: <span id="hud-jailed-count">0/4</span></div>
         <span id="hud-action" role="status"></span>
-        <div class="hud-card hud-stealth" id="hud-stealth-card" hidden>🌿 ĐANG ẨN NẤP (TÀNG HÌNH)</div>
-        <div class="hud-card hud-immune" id="hud-immune-card" hidden>🛡️ MIỄN NHIỄM: <span id="hud-immune-sec">3.0</span>s</div>
+          <div class="hud-card hud-stealth" id="hud-stealth-card" hidden>🌿 ĐANG ẨN NẤP (TÀNG HÌNH)</div>
+          <div class="hud-card hud-immune" id="hud-immune-card" hidden>🛡️ MIỄN NHIỄM: <span id="hud-immune-sec">3.0</span>s</div>
+          <button id="btn-toggle-help" type="button" class="btn-help-pill" title="Xem hướng dẫn (Phím H)">❓ Trợ giúp [H]</button>
+        </div>
+      </div>
+
+      <!-- Action Prompt (Aim Assist / In-Range Prompt) -->
+      <div id="action-prompt" class="action-prompt" hidden></div>
+
+      <!-- Rescue Progress Bar (Under Crosshair) -->
+      <div id="rescue-bar-container" class="rescue-bar-container" hidden>
+        <div class="rescue-bar-label">ĐANG GIẢI CỨU...</div>
+        <div class="rescue-bar-track">
+          <div id="rescue-bar-fill" class="rescue-bar-fill"></div>
+        </div>
+      </div>
+
+      <!-- Hit Flash Effect Screen Overlay -->
+      <div id="hit-flash" class="hit-flash" hidden></div>
+
+      <!-- Help Overlay Modal (T03) -->
+      <div id="help-modal" class="help-modal" hidden>
+        <div class="help-content">
+          <div class="help-header">
+            <h2>📜 Cẩm Nang & Phím Tắt Trò Chơi</h2>
+            <button id="btn-close-help" type="button" class="btn-close-modal">✕</button>
+          </div>
+          <div class="help-body">
+            <div class="help-section">
+              <h3>🎯 Mục Tiêu Trận Đấu</h3>
+              <p><strong>Cảnh sát (Xanh):</strong> Trong 5 phút, truy lùng và bắt toàn bộ cướp tống vào Nhà Giam được Đội trưởng chọn (J1, J2 hoặc J3).</p>
+              <p><strong>Cướp (Cam):</strong> Ẩn nấp trong các đống rơm / bụi cây (ngồi cúi để tàng hình khỏi tầm nhìn Cảnh sát ngoài 2m). Đột nhập nhà giam và giữ phím <code>E</code> hoặc <code>F</code> trong 2 giây để cứu đồng đội!</p>
+            </div>
+            <div class="help-section">
+              <h3>🎮 Bảng Phím Điều Khiển</h3>
+              <div class="help-keys-grid">
+                <div><code>W A S D</code></div><div>Di chuyển nhân vật</div>
+                <div><code>Shift</code></div><div>Chạy nhanh (Tiêu hao Thể lực)</div>
+                <div><code>Space</code></div><div>Nhảy qua hàng rào</div>
+                <div><code>C</code></div><div>Cúi người / Nấp bụi tàng hình</div>
+                <div><code>Chuột trái / E</code></div><div>Cảnh sát: Bắt cướp (khi trong tầm 2m)</div>
+                <div><code>Giữ E hoặc F (2s)</code></div><div>Cướp: Giải cứu đồng đội tại nhà giam</div>
+                <div><code>H</code></div><div>Bật / tắt bảng hướng dẫn này</div>
+                <div><code>Esc</code></div><div>Nhả chuột để thao tác sảnh chờ / cài đặt</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- In-game event notification toast -->

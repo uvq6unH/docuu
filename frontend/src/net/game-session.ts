@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, type Scene } from 'three';
+import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, Vector3, type Scene } from 'three';
 import {
   CLIENT_EVENTS,
   SERVER_EVENTS,
@@ -21,8 +21,18 @@ export interface GameSessionCallbacks {
   onGameEvent?: (event: GameEvent) => void;
 }
 
-type Credentials = { roomCode: string; playerId: string; resumeToken: string };
-const sessionKey = 'folk_tag_room_v1';
+export interface RemotePlayerEntity {
+  id: string;
+  role: 'POLICE' | 'ROBBER';
+  mesh: Mesh;
+  currentPos: Vector3;
+  targetPos: Vector3;
+  currentYaw: number;
+  targetYaw: number;
+  targetScaleY: number;
+  state?: string | undefined;
+  crouch: boolean;
+}
 
 export class GameSession {
   private credentials: Credentials | null = null;
@@ -34,7 +44,7 @@ export class GameSession {
     POLICE: MeshStandardMaterial;
     ROBBER: MeshStandardMaterial;
   };
-  private markers = new Map<string, Mesh>();
+  private entities = new Map<string, RemotePlayerEntity>();
   private lastTick = -1;
   private seq = 0;
   private jumpId = 0;
@@ -52,8 +62,8 @@ export class GameSession {
 
     this.geometry = new CapsuleGeometry(0.35, 1);
     this.materials = {
-      POLICE: new MeshStandardMaterial({ color: '#2876c9' }),
-      ROBBER: new MeshStandardMaterial({ color: '#ec8f32' }),
+      POLICE: new MeshStandardMaterial({ color: '#2876c9', roughness: 0.4 }),
+      ROBBER: new MeshStandardMaterial({ color: '#ec8f32', roughness: 0.4 }),
     };
 
     // Calculate map hash immediately
@@ -80,6 +90,7 @@ export class GameSession {
       } else {
         this.callbacks.onStatus('Đã kết nối máy chủ Authoritative.', false);
       }
+      );
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -144,21 +155,44 @@ export class GameSession {
         }
 
         visible.add(p.id);
-        let mesh = this.markers.get(p.id);
-        if (!mesh) {
-          mesh = new Mesh(this.geometry, this.materials[p.role]);
-          this.group.add(mesh);
-          this.markers.set(p.id, mesh);
-        }
+        const scaleY = p.crouch ? 1.1 / 1.7 : 1;
+        const targetY = p.pos[1] + 0.85 * scaleY;
 
-        mesh.scale.y = p.crouch ? 1.1 / 1.7 : 1;
-        mesh.position.set(p.pos[0], p.pos[1] + 0.85 * mesh.scale.y, p.pos[2]);
+        let entity = this.entities.get(p.id);
+        if (!entity) {
+          const mesh = new Mesh(this.geometry, this.materials[p.role]);
+          mesh.scale.y = scaleY;
+          mesh.position.set(p.pos[0], targetY, p.pos[2]);
+          mesh.rotation.y = p.yaw || 0;
+          this.group.add(mesh);
+
+          entity = {
+            id: p.id,
+            role: p.role,
+            mesh,
+            currentPos: new Vector3(p.pos[0], targetY, p.pos[2]),
+            targetPos: new Vector3(p.pos[0], targetY, p.pos[2]),
+            currentYaw: p.yaw || 0,
+            targetYaw: p.yaw || 0,
+            targetScaleY: scaleY,
+            state: p.state,
+            crouch: Boolean(p.crouch),
+          };
+          this.entities.set(p.id, entity);
+        } else {
+          entity.targetPos.set(p.pos[0], targetY, p.pos[2]);
+          entity.targetYaw = p.yaw || 0;
+          entity.targetScaleY = scaleY;
+          entity.state = p.state;
+          entity.crouch = Boolean(p.crouch);
+        }
       }
 
-      for (const [id, mesh] of this.markers) {
+      // Remove entities no longer visible
+      for (const [id, entity] of this.entities) {
         if (!visible.has(id)) {
-          this.group.remove(mesh);
-          this.markers.delete(id);
+          this.group.remove(entity.mesh);
+          this.entities.delete(id);
         }
       }
 
@@ -175,9 +209,37 @@ export class GameSession {
     });
   }
 
+  /**
+   * N04 Remote Player Interpolation:
+   * Smoothly interpolates remote players' positions and rotations at 60 FPS in render loop.
+   */
+  public updateRemoteInterpolation(dtSeconds: number): void {
+    if (this.entities.size === 0) return;
+    const lerpFactor = Math.min(1, Math.max(0.01, dtSeconds * 16));
+
+    for (const entity of this.entities.values()) {
+      // Smooth position lerp
+      entity.currentPos.lerp(entity.targetPos, lerpFactor);
+      entity.mesh.position.copy(entity.currentPos);
+
+      // Smooth yaw angle interpolation with wrapping
+      let diff = (entity.targetYaw - entity.currentYaw + Math.PI) % (Math.PI * 2) - Math.PI;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      entity.currentYaw += diff * lerpFactor;
+      entity.mesh.rotation.y = entity.currentYaw;
+
+      // Smooth crouch scaling
+      entity.mesh.scale.y += (entity.targetScaleY - entity.mesh.scale.y) * lerpFactor;
+    }
+  }
+
+  public getRemoteEntities(): ReadonlyMap<string, RemotePlayerEntity> {
+    return this.entities;
+  }
+
   private resetMarkers(): void {
     this.group.clear();
-    this.markers.clear();
+    this.entities.clear();
     this.lastTick = -1;
   }
 
@@ -250,6 +312,36 @@ export class GameSession {
     }
   }
 
+  public connectReal(): void {
+    if (this.isMock) {
+      this.isMock = false;
+      this.socket.disconnect();
+      this.resetMarkers();
+      this.socket = io({
+        autoConnect: false,
+        reconnection: true,
+      });
+      this.setupListeners();
+    }
+    this.connect();
+  }
+
+  public connectMock(spawnParam?: string): void {
+    this.isMock = true;
+    this.socket.disconnect();
+    this.resetMarkers();
+    const opts: Record<string, any> = {
+      autoConnect: false,
+      reconnection: true,
+    };
+    if (spawnParam) {
+      opts.query = { spawn: spawnParam };
+    }
+    this.socket = io('/mock', opts);
+    this.setupListeners();
+    this.socket.connect();
+  }
+
   public async getMapHash(): Promise<string> {
     if (this.localMapHash) return this.localMapHash;
     try {
@@ -261,7 +353,7 @@ export class GameSession {
   }
 
   public async createRoom(name: string): Promise<AckResponse<{ roomCode: string; playerId: string; resumeToken: string }>> {
-    this.connect();
+    this.connectReal();
     return new Promise((resolve) => {
       this.socket.emit(
         CLIENT_EVENTS.ROOM_CREATE,
@@ -282,7 +374,7 @@ export class GameSession {
   }
 
   public async joinRoom(roomCode: string, name: string): Promise<AckResponse<{ roomCode: string; playerId: string; resumeToken: string }>> {
-    this.connect();
+    this.connectReal();
     return new Promise((resolve) => {
       this.socket.emit(
         CLIENT_EVENTS.ROOM_JOIN,
@@ -304,13 +396,11 @@ export class GameSession {
   }
 
   public async toggleReady(ready: boolean): Promise<AckResponse> {
-    const hash = await this.getMapHash();
     return new Promise((resolve) => {
       this.socket.emit(
         CLIENT_EVENTS.ROOM_READY,
         {
           ready,
-          mapHash: hash,
           requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         },
         (res: AckResponse) => resolve(res)
@@ -367,37 +457,30 @@ export class GameSession {
     this.callbacks.onRoom(null);
   }
 
-  public connectMock(spawnParam?: string): void {
-    this.isMock = true;
-    if (spawnParam) {
-      this.socket.io.opts.query = { spawn: spawnParam };
-    }
-    this.socket.connect();
-  }
-
   public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): void {
     if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return;
     if (input.jumpPressed) this.jumpId++;
     if (input.capturePressed) this.captureId++;
     const { moveX, moveZ, sprint, crouch, rescueHeld } = input;
+
     const frame: InputFrame = {
       seq: ++this.seq,
       moveX,
       moveZ,
       sprint,
       crouch,
+      jumpId: this.jumpId,
+      captureId: this.captureId,
       rescueHeld,
       yaw,
       pitch,
-      jumpId: this.jumpId,
-      captureId: this.captureId,
     };
-    this.socket.volatile.emit(CLIENT_EVENTS.GAME_INPUT, frame);
+
+    this.socket.emit(CLIENT_EVENTS.GAME_INPUT, frame);
   }
 
   public dispose(): void {
-    this.socket.off().disconnect();
-    this.group.removeFromParent();
+    this.socket.disconnect();
     this.resetMarkers();
     this.geometry.dispose();
     this.materials.POLICE.dispose();

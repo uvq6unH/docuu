@@ -79,11 +79,60 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 .status-unready { color: #888; }
 
 /* In-game HUD overlay */
-.hud-overlay { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; pointer-events: none; z-index: 100; flex-wrap: wrap; justify-content: center; width: 90%; max-width: 800px; }
-.hud-card { background: rgba(38, 61, 48, 0.9); color: #fffdf4; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); }
+.hud-overlay { position: fixed; top: 12px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 100; gap: 8px; }
+.hud-top-bar { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 90%; max-width: 860px; }
+.hud-card { background: rgba(38, 61, 48, 0.9); color: #fffdf4; padding: 7px 13px; border-radius: 6px; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); box-shadow: 0 4px 12px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.15); }
 .hud-time { font-family: monospace; font-size: 16px; color: #fbd364; }
 .hud-stealth { background: rgba(18, 54, 25, 0.95); color: #8ef7a1; border-color: #55c46b; animation: pulse 1.5s infinite; }
 .hud-immune { background: rgba(120, 40, 20, 0.95); color: #ffd188; border-color: #e67e22; }
+
+.btn-help-pill { pointer-events: auto; width: auto !important; background: rgba(60, 90, 70, 0.9) !important; color: #fff !important; padding: 6px 12px !important; font-size: 12px !important; border-radius: 20px !important; border: 1px solid rgba(255,255,255,0.25) !important; }
+.btn-help-pill:hover { background: rgba(80, 115, 90, 0.95) !important; }
+
+/* Compass Bar (T03) */
+.hud-compass { width: 340px; background: rgba(20, 32, 25, 0.85); border-radius: 4px; border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(4px); padding: 4px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
+.compass-strip { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; color: #e8eee2; }
+.compass-deg { font-family: monospace; color: #fbd364; font-size: 13px; }
+.compass-jail { color: #8ef7a1; font-size: 12px; }
+
+/* Minimap Radar (T03) */
+.hud-minimap-container { position: fixed; top: 16px; right: 16px; pointer-events: none; z-index: 100; background: rgba(20, 32, 25, 0.85); border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(6px); padding: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.35); text-align: center; }
+#hud-minimap { border-radius: 4px; display: block; background: #152219; border: 1px solid rgba(255,255,255,0.1); }
+.minimap-label { font-size: 10px; color: #aab5a5; margin-top: 4px; font-weight: 600; }
+
+/* Aim & Action Prompt */
+.action-prompt { position: fixed; top: 58%; left: 50%; transform: translate(-50%, -50%); padding: 8px 18px; border-radius: 20px; font-size: 14px; font-weight: 700; color: #fff; pointer-events: none; z-index: 102; text-shadow: 0 1px 4px rgba(0,0,0,0.6); box-shadow: 0 4px 16px rgba(0,0,0,0.4); animation: promptPulse 0.8s infinite alternate; }
+.prompt-capture { background: rgba(214, 40, 40, 0.92); border: 2px solid #ff6b6b; }
+.prompt-rescue { background: rgba(42, 157, 143, 0.92); border: 2px solid #52b788; }
+
+@keyframes promptPulse {
+  0% { transform: translate(-50%, -50%) scale(0.98); }
+  100% { transform: translate(-50%, -50%) scale(1.04); }
+}
+
+/* Rescue Progress Bar */
+.rescue-bar-container { position: fixed; top: 65%; left: 50%; transform: translateX(-50%); width: 220px; text-align: center; pointer-events: none; z-index: 102; }
+.rescue-bar-label { font-size: 11px; font-weight: 700; color: #fff; margin-bottom: 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+.rescue-bar-track { width: 100%; height: 10px; background: rgba(0,0,0,0.6); border-radius: 5px; border: 1px solid rgba(255,255,255,0.4); overflow: hidden; }
+.rescue-bar-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #48cae4, #00b4d8, #52b788); transition: width 0.05s linear; }
+
+/* Hit Flash on Screen */
+.hit-flash { position: fixed; inset: 0; pointer-events: none; z-index: 99; transition: opacity 0.25s ease-out; }
+.hit-flash.flash-capture { background: radial-gradient(circle, transparent 50%, rgba(220, 50, 50, 0.4) 100%); }
+.hit-flash.flash-rescue { background: radial-gradient(circle, transparent 50%, rgba(50, 200, 100, 0.4) 100%); }
+
+/* Help Modal Overlay */
+.help-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; justify-content: center; align-items: center; z-index: 1000; backdrop-filter: blur(4px); }
+.help-content { background: var(--paper); border: 2px solid #263d30; border-radius: 8px; width: 92%; max-width: 580px; box-shadow: 0 16px 40px rgba(0,0,0,0.4); padding: 24px; max-height: 85vh; overflow-y: auto; }
+.help-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #263d3030; padding-bottom: 12px; margin-bottom: 16px; }
+.help-header h2 { margin: 0; font-size: 20px; color: #263d30; }
+.btn-close-modal { width: auto !important; background: transparent !important; color: #263d30 !important; font-size: 20px !important; padding: 4px 8px !important; border: none !important; font-weight: 700 !important; }
+.btn-close-modal:hover { color: #963624 !important; }
+.help-section { margin-bottom: 16px; }
+.help-section h3 { margin: 0 0 8px; font-size: 15px; color: #1f5f30; }
+.help-section p { font-size: 13px; margin: 0 0 6px; line-height: 1.5; }
+.help-keys-grid { display: grid; grid-template-columns: 140px 1fr; gap: 8px 12px; font-size: 13px; align-items: center; margin-top: 8px; }
+.help-keys-grid code { background: #e2ecd9; padding: 3px 8px; border-radius: 3px; font-weight: 700; border: 1px solid #c2ceba; text-align: center; }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -91,7 +140,7 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 }
 
 /* Event announcements banner */
-.event-toast { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); background: #263d30; color: #fffdf4; padding: 10px 22px; border-radius: 6px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,0.35); z-index: 101; pointer-events: none; transition: opacity 0.3s; border: 1px solid rgba(255,255,255,0.2); }
+.event-toast { position: fixed; top: 88px; left: 50%; transform: translateX(-50%); background: #263d30; color: #fffdf4; padding: 10px 22px; border-radius: 6px; font-size: 14px; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,0.35); z-index: 101; pointer-events: none; transition: opacity 0.3s; border: 1px solid rgba(255,255,255,0.2); }
 
 /* Jail picker buttons in JAIL_SELECTION phase */
 .jail-picker { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }

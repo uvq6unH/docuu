@@ -11,9 +11,10 @@ export type ControlsOptions = {
   camera: PerspectiveCamera;
   onLockChange: (locked: boolean) => void;
   onError: (message: string) => void;
+  onToggleHelp?: () => void;
 };
 
-export function createControls({ canvas, camera, onLockChange, onError }: ControlsOptions) {
+export function createControls({ canvas, camera, onLockChange, onError, onToggleHelp }: ControlsOptions) {
   const input = new InputState();
   const abort = new AbortController();
   const options = { signal: abort.signal };
@@ -69,13 +70,22 @@ export function createControls({ canvas, camera, onLockChange, onError }: Contro
   }, options);
 
   window.addEventListener('keydown', (event) => {
+    if (event.code === 'KeyH') {
+      onToggleHelp?.();
+      return;
+    }
     if (locked && event.code === 'Escape') {
       release();
       return;
     }
     if (!locked || !CONTROL_KEYS.has(event.code)) return;
     event.preventDefault();
-    if (!event.repeat) input.press(event.code);
+    if (!event.repeat) {
+      input.press(event.code);
+      if (event.code === 'KeyE') {
+        input.capture();
+      }
+    }
   }, options);
 
   window.addEventListener('keyup', (event) => {
