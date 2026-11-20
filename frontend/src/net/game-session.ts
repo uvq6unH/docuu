@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, Vector3, type Scene } from 'three';
+import { Group, Vector3, type Scene } from 'three';
 import {
   CLIENT_EVENTS,
   SERVER_EVENTS,
@@ -9,9 +9,11 @@ import {
   type Snapshot,
   type GameEvent,
   type AckResponse,
+  type Role,
 } from '../../../packages/shared/src/protocol';
 import type { InputState } from '../input/state';
 import { readMapDigest } from './room-details';
+import { CharacterAvatar, createCharacterModel } from '../player/character-avatar';
 
 export interface GameSessionCallbacks {
   onStatus: (message: string, isError?: boolean) => void;
@@ -27,9 +29,11 @@ const sessionKey = 'folk_tag_room_v1';
 export interface RemotePlayerEntity {
   id: string;
   role: 'POLICE' | 'ROBBER';
-  mesh: Mesh;
+  avatar: CharacterAvatar;
+  mesh: Group;
   currentPos: Vector3;
   targetPos: Vector3;
+  previousPos: Vector3;
   currentYaw: number;
   targetYaw: number;
   targetScaleY: number;
@@ -42,11 +46,6 @@ export class GameSession {
   private resuming = false;
   private socket: Socket;
   private group: Group;
-  private geometry: CapsuleGeometry;
-  private materials: {
-    POLICE: MeshStandardMaterial;
-    ROBBER: MeshStandardMaterial;
-  };
   private entities = new Map<string, RemotePlayerEntity>();
   private lastTick = -1;
   private seq = 0;
@@ -62,12 +61,6 @@ export class GameSession {
   constructor(scene: Scene, private callbacks: GameSessionCallbacks) {
     this.group = new Group();
     scene.add(this.group);
-
-    this.geometry = new CapsuleGeometry(0.35, 1);
-    this.materials = {
-      POLICE: new MeshStandardMaterial({ color: '#2876c9', roughness: 0.4 }),
-      ROBBER: new MeshStandardMaterial({ color: '#ec8f32', roughness: 0.4 }),
-    };
 
     // Calculate map hash immediately
     readMapDigest().then((hash) => {
@@ -148,8 +141,8 @@ export class GameSession {
 
       for (const p of snapshot.players) {
         if (
-          !p.connected ||
-          !this.materials[p.role] ||
+          (!p.connected && !p.id.startsWith('bot-')) ||
+          !['POLICE', 'ROBBER'].includes(p.role) ||
           !p.pos?.every(Number.isFinite) ||
           (p.role !== snapshot.self.role && p.state === 'HIDDEN' && Math.hypot(p.pos[0] - snapshot.self.pos[0], p.pos[2] - snapshot.self.pos[2]) > 2)
         ) {
@@ -158,22 +151,23 @@ export class GameSession {
 
         visible.add(p.id);
         const scaleY = p.crouch ? 1.1 / 1.7 : 1;
-        const targetY = p.pos[1] + 0.85 * scaleY;
+        const targetY = p.pos[1]; // feet directly at ground level
 
         let entity = this.entities.get(p.id);
         if (!entity) {
-          const mesh = new Mesh(this.geometry, this.materials[p.role]);
-          mesh.scale.y = scaleY;
-          mesh.position.set(p.pos[0], targetY, p.pos[2]);
-          mesh.rotation.y = p.yaw || 0;
-          this.group.add(mesh);
+          const avatar = createCharacterModel(p.role);
+          avatar.root.position.set(p.pos[0], targetY, p.pos[2]);
+          avatar.root.rotation.y = p.yaw || 0;
+          this.group.add(avatar.root);
 
           entity = {
             id: p.id,
             role: p.role,
-            mesh,
+            avatar,
+            mesh: avatar.root,
             currentPos: new Vector3(p.pos[0], targetY, p.pos[2]),
             targetPos: new Vector3(p.pos[0], targetY, p.pos[2]),
+            previousPos: new Vector3(p.pos[0], targetY, p.pos[2]),
             currentYaw: p.yaw || 0,
             targetYaw: p.yaw || 0,
             targetScaleY: scaleY,
@@ -182,6 +176,10 @@ export class GameSession {
           };
           this.entities.set(p.id, entity);
         } else {
+          if (entity.role !== p.role) {
+            entity.role = p.role;
+            entity.avatar.setRole(p.role);
+          }
           entity.targetPos.set(p.pos[0], targetY, p.pos[2]);
           entity.targetYaw = p.yaw || 0;
           entity.targetScaleY = scaleY;
@@ -193,7 +191,8 @@ export class GameSession {
       // Remove entities no longer visible
       for (const [id, entity] of this.entities) {
         if (!visible.has(id)) {
-          this.group.remove(entity.mesh);
+          entity.avatar.dispose();
+          this.group.remove(entity.avatar.root);
           this.entities.delete(id);
         }
       }
@@ -213,29 +212,42 @@ export class GameSession {
 
   /**
    * N04 Remote Player Interpolation:
-   * Smoothly interpolates remote players' positions and rotations at 60 FPS in render loop.
+   * Smoothly interpolates remote players' positions and rotations at 60 FPS in render loop,
+   * while driving procedural low-poly skeletal animations (walk, run, crouch, idle, jailed).
    */
   public updateRemoteInterpolation(dtSeconds: number): void {
     if (this.entities.size === 0) return;
     const lerpFactor = Math.min(1, Math.max(0.01, dtSeconds * 22));
 
     for (const entity of this.entities.values()) {
+      entity.previousPos.copy(entity.currentPos);
+
       // If position jumped by more than 3.0m (teleport to jail cell / respawn), snap immediately
       if (entity.currentPos.distanceTo(entity.targetPos) > 3.0) {
         entity.currentPos.copy(entity.targetPos);
       } else {
         entity.currentPos.lerp(entity.targetPos, lerpFactor);
       }
-      entity.mesh.position.copy(entity.currentPos);
+      entity.avatar.root.position.copy(entity.currentPos);
 
       // Smooth yaw angle interpolation with wrapping
       let diff = (entity.targetYaw - entity.currentYaw + Math.PI) % (Math.PI * 2) - Math.PI;
       if (diff < -Math.PI) diff += Math.PI * 2;
       entity.currentYaw += diff * lerpFactor;
-      entity.mesh.rotation.y = entity.currentYaw;
+      entity.avatar.root.rotation.y = entity.currentYaw;
 
-      // Smooth crouch scaling
-      entity.mesh.scale.y += (entity.targetScaleY - entity.mesh.scale.y) * lerpFactor;
+      // Calculate horizontal velocity to drive locomotion animations
+      const dx = entity.currentPos.x - entity.previousPos.x;
+      const dz = entity.currentPos.z - entity.previousPos.z;
+      const speed = Math.hypot(dx, dz) / Math.max(0.001, dtSeconds);
+
+      // Update low-poly avatar skeletal kinematics
+      entity.avatar.update(dtSeconds, {
+        speed,
+        crouch: entity.crouch,
+        grounded: true,
+        jailed: entity.state === 'JAILED',
+      });
     }
   }
 
@@ -244,6 +256,9 @@ export class GameSession {
   }
 
   private resetMarkers(): void {
+    for (const entity of this.entities.values()) {
+      entity.avatar.dispose();
+    }
     this.group.clear();
     this.entities.clear();
     this.lastTick = -1;
@@ -451,6 +466,58 @@ export class GameSession {
     });
   }
 
+  public async addBot(role?: Role | null): Promise<AckResponse> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_ADD_BOT,
+        {
+          role,
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+        (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
+  public async removeBot(botId?: string): Promise<AckResponse> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_REMOVE_BOT,
+        {
+          botId,
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+        (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
+  public async setRole(role: Role | null, targetPlayerId?: string): Promise<AckResponse> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_SET_ROLE,
+        {
+          role,
+          targetPlayerId,
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+        (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
+  public async autoRoles(): Promise<AckResponse> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_AUTO_ROLES,
+        {
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+        (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
   public leaveRoom(): void {
     if (this.socket.connected && !this.isMock && this.currentRoom) this.socket.emit(CLIENT_EVENTS.ROOM_LEAVE, {});
     this.remember(null);
@@ -462,9 +529,9 @@ export class GameSession {
     this.callbacks.onRoom(null);
   }
 
-  public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): void {
-    if (this.currentRoom?.phase === 'RESULT') return;
-    if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return;
+  public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): number {
+    if (this.currentRoom?.phase === 'RESULT') return this.seq;
+    if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return this.seq;
     if (input.jumpPressed) this.jumpId++;
     if (input.capturePressed) this.captureId++;
     const { moveX, moveZ, sprint, crouch, rescueHeld } = input;
@@ -483,13 +550,11 @@ export class GameSession {
     };
 
     this.socket.emit(CLIENT_EVENTS.GAME_INPUT, frame);
+    return this.seq;
   }
 
   public dispose(): void {
     this.socket.disconnect();
     this.resetMarkers();
-    this.geometry.dispose();
-    this.materials.POLICE.dispose();
-    this.materials.ROBBER.dispose();
   }
 }

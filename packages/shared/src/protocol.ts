@@ -78,6 +78,7 @@ export interface RosterMember {
   connected: boolean;
   isHost?: boolean;
   isCaptain?: boolean;
+  isBot?: boolean;
 }
 
 export interface RoomState {
@@ -129,6 +130,10 @@ export const CLIENT_EVENTS = {
   ROOM_READY: 'room:ready',
   ROOM_START: 'room:start',
   ROOM_RESTART: 'room:restart',
+  ROOM_ADD_BOT: 'room:add_bot',
+  ROOM_REMOVE_BOT: 'room:remove_bot',
+  ROOM_SET_ROLE: 'room:set_role',
+  ROOM_AUTO_ROLES: 'room:auto_roles',
   JAIL_SELECT: 'jail:select',
   GAME_INPUT: 'game:input',
 } as const;

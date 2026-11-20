@@ -563,6 +563,151 @@ export class RoomManager {
         }
       );
 
+      // 10. room:add_bot
+      socket.on(
+        CLIENT_EVENTS.ROOM_ADD_BOT,
+        (payload: { requestId?: string; role?: any }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not connected to a room' };
+
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+
+            if (room.hostId !== binding.playerId) {
+              return { ok: false, code: 'NOT_HOST', message: 'Only room host can add bots' };
+            }
+
+            if (room.phase !== 'LOBBY') {
+              return { ok: false, code: 'INVALID_PHASE', message: 'Bots can only be added in lobby' };
+            }
+
+            if (room.players.size >= GAME_RULES.REQUIRED_PLAYERS) {
+              return { ok: false, code: 'ROOM_FULL', message: 'Room is full (max 6 players)' };
+            }
+
+            const bot = room.addBot(payload?.role);
+            if (!bot) {
+              return { ok: false, code: 'ROOM_FULL', message: 'Could not add bot' };
+            }
+
+            this.broadcastRoomState(room);
+            return { ok: true, data: { botId: bot.id, botName: bot.name } };
+          });
+        }
+      );
+
+      // 11. room:remove_bot
+      socket.on(
+        CLIENT_EVENTS.ROOM_REMOVE_BOT,
+        (payload: { requestId?: string; botId?: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not connected to a room' };
+
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+
+            if (room.hostId !== binding.playerId) {
+              return { ok: false, code: 'NOT_HOST', message: 'Only room host can remove bots' };
+            }
+
+            if (room.phase !== 'LOBBY') {
+              return { ok: false, code: 'INVALID_PHASE', message: 'Bots can only be removed in lobby' };
+            }
+
+            const success = room.removeBot(payload?.botId);
+            if (!success) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'No bot to remove' };
+            }
+
+            this.broadcastRoomState(room);
+            return { ok: true };
+          });
+        }
+      );
+
+      // 12. room:set_role
+      socket.on(
+        CLIENT_EVENTS.ROOM_SET_ROLE,
+        (
+          payload: { requestId?: string; role: any; targetPlayerId?: string },
+          ack?: (res: AckResponse) => void
+        ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not connected to a room' };
+
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+
+            if (room.phase !== 'LOBBY') {
+              return { ok: false, code: 'INVALID_PHASE', message: 'Roles can only be changed in lobby' };
+            }
+
+            const targetId = payload?.targetPlayerId || binding.playerId;
+            if (targetId !== binding.playerId && room.hostId !== binding.playerId) {
+              return { ok: false, code: 'NOT_HOST', message: 'Only host can change other players roles' };
+            }
+
+            const role = payload?.role === 'POLICE' || payload?.role === 'ROBBER' ? payload.role : null;
+            const success = room.setPlayerRole(targetId, role);
+            if (!success) {
+              return { ok: false, code: 'BAD_PAYLOAD', message: 'Player not found' };
+            }
+
+            this.broadcastRoomState(room);
+            return { ok: true };
+          });
+        }
+      );
+
+      // 13. room:auto_roles
+      socket.on(
+        CLIENT_EVENTS.ROOM_AUTO_ROLES,
+        (payload: { requestId?: string }, ack?: (res: AckResponse) => void) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not connected to a room' };
+
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+
+            if (room.hostId !== binding.playerId) {
+              return { ok: false, code: 'NOT_HOST', message: 'Only host can auto-assign roles' };
+            }
+
+            if (room.phase !== 'LOBBY') {
+              return { ok: false, code: 'INVALID_PHASE', message: 'Roles can only be assigned in lobby' };
+            }
+
+            room.autoAssignRoles();
+            this.broadcastRoomState(room);
+            return { ok: true };
+          });
+        }
+      );
+
       // Disconnect
       socket.on('disconnect', () => {
         const binding = this.socketBindings.get(socket.id);

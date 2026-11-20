@@ -241,6 +241,14 @@ test('two players finish by capture and start another match in the same room', a
       await approach(page, -23, -12, .8);
       await approach(page, -23, 0, 1.1);
       await expect(page.locator('#action-prompt')).toContainText('BẮT CƯỚP');
+      await page.screenshot({ path: 'test-results/police-capturing-robber.png' });
+      await guest.screenshot({ path: 'test-results/robber-view-of-police.png' });
+      try {
+        const { copyFileSync } = await import('node:fs');
+        const artifactDir = 'C:\\Users\\v3411179\\.gemini\\antigravity\\brain\\56aa1232-d0ed-43f3-820f-33729688864e';
+        copyFileSync('test-results/police-capturing-robber.png', artifactDir + '\\police-capturing-robber.png');
+        copyFileSync('test-results/robber-view-of-police.png', artifactDir + '\\robber-view-of-police.png');
+      } catch {}
       await page.mouse.down();
       await page.mouse.up();
       for (const client of [page, guest]) {

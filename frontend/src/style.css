@@ -105,8 +105,25 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 .role-robber { background: #ec8f32; }
 .role-none { background: #888; }
 .badge-host { background: #7a3e88; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.badge-bot { background: #263d30; color: #8ef7a1; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: 700; border: 1px solid #52b788; }
 .status-ready { color: #287a38; font-weight: 600; }
 .status-unready { color: #888; }
+
+.role-selector-card { background: #eef3ea; border: 1px solid #c2ceba; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; }
+.role-selector-label { display: block; font-size: 12px; font-weight: 700; color: #263d30; margin-bottom: 6px; }
+.role-btn-group { display: flex; gap: 6px; }
+.btn-role { flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 600; border-radius: 4px; background: #607567; color: #fff; border: 2px solid transparent; cursor: pointer; transition: all 0.15s; }
+.btn-role:hover { filter: brightness(1.1); }
+.btn-role.active { border-color: #263d30; box-shadow: 0 0 0 2px #fff inset; font-weight: 700; transform: scale(1.02); }
+.btn-role-police { background: #2876c9 !important; }
+.btn-role-robber { background: #ec8f32 !important; }
+
+.host-controls-card { display: flex; gap: 6px; margin-bottom: 8px; }
+.btn-tool { flex: 1; padding: 6px 4px; font-size: 11px; font-weight: 700; border-radius: 4px; color: #fff; border: none; cursor: pointer; transition: filter 0.15s; }
+.btn-tool:hover { filter: brightness(1.12); }
+.btn-tool-bot { background: #2f7a3e !important; }
+.btn-tool-remove { background: #963624 !important; }
+.btn-tool-auto { background: #4a5c68 !important; }
 
 /* In-game HUD overlay */
 .hud-overlay { position: fixed; top: 12px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; pointer-events: none; z-index: 100; gap: 8px; }

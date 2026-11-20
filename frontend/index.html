@@ -129,6 +129,23 @@
             <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại</button>
             <p id="result-wait" hidden>Đang chờ chủ phòng chọn chơi lại.</p>
           </section>
+          <!-- Role Selection UI -->
+          <div id="role-picker-container" class="role-selector-card">
+            <span class="role-selector-label">Vai trò của bạn:</span>
+            <div class="role-btn-group">
+              <button id="btn-role-auto" type="button" class="btn-role active" data-role="auto">🎲 Tự động</button>
+              <button id="btn-role-police" type="button" class="btn-role btn-role-police" data-role="POLICE">👮 Cảnh sát</button>
+              <button id="btn-role-robber" type="button" class="btn-role btn-role-robber" data-role="ROBBER">🥷 Cướp</button>
+            </div>
+          </div>
+
+          <!-- Host Bot Controls & Auto Roles UI (Only visible to host in LOBBY) -->
+          <div id="host-room-controls" class="host-controls-card" hidden>
+            <button id="btn-add-bot" type="button" class="btn-tool btn-tool-bot">🤖 + Thêm máy</button>
+            <button id="btn-remove-bot" type="button" class="btn-tool btn-tool-remove">➖ Bớt máy</button>
+            <button id="btn-auto-roles" type="button" class="btn-tool btn-tool-auto">⚖️ Chia vai auto</button>
+          </div>
+
           <ul class="roster-list" id="roster-list"></ul>
 
           <!-- Captain Jail Selection UI in JAIL_SELECTION phase -->

@@ -2,13 +2,14 @@ import { villagePreview } from './world/village';
 import './style.css';
 import { createRenderer, createScene, disposeScene, resizeScene } from './core/scene';
 import { createControls } from './input/controls';
-import { initialMovement, stepMovement } from '../../packages/shared/src/movement';
+import { initialMovement, stepMovement, type MovementState } from '../../packages/shared/src/movement';
 import { movementRules } from '../../packages/shared/src/rules';
 import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
 import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
 import type { RoomState, GameEvent, Snapshot } from '../../packages/shared/src/protocol';
+import type { Vec3 } from '../../packages/shared/src/map';
 import { sound } from './core/audio';
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 
@@ -51,6 +52,17 @@ const resultTitle = requireElement('#result-title');
 const resultReason = requireElement('#result-reason');
 const resultWait = requireElement('#result-wait');
 const btnLeaveRoom = requireElement<HTMLButtonElement>('#btn-leave-room');
+
+// Role selection & Bot controls
+const rolePickerContainer = requireElement<HTMLDivElement>('#role-picker-container');
+const btnRoleAuto = requireElement<HTMLButtonElement>('#btn-role-auto');
+const btnRolePolice = requireElement<HTMLButtonElement>('#btn-role-police');
+const btnRoleRobber = requireElement<HTMLButtonElement>('#btn-role-robber');
+
+const hostRoomControls = requireElement<HTMLDivElement>('#host-room-controls');
+const btnAddBot = requireElement<HTMLButtonElement>('#btn-add-bot');
+const btnRemoveBot = requireElement<HTMLButtonElement>('#btn-remove-bot');
+const btnAutoRoles = requireElement<HTMLButtonElement>('#btn-auto-roles');
 
 // HUD Elements
 const hudOverlay = requireElement('#hud-overlay');
@@ -99,6 +111,19 @@ try {
   let activeJailId = 'J1';
   let lastRemainingSec = -1;
   let lastCaptureAttemptTime = 0;
+  let lastObservedPhase = '';
+  let lastFrozenNoticeTime = 0;
+
+  interface PredictedFrame {
+    seq: number;
+    input: ReturnType<typeof controls.input.consume>;
+    yaw: number;
+    predictedPos: Vec3;
+    verticalSpeed: number;
+    grounded: boolean;
+  }
+  const predictionHistory: PredictedFrame[] = [];
+  const visualErrorOffset = { x: 0, y: 0, z: 0 };
 
   const surveyPosition = camera.position.clone();
   const surveyRotation = camera.rotation.clone();
@@ -348,50 +373,117 @@ try {
       const self = snapshot.self;
       if (!self) return;
       const identity = snapshot.matchId + '/' + self.id;
-      if (viewSession !== identity) {
-        yaw = self.yaw;
-        pitch = 0;
-        if (playing) camera.rotation.set(pitch, yaw, 0, 'YXZ');
-        viewSession = identity;
-      }
-      if (session.isMock) sceneLabel.textContent = 'MOCK01 · ' + self.id + ' · ' + session.currentRoom?.roster.length + ' nhân vật';
-
       currentRole = self.role;
 
-      if (self.state === 'JAILED') {
+      // Phase transition or new match: Snap cleanly to authoritative spawn point & clear prediction history
+      if (lastObservedPhase !== snapshot.phase || viewSession !== identity) {
+        lastObservedPhase = snapshot.phase;
+        viewSession = identity;
+        yaw = self.yaw;
+        pitch = 0;
         player = {
           ...player,
-          pos: [...self.pos],
+          pos: [self.pos[0], self.pos[1], self.pos[2]],
+          stamina: self.stamina,
+          grounded: self.grounded,
+          crouched: Boolean(self.crouch),
+          verticalSpeed: self.vel ? self.vel[1] : 0,
+        };
+        previous = { ...player, pos: [...player.pos] };
+        predictionHistory.length = 0;
+        visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+        if (playing) camera.rotation.set(pitch, yaw, 0, 'YXZ');
+      } else if (self.state === 'JAILED') {
+        player = {
+          ...player,
+          pos: [self.pos[0], self.pos[1], self.pos[2]],
           stamina: self.stamina,
           grounded: self.grounded,
           crouched: false,
           verticalSpeed: 0,
         };
-        previous = player;
+        previous = { ...player, pos: [...player.pos] };
+        predictionHistory.length = 0;
+        visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
       } else {
-        // Smooth prediction error reconciliation to prevent camera hitching
-        const errX = self.pos[0] - player.pos[0];
-        const errZ = self.pos[2] - player.pos[2];
-        const errY = self.pos[1] - player.pos[1];
-        const errDist = Math.hypot(errX, errZ);
+        // Authoritative Client-Side Prediction: Reconcile against self.ackSeq
+        const ackIndex = predictionHistory.findIndex((f) => f.seq === self.ackSeq);
+        if (ackIndex >= 0) {
+          const ackFrame = predictionHistory[ackIndex]!;
+          const errX = self.pos[0] - ackFrame.predictedPos[0];
+          const errZ = self.pos[2] - ackFrame.predictedPos[2];
+          const errY = self.pos[1] - ackFrame.predictedPos[1];
+          const errDist = Math.hypot(errX, errZ);
+          const errHeight = Math.abs(errY);
 
-        if (errDist > 1.8) {
-          // Hard snap on large server correction / teleport
-          player.pos = [...self.pos];
-          player.verticalSpeed = 0;
-          previous = player;
-        } else if (errDist > 0.03) {
-          // Gentle correction nudge towards server position
-          player.pos[0] += errX * 0.15;
-          player.pos[2] += errZ * 0.15;
-          if (Math.abs(errY) > 0.25) {
-            player.pos[1] += errY * 0.2;
+          // Discard acknowledged frames up to ackSeq
+          predictionHistory.splice(0, ackIndex + 1);
+
+          if (errDist > 2.0 || errHeight > 1.5) {
+            // Hard snap on large server correction / teleport / boundary clamp
+            player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+            player.verticalSpeed = self.vel ? self.vel[1] : 0;
+            player.grounded = self.grounded;
+            previous = { ...player, pos: [...player.pos] };
+            predictionHistory.length = 0;
+            visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+          } else if (errDist > 0.04 || errHeight > 0.04) {
+            // Replay pending unacknowledged frames starting from authoritative server state
+            let replayed: MovementState = {
+              pos: [self.pos[0], self.pos[1], self.pos[2]],
+              verticalSpeed: self.vel ? self.vel[1] : 0,
+              grounded: self.grounded,
+              crouched: Boolean(self.crouch),
+              sprinting: false,
+              stamina: self.stamina,
+              exhausted: false,
+              regenDelayTicks: 0,
+            };
+            for (const pending of predictionHistory) {
+              replayed = stepMovement(
+                replayed,
+                { ...pending.input, yaw: pending.yaw },
+                currentRole || 'ROBBER',
+                villageMap
+              );
+              pending.predictedPos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
+              pending.verticalSpeed = replayed.verticalSpeed;
+              pending.grounded = replayed.grounded;
+            }
+
+            // Smooth Visual Error Absorption (Unreal/Source style)
+            // Absorb positional delta into visualErrorOffset so the camera glides without any pop or hitch!
+            const deltaX = player.pos[0] - replayed.pos[0];
+            const deltaY = player.pos[1] - replayed.pos[1];
+            const deltaZ = player.pos[2] - replayed.pos[2];
+
+            if (Math.hypot(deltaX, deltaZ) < 1.2 && Math.abs(deltaY) < 1.0) {
+              visualErrorOffset.x += deltaX;
+              visualErrorOffset.y += deltaY;
+              visualErrorOffset.z += deltaZ;
+            }
+
+            player.pos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
+            player.verticalSpeed = replayed.verticalSpeed;
+            player.grounded = replayed.grounded;
+            previous.pos = [player.pos[0], player.pos[1], player.pos[2]];
+          }
+          // If error <= 0.04m: Prediction matches server authoritative physics exactly.
+          // Zero jitter, zero pull-back!
+        } else if (predictionHistory.length === 0) {
+          const errDist = Math.hypot(self.pos[0] - player.pos[0], self.pos[2] - player.pos[2]);
+          if (errDist > 1.5) {
+            player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+            player.verticalSpeed = 0;
+            previous = { ...player, pos: [...player.pos] };
+            visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
           }
         }
         player.stamina = self.stamina;
-        player.grounded = self.grounded;
-        player.crouched = self.crouch;
+        player.crouched = Boolean(self.crouch);
       }
+
+      if (session.isMock) sceneLabel.textContent = 'MOCK01 · ' + self.id + ' · ' + session.currentRoom?.roster.length + ' nhân vật';
 
       // Countdown audio warning in the final 5 seconds
       const sec = Math.ceil(snapshot.remainingMs / 1000);
@@ -408,9 +500,15 @@ try {
       hudRole.style.color = self.role === 'POLICE' ? '#58a6ff' : '#ffa657';
       hudJail.textContent = snapshot.jailId || 'Chưa chọn';
       const robberCount = session.currentRoom?.roster.filter(p => p.role === 'ROBBER').length ?? 0;
-      requireElement('#hud-action').textContent = self.state === 'JAILED' ? 'Bạn đang bị giam · Chờ đồng đội cứu'
-        : snapshot.phase === 'PLAYING' && self.role === 'POLICE' ? 'Áp sát và nhấn chuột trái để bắt'
-        : self.rescueProgressMs > 0 ? 'Đang cứu ' + Math.round(self.rescueProgressMs / 20) + '%' : '';
+      requireElement('#hud-action').textContent = self.state === 'JAILED'
+        ? 'Bạn đang bị giam · Chờ đồng đội cứu'
+        : snapshot.phase === 'HEAD_START' && self.role === 'POLICE'
+        ? '⏳ CẢNH SÁT TẠM ĐỨNG YÊN (10s cướp chạy trốn) · Sẽ xuất kích khi hết đếm ngược!'
+        : snapshot.phase === 'PLAYING' && self.role === 'POLICE'
+        ? 'Áp sát và nhấn chuột trái để bắt'
+        : self.rescueProgressMs > 0
+        ? 'Đang cứu ' + Math.round(self.rescueProgressMs / 20) + '%'
+        : '';
       hudJailedCount.textContent = `${snapshot.jailedCount} / ${robberCount}`;
 
       // Stealth & Immunity HUD flags
@@ -531,6 +629,13 @@ try {
         badgeGroup.append(capBadge);
       }
 
+      if (member.isBot) {
+        const botBadge = document.createElement('span');
+        botBadge.className = 'badge-bot';
+        botBadge.textContent = 'Máy';
+        badgeGroup.append(botBadge);
+      }
+
       const roleBadge = document.createElement('span');
       roleBadge.className = `role-badge ${member.role === 'POLICE' ? 'role-police' : member.role === 'ROBBER' ? 'role-robber' : 'role-none'}`;
       roleBadge.textContent = member.role === 'POLICE' ? 'Cảnh sát' : member.role === 'ROBBER' ? 'Cướp' : 'Chờ';
@@ -543,6 +648,22 @@ try {
 
       li.append(nameSpan, badgeGroup);
       rosterList.append(li);
+    }
+
+    // Role selection buttons state
+    rolePickerContainer.hidden = room.phase !== 'LOBBY';
+    const myMember = room.roster.find((m) => m.id === session.playerId);
+    const myRole = myMember?.role ?? null;
+    btnRoleAuto.classList.toggle('active', myRole === null);
+    btnRolePolice.classList.toggle('active', myRole === 'POLICE');
+    btnRoleRobber.classList.toggle('active', myRole === 'ROBBER');
+
+    // Host room controls (bot add/remove, auto roles)
+    hostRoomControls.hidden = !(isHost && room.phase === 'LOBBY');
+    if (isHost && room.phase === 'LOBBY') {
+      btnAddBot.disabled = room.roster.length >= 6;
+      btnRemoveBot.disabled = !room.roster.some((m) => m.isBot);
+      btnAutoRoles.disabled = room.roster.length < 2;
     }
 
     btnToggleReady.hidden = room.phase !== 'LOBBY';
@@ -698,6 +819,80 @@ try {
     showToast('Đã rời phòng');
   });
 
+  // Role selector listeners
+  btnRoleAuto.addEventListener('click', async () => {
+    try {
+      await session.setRole(null);
+    } catch (err) {
+      showToast(`Lỗi chọn vai: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  btnRolePolice.addEventListener('click', async () => {
+    try {
+      await session.setRole('POLICE');
+    } catch (err) {
+      showToast(`Lỗi chọn vai: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  btnRoleRobber.addEventListener('click', async () => {
+    try {
+      await session.setRole('ROBBER');
+    } catch (err) {
+      showToast(`Lỗi chọn vai: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  // Host bot control listeners
+  btnAddBot.addEventListener('click', async () => {
+    btnAddBot.disabled = true;
+    try {
+      const res = await session.addBot();
+      btnAddBot.disabled = false;
+      if (!res.ok) {
+        showToast(`Không thể thêm máy: ${res.message || res.code}`);
+      } else {
+        showToast('🤖 Đã thêm máy vào phòng!');
+      }
+    } catch (err) {
+      btnAddBot.disabled = false;
+      showToast(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  btnRemoveBot.addEventListener('click', async () => {
+    btnRemoveBot.disabled = true;
+    try {
+      const res = await session.removeBot();
+      btnRemoveBot.disabled = false;
+      if (!res.ok) {
+        showToast(`Không thể bớt máy: ${res.message || res.code}`);
+      } else {
+        showToast('Đã bớt máy khỏi phòng');
+      }
+    } catch (err) {
+      btnRemoveBot.disabled = false;
+      showToast(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
+  btnAutoRoles.addEventListener('click', async () => {
+    btnAutoRoles.disabled = true;
+    try {
+      const res = await session.autoRoles();
+      btnAutoRoles.disabled = false;
+      if (!res.ok) {
+        showToast(`Không thể chia vai: ${res.message || res.code}`);
+      } else {
+        showToast('🎲 Đã tự động chia vai cho toàn phòng!');
+      }
+    } catch (err) {
+      btnAutoRoles.disabled = false;
+      showToast(`Lỗi: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
+
   // Captain Jail Picker
   captainJailPicker.querySelectorAll<HTMLButtonElement>('.jail-btn').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -818,7 +1013,7 @@ try {
       lastFrame = time;
 
       while (accumulated >= tickMs) {
-        previous = player;
+        previous = { ...player, pos: [...player.pos] };
         const input = controls.input.consume();
 
         // Immediate Client-Side Prediction: Step physics locally at 30Hz!
@@ -826,13 +1021,33 @@ try {
         const isJailed = latestSnapshot?.self?.state === 'JAILED';
         const isPoliceFrozen = latestSnapshot?.phase === 'HEAD_START' && currentRole === 'POLICE';
 
+        if (isPoliceFrozen && (input.moveX !== 0 || input.moveZ !== 0 || input.jumpPressed)) {
+          const now = performance.now();
+          if (now - lastFrozenNoticeTime > 3500) {
+            lastFrozenNoticeTime = now;
+            showToast('⏳ Bạn là Cảnh sát: Đang trong 10s Head Start cướp chạy trốn, hãy đợi đếm ngược kết thúc!');
+          }
+        }
+
+        const currentYaw = camera.rotation.y;
         if (!isJailed && !isPoliceFrozen) {
-          player = stepMovement(player, { ...input, yaw: camera.rotation.y }, role, villageMap);
+          player = stepMovement(player, { ...input, yaw: currentYaw }, role, villageMap);
         }
 
         if (!isOffline) {
-          // Stream input frame to Authoritative Server at 30Hz
-          session.send(input, camera.rotation.y, camera.rotation.x);
+          // Stream input frame to Authoritative Server at 30Hz & record prediction history
+          const seq = session.send(input, currentYaw, camera.rotation.x);
+          if (seq > 0 && !isJailed && !isPoliceFrozen) {
+            predictionHistory.push({
+              seq,
+              input,
+              yaw: currentYaw,
+              predictedPos: [...player.pos],
+              verticalSpeed: player.verticalSpeed,
+              grounded: player.grounded,
+            });
+            if (predictionHistory.length > 60) predictionHistory.shift();
+          }
         }
 
         // Procedural footstep audio when moving
@@ -855,12 +1070,18 @@ try {
         accumulated -= tickMs;
       }
 
+      // Smooth exponential decay of reconciliation offset (eliminates any micro-pop)
+      const decay = Math.exp(-22 * (frameMs / 1000));
+      visualErrorOffset.x *= decay;
+      visualErrorOffset.y *= decay;
+      visualErrorOffset.z *= decay;
+
       const blend = accumulated / tickMs;
       const lerp = (from: number, to: number) => from + (to - from) * blend;
       camera.position.set(
-        lerp(previous.pos[0], player.pos[0]),
-        lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)),
-        lerp(previous.pos[2], player.pos[2])
+        lerp(previous.pos[0], player.pos[0]) + visualErrorOffset.x,
+        lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y,
+        lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z
       );
       stamina.textContent = `Thể lực ${Math.round(player.stamina)}/${movementRules.maxStamina}`;
 

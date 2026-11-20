@@ -1,10 +1,11 @@
 import { io } from 'socket.io-client';
-import { CapsuleGeometry, Group, Mesh, MeshStandardMaterial, type Scene } from 'three';
+import { Group, type Scene } from 'three';
 import {
   CLIENT_EVENTS, SERVER_EVENTS, PROTOCOL_VERSION,
   type InputFrame, type RoomState, type Snapshot,
 } from '../../../packages/shared/src/protocol';
 import type { InputState } from '../input/state';
+import { CharacterAvatar, createCharacterModel } from '../player/character-avatar';
 
 export function connectMock(
   scene: Scene, onSnapshot: (snapshot: Snapshot) => void,
@@ -17,12 +18,7 @@ export function connectMock(
   });
   const group = new Group();
   scene.add(group);
-  const geometry = new CapsuleGeometry(.35, 1);
-  const materials = {
-    POLICE: new MeshStandardMaterial({ color: '#2876c9' }),
-    ROBBER: new MeshStandardMaterial({ color: '#ec8f32' }),
-  };
-  const markers = new Map<string, Mesh>();
+  const markers = new Map<string, CharacterAvatar>();
   let roomReady = false;
   let lastTick = -1;
   let seq = 0, jumpId = 0, captureId = 0;
@@ -31,6 +27,9 @@ export function connectMock(
     roomReady = false;
     lastTick = -1;
     seq = jumpId = captureId = 0;
+    for (const avatar of markers.values()) {
+      avatar.dispose();
+    }
     group.clear();
     markers.clear();
     onRoom(null);
@@ -54,20 +53,32 @@ export function connectMock(
     lastTick = snapshot.tick;
     const visible = new Set<string>();
     for (const p of snapshot.players) {
-      if (!p.connected || !materials[p.role] || !p.pos?.every(Number.isFinite) ||
+      if (!p.connected || !['POLICE', 'ROBBER'].includes(p.role) || !p.pos?.every(Number.isFinite) ||
           (p.role !== snapshot.self.role && p.state === 'HIDDEN')) continue;
       visible.add(p.id);
-      let mesh = markers.get(p.id);
-      if (!mesh) {
-        mesh = new Mesh(geometry, materials[p.role]);
-        group.add(mesh);
-        markers.set(p.id, mesh);
+      let avatar = markers.get(p.id);
+      if (!avatar) {
+        avatar = createCharacterModel(p.role);
+        group.add(avatar.root);
+        markers.set(p.id, avatar);
+      } else if (avatar.role !== p.role) {
+        avatar.setRole(p.role);
       }
-      mesh.scale.y = p.crouch ? 1.1 / 1.7 : 1;
-      mesh.position.set(p.pos[0], p.pos[1] + .85 * mesh.scale.y, p.pos[2]);
+      avatar.root.position.set(p.pos[0], p.pos[1], p.pos[2]);
+      avatar.root.rotation.y = p.yaw || 0;
+      avatar.update(1 / 30, {
+        speed: (p as { speed?: number }).speed ?? 0,
+        crouch: Boolean(p.crouch),
+        grounded: true,
+        jailed: p.state === 'JAILED',
+      });
     }
-    for (const [id, mesh] of markers) {
-      if (!visible.has(id)) { group.remove(mesh); markers.delete(id); }
+    for (const [id, avatar] of markers) {
+      if (!visible.has(id)) {
+        avatar.dispose();
+        group.remove(avatar.root);
+        markers.delete(id);
+      }
     }
     onSnapshot(snapshot);
   });
@@ -84,12 +95,11 @@ export function connectMock(
     dispose() {
       socket.off().disconnect();
       group.removeFromParent();
+      for (const avatar of markers.values()) {
+        avatar.dispose();
+      }
       group.clear();
       markers.clear();
-      geometry.dispose();
-      materials.POLICE.dispose();
-      materials.ROBBER.dispose();
     },
   };
 }
-

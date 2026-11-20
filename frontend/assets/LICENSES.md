@@ -16,5 +16,8 @@ Mỗi model, texture, audio hoặc font được thêm vào phải có một dò
 | haystack (.blend, .glb) | Codex tạo cho dự án | Primitive Blender nội bộ | Chủ repo quyết định license phân phối | Dựng mesh và vật liệu, xuất glTF | blender/build_a02.py |
 | fence_segment (.blend, .glb) | Codex tạo cho dự án | Primitive Blender nội bộ | Chủ repo quyết định license phân phối | Dựng mesh và vật liệu, xuất glTF | blender/build_a02.py |
 | jail (.blend, .glb) | Codex tạo cho dự án | Primitive Blender nội bộ | Chủ repo quyết định license phân phối | Dựng mesh và vật liệu, xuất glTF | blender/build_a02.py |
+| avatar_police (.blend, .glb) | Antigravity tạo cho dự án, 20/11/2026 | Primitive nội bộ Three.js/Blender | Chủ repo quyết định license phân phối | Dựng mesh cảnh sát low-poly, mũ kê-pi, huy hiệu, xuất glTF | blender/build_a03.py, export_avatar_glb.mjs |
+| avatar_robber (.blend, .glb) | Antigravity tạo cho dự án, 20/11/2026 | Primitive nội bộ Three.js/Blender | Chủ repo quyết định license phân phối | Dựng mesh cướp low-poly, khăn rằn, áo bà ba, xuất glTF | blender/build_a03.py, export_avatar_glb.mjs |
+| avatar (.blend, .glb) | Antigravity tạo cho dự án, 20/11/2026 | Primitive nội bộ Three.js/Blender | Chủ repo quyết định license phân phối | Model tổng hợp 2 vai, đổi material theo phe | blender/build_a03.py, export_avatar_glb.mjs |
 
 Nguồn Blender đặt ở `blender/`; GLB dùng trên web đặt ở `../public/models/`. Asset chỉ phục vụ hình ảnh, không thay thế map JSON/collider shared.

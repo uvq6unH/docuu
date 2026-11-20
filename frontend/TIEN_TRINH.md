@@ -88,7 +88,7 @@ Trạng thái: `CHỜ` = chưa triển khai, dependency chưa được xác minh
 | R05 | Spatial footsteps | N04 | Âm lượng theo movement; không leak hidden | TODO, P1 |
 | A01 | Blender houses, trees | M04 | GLB đúng scale và budget | ĐẠT · 5 GLB đã kiểm tra trong Chrome |
 | A02 | Jail, bush, haystack, fence | M04 | Art khớp metadata/collider | ĐẠT · 4 GLB |
-| A03 | Avatar và basic animations | N04 | Nhận diện đội, skeleton độc lập | TODO, P1 |
+| A03 | Avatar và basic animations | N04 | Nhận diện đội, skeleton độc lập | ĐẠT · Model Low-Poly Cảnh sát/Cướp, Animation đi/chạy/ngồi/ngồi tù |
 | D03 | Loading/options, tối ưu render/asset | A01, A02, A03 | Có số đo FPS và tải thực tế | TODO, P1 |
 | D04 (AB) | Alpha 6 người qua Internet | D01 | Full match/reconnect chạy được | TODO |
 | T01 (AB) | 20–30 playtests và feedback | D04 | Có log/feedback thực tế | TODO |

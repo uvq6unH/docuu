@@ -45,9 +45,11 @@ export interface PlayerSession {
   socket: Socket | null;
   resumeToken: string;
   role: Role | null;
+  rolePreference?: Role | 'AUTO';
   ready: boolean;
   isHost: boolean;
   isCaptain: boolean;
+  isBot?: boolean;
   movementState: MovementState;
   inputQueue: InputFrame[];
   lastProcessedSeq: number;
@@ -105,6 +107,7 @@ export class Room {
   private totalTicksCount = 0;
   private maxTickTimeMs = 0;
   private lastTickTimeMs = 0;
+  private botCounter: number = 0;
 
   constructor(
     roomCode: string,
@@ -208,6 +211,110 @@ export class Room {
     return true;
   }
 
+  public addBot(rolePreference?: Role | null): PlayerSession | null {
+    if (this.phase !== 'LOBBY') return null;
+    if (this.players.size >= this.rules.REQUIRED_PLAYERS) return null;
+
+    const botCount = Array.from(this.players.values()).filter((p) => p.isBot).length;
+    this.botCounter++;
+    const botId = `bot-${this.botCounter}`;
+    const botName = `Máy ${botCount + 1}`;
+    const resumeToken = `bot-token-${botId}`;
+
+    const session: PlayerSession = {
+      id: botId,
+      name: botName,
+      socket: null,
+      resumeToken,
+      role: rolePreference ?? null,
+      rolePreference: rolePreference ?? 'AUTO',
+      ready: true,
+      isHost: false,
+      isCaptain: false,
+      isBot: true,
+      movementState: initialMovement([0, 0, 0]),
+      inputQueue: [],
+      lastProcessedSeq: 0,
+      lastJumpId: 0,
+      lastCaptureId: 0,
+      lastCaptureAttemptTick: 0,
+      lastInputTimestamp: Date.now(),
+      disconnectTimer: null,
+      state: 'FREE',
+      guard: false,
+      timeJailedMs: 0,
+      immuneRemainingMs: 0,
+      rescueProgressMs: 0,
+      rescueHeld: false,
+      rescueNeedsRelease: false,
+      hideCrouchMs: 0,
+      lastYaw: 0,
+    };
+
+    this.players.set(botId, session);
+
+    if (this.db) {
+      this.db.upsertPlayer({
+        id: botId,
+        roomCode: this.roomCode,
+        name: botName,
+        ready: true,
+        isHost: false,
+        resumeToken,
+      });
+    }
+
+    return session;
+  }
+
+  public removeBot(botId?: string): boolean {
+    if (this.phase !== 'LOBBY') return false;
+
+    let targetId = botId;
+    if (!targetId) {
+      const bots = Array.from(this.players.values()).filter((p) => p.isBot);
+      if (bots.length === 0) return false;
+      targetId = bots[bots.length - 1]!.id;
+    }
+
+    const session = this.players.get(targetId);
+    if (!session || !session.isBot) return false;
+
+    this.players.delete(targetId);
+    return true;
+  }
+
+  public setPlayerRole(playerId: string, role: Role | null): boolean {
+    if (this.phase !== 'LOBBY') return false;
+    const session = this.players.get(playerId);
+    if (!session) return false;
+
+    session.role = role;
+    session.rolePreference = role ?? 'AUTO';
+    return true;
+  }
+
+  public autoAssignRoles(): boolean {
+    if (this.phase !== 'LOBBY') return false;
+    const list = Array.from(this.players.values());
+    if (list.length === 0) return false;
+
+    const policeCount =
+      list.length === this.rules.REQUIRED_PLAYERS
+        ? this.rules.POLICE_COUNT
+        : Math.max(1, Math.min(this.rules.POLICE_COUNT, Math.floor(list.length / 3) || 1));
+
+    const shuffled = [...list].sort(() => Math.random() - 0.5);
+
+    shuffled.forEach((p, index) => {
+      const assignedRole: Role = index < policeCount ? 'POLICE' : 'ROBBER';
+      p.role = assignedRole;
+      p.rolePreference = assignedRole;
+    });
+
+    return true;
+  }
+
   public startMatch(allowPartialRoster = true): boolean {
     const minPlayers = allowPartialRoster ? 2 : this.rules.REQUIRED_PLAYERS;
     if (this.players.size < minPlayers || this.players.size > this.rules.REQUIRED_PLAYERS) return false;
@@ -225,33 +332,85 @@ export class Room {
       this.players.size === this.rules.REQUIRED_PLAYERS
         ? this.rules.POLICE_COUNT
         : Math.max(1, Math.min(this.rules.POLICE_COUNT, Math.floor(this.players.size / 3) || 1));
-    list.forEach((p, index) => {
-      if (index < policeCount) {
-        p.role = 'POLICE';
-        p.guard = false;
-        p.isCaptain = index === 0;
-        if (p.isCaptain) {
-          this.captainId = p.id;
+    const robberCount = this.players.size - policeCount;
+
+    // Check if roles are already balanced per preferences
+    const currentPolice = list.filter((p) => p.role === 'POLICE');
+    const currentRobbers = list.filter((p) => p.role === 'ROBBER');
+
+    if (currentPolice.length === policeCount && currentRobbers.length === robberCount) {
+      // Retain already balanced roles
+    } else {
+      const policeAssigned: PlayerSession[] = [];
+      const robberAssigned: PlayerSession[] = [];
+      const remaining: PlayerSession[] = [];
+
+      for (const p of list) {
+        if (p.role === 'POLICE' && policeAssigned.length < policeCount) {
+          policeAssigned.push(p);
+        } else if (p.role === 'ROBBER' && robberAssigned.length < robberCount) {
+          robberAssigned.push(p);
+        } else {
+          remaining.push(p);
         }
-        p.movementState = initialMovement(officialVillageMap.spawns.police[index]!, this.movementRules);
-      } else {
-        p.role = 'ROBBER';
-        p.isCaptain = false;
-        p.state = 'FREE';
-        p.timeJailedMs = 0;
-        p.immuneRemainingMs = 0;
-        p.rescueProgressMs = 0;
-        p.rescueHeld = false;
-        p.rescueNeedsRelease = false;
-        p.hideCrouchMs = 0;
-        const robberIdx = index - policeCount;
-        p.movementState = initialMovement(officialVillageMap.spawns.robber[robberIdx]!, this.movementRules);
       }
+
+      for (const p of remaining) {
+        if (policeAssigned.length < policeCount) {
+          policeAssigned.push(p);
+        } else {
+          robberAssigned.push(p);
+        }
+      }
+
+      for (const p of policeAssigned) p.role = 'POLICE';
+      for (const p of robberAssigned) p.role = 'ROBBER';
+    }
+
+    // Elect captain: Prefer a human Police player; if none, the first bot Police
+    const policeList = list.filter((p) => p.role === 'POLICE');
+    const humanPolice = policeList.find((p) => !p.isBot);
+    const chosenCaptain = humanPolice || policeList[0] || list[0]!;
+
+    policeList.forEach((p, index) => {
+      p.guard = false;
+      p.isCaptain = p.id === chosenCaptain.id;
+      p.jailSlotIndex = undefined;
+      if (p.isCaptain) {
+        this.captainId = p.id;
+      }
+      p.movementState = initialMovement(
+        officialVillageMap.spawns.police[index] || officialVillageMap.spawns.police[0]!,
+        this.movementRules
+      );
+    });
+
+    const robbersList = list.filter((p) => p.role === 'ROBBER');
+    robbersList.forEach((p, index) => {
+      p.isCaptain = false;
+      p.state = 'FREE';
+      p.timeJailedMs = 0;
+      p.immuneRemainingMs = 0;
+      p.rescueProgressMs = 0;
+      p.rescueHeld = false;
+      p.rescueNeedsRelease = false;
+      p.hideCrouchMs = 0;
+      p.jailSlotIndex = undefined;
+      p.movementState = initialMovement(
+        officialVillageMap.spawns.robber[index] || officialVillageMap.spawns.robber[0]!,
+        this.movementRules
+      );
     });
 
     this.phase = 'JAIL_SELECTION';
     this.selectedJailId = null;
     this.remainingMs = Number(this.rules.PHASE_DURATION_JAIL_SELECTION_MS);
+
+    // If captain is a bot, immediately auto-select jail so match proceeds to HEAD_START
+    const captain = this.players.get(this.captainId || '');
+    if (captain?.isBot) {
+      this.selectJail(captain.id, 'J1');
+    }
 
     if (this.db) {
       this.db.createMatch({
@@ -311,8 +470,8 @@ export class Room {
     this.tick = 0;
 
     for (const session of this.players.values()) {
-      session.ready = false;
-      session.role = null;
+      session.ready = session.isBot ? true : false;
+      session.role = session.rolePreference && session.rolePreference !== 'AUTO' ? session.rolePreference : null;
       session.isCaptain = false;
       session.state = 'FREE';
       session.guard = false;
@@ -445,10 +604,11 @@ export class Room {
         name: p.name,
         ready: p.ready,
         role: p.role,
-        connected: p.socket !== null && p.socket.connected,
+        connected: p.isBot ? true : (p.socket !== null && p.socket.connected),
       };
       if (p.isHost) member.isHost = true;
       if (p.isCaptain) member.isCaptain = true;
+      if (p.isBot) member.isBot = true;
       return member;
     });
 
@@ -482,6 +642,173 @@ export class Room {
     if (this.simTimer) {
       clearInterval(this.simTimer);
       this.simTimer = null;
+    }
+  }
+
+  private runBotAi(
+    bot: PlayerSession,
+    dtMs: number,
+    captureAttempts: { policeId: string; yaw: number }[],
+    activeJail: typeof officialVillageMap.jails[0]
+  ): void {
+    if (!bot.role) return;
+
+    if (bot.role === 'POLICE') {
+      if (this.phase === 'HEAD_START') {
+        bot.movementState.sprinting = false;
+        bot.movementState.verticalSpeed = 0;
+        return;
+      }
+      if (this.phase !== 'PLAYING') return;
+
+      // Find closest free robber
+      let closestRobber: PlayerSession | null = null;
+      let minDistance = Infinity;
+
+      for (const other of this.players.values()) {
+        if (other.role === 'ROBBER' && other.state !== 'JAILED' && other.state !== 'IMMUNE') {
+          const dx = other.movementState.pos[0] - bot.movementState.pos[0];
+          const dz = other.movementState.pos[2] - bot.movementState.pos[2];
+          const dist = Math.hypot(dx, dz);
+          if (dist < minDistance) {
+            minDistance = dist;
+            closestRobber = other;
+          }
+        }
+      }
+
+      if (closestRobber) {
+        const dx = closestRobber.movementState.pos[0] - bot.movementState.pos[0];
+        const dz = closestRobber.movementState.pos[2] - bot.movementState.pos[2];
+        const targetYaw = Math.atan2(-dx, -dz);
+        bot.lastYaw = targetYaw;
+
+        const intent: MovementIntent = {
+          moveX: 0,
+          moveZ: 1,
+          yaw: targetYaw,
+          sprint: minDistance > 3.0 && bot.movementState.stamina > 20,
+          crouch: false,
+          jumpPressed: false,
+        };
+
+        bot.movementState = stepMovement(
+          bot.movementState,
+          intent,
+          'POLICE',
+          officialVillageMap,
+          this.movementRules
+        );
+
+        if (minDistance <= 2.0) {
+          captureAttempts.push({ policeId: bot.id, yaw: targetYaw });
+        }
+      } else {
+        const dx = activeJail.center[0] - bot.movementState.pos[0];
+        const dz = activeJail.center[2] - bot.movementState.pos[2];
+        const dist = Math.hypot(dx, dz);
+        if (dist > 6.0) {
+          const targetYaw = Math.atan2(-dx, -dz);
+          bot.lastYaw = targetYaw;
+          bot.movementState = stepMovement(
+            bot.movementState,
+            { moveX: 0, moveZ: 1, yaw: targetYaw, sprint: false, crouch: false, jumpPressed: false },
+            'POLICE',
+            officialVillageMap,
+            this.movementRules
+          );
+        }
+      }
+    } else if (bot.role === 'ROBBER') {
+      if (bot.state === 'JAILED') {
+        if (bot.jailSlotIndex !== undefined && activeJail.slots[bot.jailSlotIndex]) {
+          bot.movementState.pos = [...activeJail.slots[bot.jailSlotIndex]!];
+          bot.movementState.verticalSpeed = 0;
+          bot.movementState.crouched = false;
+          bot.movementState.sprinting = false;
+        }
+        return;
+      }
+
+      if (this.phase !== 'HEAD_START' && this.phase !== 'PLAYING') return;
+
+      const jailedTeammates = Array.from(this.players.values()).filter(
+        (p) => p.role === 'ROBBER' && p.state === 'JAILED'
+      );
+
+      if (this.phase === 'PLAYING' && jailedTeammates.length > 0) {
+        const anchor = activeJail.rescueAnchors[0] || [activeJail.center[0], 0, activeJail.center[2] + 2];
+        const dx = anchor[0] - bot.movementState.pos[0];
+        const dz = anchor[2] - bot.movementState.pos[2];
+        const distToAnchor = Math.hypot(dx, dz);
+        const targetYaw = Math.atan2(-dx, -dz);
+        bot.lastYaw = targetYaw;
+
+        if (distToAnchor > 1.25) {
+          bot.rescueHeld = false;
+          bot.movementState = stepMovement(
+            bot.movementState,
+            { moveX: 0, moveZ: 1, yaw: targetYaw, sprint: bot.movementState.stamina > 20, crouch: false, jumpPressed: false },
+            'ROBBER',
+            officialVillageMap,
+            this.movementRules
+          );
+        } else {
+          bot.rescueHeld = true;
+          bot.movementState.verticalSpeed = 0;
+        }
+      } else {
+        let nearestPolice: PlayerSession | null = null;
+        let minPoliceDist = Infinity;
+
+        for (const other of this.players.values()) {
+          if (other.role === 'POLICE') {
+            const dx = other.movementState.pos[0] - bot.movementState.pos[0];
+            const dz = other.movementState.pos[2] - bot.movementState.pos[2];
+            const dist = Math.hypot(dx, dz);
+            if (dist < minPoliceDist) {
+              minPoliceDist = dist;
+              nearestPolice = other;
+            }
+          }
+        }
+
+        if (nearestPolice && minPoliceDist < 12.0) {
+          const fleeX = bot.movementState.pos[0] - nearestPolice.movementState.pos[0];
+          const fleeZ = bot.movementState.pos[2] - nearestPolice.movementState.pos[2];
+          const targetYaw = Math.atan2(-fleeX, -fleeZ);
+          bot.lastYaw = targetYaw;
+
+          bot.movementState = stepMovement(
+            bot.movementState,
+            { moveX: 0, moveZ: 1, yaw: targetYaw, sprint: bot.movementState.stamina > 25, crouch: false, jumpPressed: false },
+            'ROBBER',
+            officialVillageMap,
+            this.movementRules
+          );
+        } else {
+          const distFromOrigin = Math.hypot(bot.movementState.pos[0], bot.movementState.pos[2]);
+          if (distFromOrigin > 35) {
+            const targetYaw = Math.atan2(-bot.movementState.pos[0], -bot.movementState.pos[2]);
+            bot.lastYaw = targetYaw;
+            bot.movementState = stepMovement(
+              bot.movementState,
+              { moveX: 0, moveZ: 1, yaw: targetYaw, sprint: false, crouch: false, jumpPressed: false },
+              'ROBBER',
+              officialVillageMap,
+              this.movementRules
+            );
+          } else {
+            bot.movementState = stepMovement(
+              bot.movementState,
+              { moveX: 0, moveZ: 0, yaw: bot.lastYaw, sprint: false, crouch: true, jumpPressed: false },
+              'ROBBER',
+              officialVillageMap,
+              this.movementRules
+            );
+          }
+        }
+      }
     }
   }
 
@@ -575,90 +902,85 @@ export class Room {
     for (const session of this.players.values()) {
       if (!session.role) continue;
 
-      const isStale =
-        session.socket === null || now - session.lastInputTimestamp > this.rules.INPUT_STALE_TIMEOUT_MS;
+      if (session.isBot) {
+        this.runBotAi(session, dtMs, captureAttempts, activeJail);
+      } else {
+        const isStale =
+          session.socket === null || now - session.lastInputTimestamp > this.rules.INPUT_STALE_TIMEOUT_MS;
 
-      let intent: MovementIntent = {
-        moveX: 0,
-        moveZ: 0,
-        yaw: session.lastYaw,
-        jumpPressed: false,
-        sprint: false,
-        crouch: false,
-      };
+        let intent: MovementIntent = {
+          moveX: 0,
+          moveZ: 0,
+          yaw: session.lastYaw,
+          jumpPressed: false,
+          sprint: false,
+          crouch: false,
+        };
 
-      if (!isStale && session.inputQueue.length > 0) {
-        const framesToProcess = session.inputQueue.splice(0, this.rules.MAX_CATCHUP_STEPS);
-        for (const frame of framesToProcess) {
-          if (frame.seq <= session.lastProcessedSeq) continue;
-          session.lastProcessedSeq = frame.seq;
-          session.lastYaw = frame.yaw;
+        if (!isStale && session.inputQueue.length > 0) {
+          const framesToProcess = session.inputQueue.splice(0, this.rules.MAX_CATCHUP_STEPS);
+          for (const frame of framesToProcess) {
+            if (frame.seq <= session.lastProcessedSeq) continue;
+            session.lastProcessedSeq = frame.seq;
+            session.lastYaw = frame.yaw;
 
-          const jumpPressed = Boolean(frame.jumpId && frame.jumpId > session.lastJumpId);
-          if (frame.jumpId) session.lastJumpId = frame.jumpId;
+            const jumpPressed = Boolean(frame.jumpId && frame.jumpId > session.lastJumpId);
+            if (frame.jumpId) session.lastJumpId = frame.jumpId;
 
-          const captureTriggered = Boolean(frame.captureId && frame.captureId > session.lastCaptureId);
-          if (frame.captureId) session.lastCaptureId = frame.captureId;
+            const captureTriggered = Boolean(frame.captureId && frame.captureId > session.lastCaptureId);
+            if (frame.captureId) session.lastCaptureId = frame.captureId;
 
-          if (captureTriggered && session.role === 'POLICE' && this.phase === 'PLAYING') {
-            captureAttempts.push({ policeId: session.id, yaw: frame.yaw });
-          }
-
-          // Track rescue held intent
-          session.rescueHeld = Boolean(frame.rescueHeld);
-          if (!session.rescueHeld) {
-            session.rescueProgressMs = 0;
-            session.rescueNeedsRelease = false;
-          }
-
-          const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
-
-          const frameIntent: MovementIntent = {
-            moveX: isJailed ? 0 : ((Math.sign(frame.moveX) || 0) as -1 | 0 | 1),
-            moveZ: isJailed ? 0 : ((Math.sign(frame.moveZ) || 0) as -1 | 0 | 1),
-            yaw: frame.yaw,
-            jumpPressed: isJailed ? false : jumpPressed,
-            sprint: isJailed ? false : Boolean(frame.sprint),
-            crouch: Boolean(frame.crouch),
-          };
-
-          if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
-            frameIntent.moveX = 0;
-            frameIntent.moveZ = 0;
-            frameIntent.sprint = false;
-          }
-
-          if (isJailed && session.jailSlotIndex !== undefined) {
-            if (activeJail.slots[session.jailSlotIndex]) {
-              session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
-              session.movementState.verticalSpeed = 0;
-              session.movementState.crouched = false;
-              session.movementState.sprinting = false;
+            if (captureTriggered && session.role === 'POLICE' && this.phase === 'PLAYING') {
+              captureAttempts.push({ policeId: session.id, yaw: frame.yaw });
             }
-          } else {
-            session.movementState = stepMovement(
-              session.movementState,
-              frameIntent,
-              session.role as MovementRole,
-              officialVillageMap,
-              this.movementRules
-            );
+
+            // Track rescue held intent
+            session.rescueHeld = Boolean(frame.rescueHeld);
+            if (!session.rescueHeld) {
+              session.rescueProgressMs = 0;
+              session.rescueNeedsRelease = false;
+            }
+
+            const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
+
+            const frameIntent: MovementIntent = {
+              moveX: isJailed ? 0 : ((Math.sign(frame.moveX) || 0) as -1 | 0 | 1),
+              moveZ: isJailed ? 0 : ((Math.sign(frame.moveZ) || 0) as -1 | 0 | 1),
+              yaw: frame.yaw,
+              jumpPressed: isJailed ? false : jumpPressed,
+              sprint: isJailed ? false : Boolean(frame.sprint),
+              crouch: Boolean(frame.crouch),
+            };
+
+            if (this.phase === 'HEAD_START' && session.role === 'POLICE') {
+              frameIntent.moveX = 0;
+              frameIntent.moveZ = 0;
+              frameIntent.sprint = false;
+            }
+
+            if (isJailed && session.jailSlotIndex !== undefined) {
+              if (activeJail.slots[session.jailSlotIndex]) {
+                session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+                session.movementState.verticalSpeed = 0;
+                session.movementState.crouched = false;
+                session.movementState.sprinting = false;
+              }
+            } else {
+              session.movementState = stepMovement(
+                session.movementState,
+                frameIntent,
+                session.role as MovementRole,
+                officialVillageMap,
+                this.movementRules
+              );
+            }
           }
+        } else if (isStale) {
+          // A fresh held input remains valid between packets. Only a release
+          // frame clears the latch after a completed rescue.
+          session.rescueHeld = false;
+          session.inputQueue.length = 0;
         }
-      } else if (!isStale && !session.movementState.grounded && !(session.role === 'ROBBER' && session.state === 'JAILED')) {
-        // Continue physics in mid-air (gravity) even if packet timing is jittered
-        session.movementState = stepMovement(
-          session.movementState,
-          { moveX: 0, moveZ: 0, yaw: session.lastYaw, jumpPressed: false, sprint: false, crouch: session.movementState.crouched },
-          session.role as MovementRole,
-          officialVillageMap,
-          this.movementRules
-        );
-      } else if (isStale) {
-        // A fresh held input remains valid between packets. Only a release
-        // frame clears the latch after a completed rescue.
-        session.rescueHeld = false;
-        session.inputQueue.length = 0;
       }
 
       // Stealth update (robber crouching in hide zone)
@@ -1103,7 +1425,7 @@ export class Room {
         vel: [0, other.movementState.verticalSpeed, 0],
         crouch: other.movementState.crouched,
         grounded: other.movementState.grounded,
-        connected: other.socket !== null && other.socket.connected,
+        connected: other.isBot ? true : (other.socket !== null && other.socket.connected),
       };
       if (other.role === 'ROBBER') {
         otherView.state = other.state;
