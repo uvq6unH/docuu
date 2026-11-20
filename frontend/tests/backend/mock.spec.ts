@@ -21,8 +21,8 @@ test('two browsers receive the room and observe server-confirmed player movement
   observer.on('websocket', ws => {
     ws.on('framereceived', ({ payload }) => {
       const packet = payload.toString();
-      if (!packet.startsWith('42["game:snapshot",')) return;
-      const [, snapshot] = JSON.parse(packet.slice(2)) as [string, Snapshot];
+      if (!packet.startsWith('42/mock,["game:snapshot",')) return;
+      const [, snapshot] = JSON.parse(packet.slice('42/mock,'.length)) as [string, Snapshot];
       remotePos = snapshot.players.find(p => p.id === 'police-1')?.pos;
     });
   });
@@ -43,6 +43,8 @@ test('two browsers receive the room and observe server-confirmed player movement
   await observer.close();
   await page.locator('#btn-leave-room').click();
   await expect(page.locator('#menu-view')).toBeVisible();
+  await page.locator('#btn-create-room').click();
+  await expect(page.locator('#display-room-code')).toHaveText(/^[A-Z2-9]{6}$/);
 });
 
 test('two browsers observe capture: police clicks in range, robber teleports to jail J1 and jailedCount becomes 1', async ({ page, browser }) => {
@@ -57,8 +59,8 @@ test('two browsers observe capture: police clicks in range, robber teleports to 
   robberBrowser.on('websocket', (ws) => {
     ws.on('framereceived', ({ payload }) => {
       const packet = payload.toString();
-      if (!packet.startsWith('42["game:snapshot",')) return;
-      const [, snapshot] = JSON.parse(packet.slice(2)) as [string, Snapshot];
+      if (!packet.startsWith('42/mock,["game:snapshot",')) return;
+      const [, snapshot] = JSON.parse(packet.slice('42/mock,'.length)) as [string, Snapshot];
       robberSelfPos = snapshot.self.pos;
       robberSelfState = snapshot.self.state;
       observerJailedCount = snapshot.jailedCount;
@@ -76,7 +78,7 @@ test('two browsers observe capture: police clicks in range, robber teleports to 
   await page.locator('#enter').click();
   await expect(page.locator('#status')).toContainText('Chuột đã khóa');
 
-  const canvas = page.locator('canvas');
+  const canvas = page.locator('#viewport canvas');
   await canvas.dispatchEvent('mousedown', { button: 0 });
 
   // Both browsers observe robber in jail J1 slot 0 [-0.8, 0, -0.8] and jailedCount = 1

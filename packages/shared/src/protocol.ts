@@ -112,7 +112,7 @@ export interface AckResponse<T = unknown> {
   data?: T;
 }
 
-export type GameEventType = 'CAPTURE' | 'RESCUE' | 'PHASE' | 'GUARD_CHANGED' | 'RESULT';
+export type GameEventType = 'CAPTURE' | 'CAPTURE_MISS' | 'RESCUE' | 'PHASE' | 'GUARD_CHANGED' | 'RESULT';
 
 export interface GameEvent {
   eventId: string;

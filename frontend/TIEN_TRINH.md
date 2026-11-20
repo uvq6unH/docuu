@@ -320,3 +320,17 @@ Bước tiếp theo là chạy lại bài phòng sáu người khi BE sửa xử
 Đã sửa R01 tại backend/apps/server/src/rooms/room.ts và bổ sung kiểm tra tick thiếu gói, nhả E, input hết hạn và khóa lần cứu tiếp theo tại backend/apps/server/tests/rescue_and_guard.test.mjs. Trong frontend/tests/backend/capture.spec.ts, Chrome xác nhận người vừa kết nối lại được cứu tại J1, số bị giam giảm từ 1/4 về 0/4, điểm thả X/Z là 3,5/0, HUD miễn bắt hiện rồi tắt và rời phòng xóa phiên trong tab.
 
 Backend đạt typecheck, build và 19/19 test. Bộ tích hợp FE–BE đạt 4/4. Bước tiếp theo là kiểm tra kết quả trận và rematch trong phòng sáu người, gồm trở về lobby và xóa trạng thái ván cũ.
+
+### Kiểm tra commit merge d4a3f92
+
+Git đã giải quyết hết conflict. FE còn dấu đóng dư trong listener connect của src/net/game-session.ts và thiếu khai báo Credentials, sessionKey. Lint, typecheck, build FE thất bại. Đã mở bài Chrome phòng thật rồi dừng khi Vite báo lỗi cú pháp trước khi tạo phòng. 43/43 unit test FE, 48/48 test shared và 19/19 test backend đạt. Shared và backend build đạt, backend typecheck đạt.
+
+Qua đọc code còn thấy rời MOCK01 giữ socket /mock khi tạo phòng thật, bộ test mock đọc prefix của namespace gốc, gợi ý bắt/cứu dùng ngưỡng rộng hơn server và server trừ dần tiến độ khi ra ngoài điểm cứu dù luật yêu cầu reset. Chưa nghiệm thu các tính năng mới trên Chrome. Bước kế tiếp là khôi phục khai báo phiên và sửa lỗi cú pháp trước khi chạy lại bài phòng sáu người.
+
+### 20/11/2026 — Khôi phục luồng chơi sau merge d4a3f92
+
+Đã sửa listener kết nối và khôi phục dữ liệu phiên trong game-session.ts. Sau khi rời MOCK01, người chơi có thể tạo phòng thật trong cùng tab. Lượt kiểm tra đầu phát hiện FE gửi thiếu mapHash khi bấm Sẵn sàng. FE hiện gửi lại SHA-256 của bản đồ đang phục vụ và phòng đủ sáu người đã bắt đầu được.
+
+HUD dùng snapshot và hàm capture/rescue trong shared để kiểm tra cự ly, hướng nhìn, vật cản và trạng thái. Server xóa tiến độ ngay khi người cứu rời điểm hợp lệ. Test server kiểm tra ra khỏi phạm vi khi vẫn giữ E. Bộ test mock đọc snapshot từ namespace /mock. Kiểu sự kiện chung đã khai báo CAPTURE_MISS mà server đang phát.
+
+Kiểm tra đạt lint FE, typecheck và build của FE/shared/backend, 43 unit test FE, 48 test shared, 19 test backend, 10 Chrome E2E sân tập và 4 Chrome E2E tích hợp. Trong phòng sáu người, Chrome xác nhận HUD bắt/cứu, tải lại và ngắt WebSocket khi bị giam, được cứu đúng điểm thả, HUD miễn bắt hiện rồi tắt và xóa phiên khi rời phòng. Vite cảnh báo gói JS chính 717,19 kB (gzip 187,66 kB). Bước tiếp theo là nghiệm thu màn hình kết quả và rematch sáu người trên Chrome.

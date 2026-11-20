@@ -905,7 +905,7 @@ export class Room {
               session.socket.emit(SERVER_EVENTS.GAME_EVENT, {
                 eventId: `miss-${this.tick}-${session.id}`,
                 tick: this.tick,
-                type: 'CAPTURE_MISS' as any,
+                type: 'CAPTURE_MISS',
                 data: {
                   policeId: session.id,
                   failReason: captureResult.failReason,
@@ -965,12 +965,7 @@ export class Room {
               completedRescuers.push({ session: robber, anchorIndex: eligibility.anchorIndex });
             }
           } else {
-            // Smooth rescue decay: if key is still held, decay rather than instantly dropping to 0
-            if (robber.rescueHeld) {
-              robber.rescueProgressMs = Math.max(0, robber.rescueProgressMs - dtMs * 2);
-            } else {
-              robber.rescueProgressMs = 0;
-            }
+            robber.rescueProgressMs = 0;
           }
         }
 

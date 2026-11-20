@@ -2,7 +2,7 @@ import type { Vec3, MapBox, JailCandidate } from './map.ts';
 import type { RobberState } from './protocol.ts';
 import { GAME_RULES, type GameRules } from './rules.ts';
 import { checkLineOfSight } from './collision.ts';
-import { fitsAt, StaticWorld } from './collision.ts';
+import { fitsAt, type StaticWorld } from './collision.ts';
 
 export interface RescuerActor {
   id: string;

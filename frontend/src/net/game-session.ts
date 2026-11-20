@@ -21,6 +21,9 @@ export interface GameSessionCallbacks {
   onGameEvent?: (event: GameEvent) => void;
 }
 
+type Credentials = { roomCode: string; playerId: string; resumeToken: string };
+const sessionKey = 'folk_tag_room_v1';
+
 export interface RemotePlayerEntity {
   id: string;
   role: 'POLICE' | 'ROBBER';
@@ -90,7 +93,6 @@ export class GameSession {
       } else {
         this.callbacks.onStatus('Đã kết nối máy chủ Authoritative.', false);
       }
-      );
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -330,14 +332,12 @@ export class GameSession {
     this.isMock = true;
     this.socket.disconnect();
     this.resetMarkers();
-    const opts: Record<string, any> = {
+    this.socket = io('/mock', {
+      forceNew: true,
+      query: spawnParam ? { spawn: spawnParam } : {},
       autoConnect: false,
       reconnection: true,
-    };
-    if (spawnParam) {
-      opts.query = { spawn: spawnParam };
-    }
-    this.socket = io('/mock', opts);
+    });
     this.setupListeners();
     this.socket.connect();
   }
@@ -396,11 +396,13 @@ export class GameSession {
   }
 
   public async toggleReady(ready: boolean): Promise<AckResponse> {
+    const mapHash = await this.getMapHash();
     return new Promise((resolve) => {
       this.socket.emit(
         CLIENT_EVENTS.ROOM_READY,
         {
           ready,
+          mapHash,
           requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         },
         (res: AckResponse) => resolve(res)
@@ -450,7 +452,6 @@ export class GameSession {
     this.remember(null);
     this.resuming = false;
     this.socket.disconnect();
-    this.isMock = false;
     this.currentRoom = null;
     this.roomReady = false;
     this.resetMarkers();

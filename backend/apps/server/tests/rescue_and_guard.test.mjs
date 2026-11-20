@@ -226,6 +226,12 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     assert.ok(firstTick > 0);
     room.step();
     assert.ok(rescuer.rescueProgressMs > firstTick);
+    rescuer.movementState.pos = [-6, 0, 0];
+    room.step();
+    assert.equal(rescuer.rescueProgressMs, 0);
+    rescuer.movementState.pos = [-2.5, 0, 0];
+    room.step();
+    room.step();
     // A release and re-press in one batch starts a new hold.
     sendRescue(false);
     sendRescue(true);

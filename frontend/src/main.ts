@@ -8,7 +8,9 @@ import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
 import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
-import type { RoomState, GameEvent } from '../../packages/shared/src/protocol';
+import { isRobberCapturable } from '../../packages/shared/src/capture';
+import { checkRescueEligibility } from '../../packages/shared/src/rescue';
+import type { RoomState, GameEvent, Snapshot } from '../../packages/shared/src/protocol';
 import { sound } from './core/audio';
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
 
@@ -90,6 +92,7 @@ try {
   let isOffline = true;
   let isReady = false;
   let toastTimer: number | null = null;
+  let latestSnapshot: Snapshot | null = null;
   let currentRole: 'POLICE' | 'ROBBER' | null = null;
   let activeJailId = 'J1';
   let lastRemainingSec = -1;
@@ -167,7 +170,7 @@ try {
   // Compass heading update
   function updateCompass(cameraYaw: number, selfPos: [number, number, number], targetJailId: string) {
     const deg = (Math.round((-cameraYaw * 180) / Math.PI) % 360 + 360) % 360;
-    let cardinal = 'B';
+    let cardinal: string;
     if (deg >= 337.5 || deg < 22.5) cardinal = 'B (Bắc)';
     else if (deg >= 22.5 && deg < 67.5) cardinal = 'ĐB (Đông Bắc)';
     else if (deg >= 67.5 && deg < 112.5) cardinal = 'Đ (Đông)';
@@ -248,78 +251,30 @@ try {
   }
 
   // Aim Assist & Proximity Action Prompts
-  function checkAimInteraction(selfRole: 'POLICE' | 'ROBBER' | null, selfPos: [number, number, number], cameraYaw: number, targetJailId: string) {
-    if (!selfRole) {
-      actionPrompt.hidden = true;
-      crosshair.style.background = '#ffffff';
-      crosshair.style.boxShadow = '0 1px 3px #263d30';
-      return;
-    }
-
-    const forwardX = -Math.sin(cameraYaw);
-    const forwardZ = -Math.cos(cameraYaw);
-
-    if (selfRole === 'POLICE') {
-      let closestRobberDist = Infinity;
-      let foundTarget = false;
-
-      for (const remote of session.getRemoteEntities().values()) {
-        if (remote.role !== 'ROBBER' || remote.state === 'JAILED' || remote.state === 'IMMUNE') continue;
-        const dx = remote.currentPos.x - selfPos[0];
-        const dz = remote.currentPos.z - selfPos[2];
-        const dist = Math.hypot(dx, dz);
-        const dy = Math.abs(remote.currentPos.y - selfPos[1]);
-
-        if (dist <= 2.2 && dy <= 1.2 && dist < closestRobberDist) {
-          const dot = (forwardX * dx + forwardZ * dz) / dist;
-          const angleDeg = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
-          if (angleDeg <= 65) {
-            closestRobberDist = dist;
-            foundTarget = true;
-          }
+  function checkAimInteraction(snapshot: Snapshot | null, yaw: number) {
+    let action: 'capture' | 'rescue' | null = null;
+    if (snapshot?.phase === 'PLAYING') {
+      const self = snapshot.self;
+      if (self.role === 'POLICE') {
+        const police = { ...self, yaw };
+        if (snapshot.players.some(target => target.connected && target.state &&
+          isRobberCapturable(police, { ...target, state: target.state }, villageMap.colliders).capturable)) {
+          action = 'capture';
         }
-      }
-
-      if (foundTarget) {
-        actionPrompt.textContent = '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!';
-        actionPrompt.className = 'action-prompt prompt-capture';
-        actionPrompt.hidden = false;
-        crosshair.style.background = '#ff4d4d';
-        crosshair.style.boxShadow = '0 0 8px #ff4d4d';
-      } else {
-        actionPrompt.hidden = true;
-        crosshair.style.background = '#ffffff';
-        crosshair.style.boxShadow = '0 1px 3px #263d30';
-      }
-    } else if (selfRole === 'ROBBER') {
-      const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
-      let inRescueRange = false;
-
-      for (const anchor of jail.rescueAnchors) {
-        const dist = Math.hypot(anchor[0] - selfPos[0], anchor[2] - selfPos[2]);
-        if (dist <= 1.8) {
-          const toJailX = jail.center[0] - selfPos[0];
-          const toJailZ = jail.center[2] - selfPos[2];
-          const dot = forwardX * toJailX + forwardZ * toJailZ;
-          if (dot >= 0) {
-            inRescueRange = true;
-            break;
-          }
-        }
-      }
-
-      if (inRescueRange) {
-        actionPrompt.textContent = '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
-        actionPrompt.className = 'action-prompt prompt-rescue';
-        actionPrompt.hidden = false;
-        crosshair.style.background = '#52b788';
-        crosshair.style.boxShadow = '0 0 8px #52b788';
-      } else {
-        actionPrompt.hidden = true;
-        crosshair.style.background = '#ffffff';
-        crosshair.style.boxShadow = '0 1px 3px #263d30';
+      } else if (snapshot.jailedCount > 0 && self.state) {
+        const jail = villageMap.jails.find(candidate => candidate.id === snapshot.jailId);
+        if (jail && checkRescueEligibility({ ...self, role: 'ROBBER', state: self.state, yaw },
+          jail, villageMap.colliders).eligible) action = 'rescue';
       }
     }
+    actionPrompt.hidden = action === null;
+    if (action) {
+      actionPrompt.textContent = action === 'capture' ? '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!' : '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
+      actionPrompt.className = 'action-prompt prompt-' + action;
+    }
+    const color = action === 'capture' ? '#ff4d4d' : '#52b788';
+    crosshair.style.background = action ? color : '#ffffff';
+    crosshair.style.boxShadow = action ? '0 0 8px ' + color : '0 1px 3px #263d30';
   }
 
   // Session Callbacks
@@ -330,15 +285,18 @@ try {
       connectionInfo.textContent = msg;
     },
     onInterrupted() {
+      latestSnapshot = null;
       controls.input.clear();
       if (document.pointerLockElement) document.exitPointerLock();
       hudOverlay.hidden = true;
     },
     onRoom(room) {
+      if (!room || room.phase === 'LOBBY') latestSnapshot = null;
       if (room) isOffline = false;
       updateRoomUI(room);
     },
     onSnapshot(snapshot) {
+      latestSnapshot = snapshot;
       world.setServerJail(snapshot.jailId);
       activeJailId = snapshot.jailId || 'J1';
       updateJailRescueBeacons(activeJailId);
@@ -427,7 +385,7 @@ try {
         sound.playRescueSound();
         flashScreen('flash-rescue');
         showToast(`🔓 Cướp ${data.rescuerId} đã giải cứu đồng đội!`);
-      } else if (event.type === ('CAPTURE_MISS' as any)) {
+      } else if (event.type === 'CAPTURE_MISS') {
         sound.playCaptureMiss();
         showToast('⚠️ Bắt hụt! Đối tượng ở ngoài tầm hoặc góc nhìn.', 1800);
       } else if (event.type === 'GUARD_CHANGED') {
@@ -802,7 +760,7 @@ try {
       // T03: Update Compass, Minimap, and Aim Interaction
       updateCompass(camera.rotation.y, player.pos, activeJailId);
       renderMinimap(player.pos, camera.rotation.y, activeJailId);
-      checkAimInteraction(currentRole, player.pos, camera.rotation.y, activeJailId);
+      checkAimInteraction(latestSnapshot, camera.rotation.y);
     }
 
     renderer.render(scene, camera);

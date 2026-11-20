@@ -7,7 +7,7 @@ test('F04 renders a real WebGL canvas, resizes, and has no browser errors', asyn
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Vào sân tập' })).toBeEnabled();
   await expect(page.locator('#status')).toContainText('Sẵn sàng');
-  const canvas = page.locator('canvas');
+  const canvas = page.locator('#viewport canvas');
   await expect(canvas).toHaveCount(1);
   expect(await canvas.evaluate((element) => !!(element as HTMLCanvasElement).getContext('webgl2'))).toBe(true);
   await expect.poll(() => canvas.evaluate((element) => (element as HTMLCanvasElement).width)).toBeGreaterThanOrEqual(1440);

@@ -75,6 +75,7 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     for (let i = 0; i < 2; i++) await addPeer(code);
     await page.bringToFront();
     await page.locator('#btn-toggle-ready').click();
+    await expect(page.locator('#btn-start-game')).toBeEnabled();
     await page.locator('#btn-start-game').click();
     await page.locator('[data-jail="J1"]').click();
     await expect(page.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
@@ -85,6 +86,7 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     await approach(page, -5, -13, .8);
     await approach(page, -23, -12, .8);
     await approach(page, -23, 0, 1.1);
+    await expect(page.locator('#action-prompt')).toContainText('BẮT CƯỚP');
     await page.mouse.down();
     await page.mouse.up();
     await expect(page.locator('#hud-jailed-count')).toHaveText('1 / 4');
@@ -124,6 +126,8 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     await approach(rescuer, 3, 3, .7);
     await approach(rescuer, 2.7, 0, .55);
     await approach(rescuer, 0, 0, 4);
+    await expect(rescuer.locator('#action-prompt')).toBeVisible();
+    await expect(rescuer.locator('#action-prompt')).toContainText('CỨU ĐỒNG ĐỘI');
     await rescuer.keyboard.down('e');
     await expect(robber.locator('#hud-jailed-count')).toHaveText('0 / 4', { timeout: 12000 });
     await expect(robber.locator('#hud-immune-card')).toBeVisible();
