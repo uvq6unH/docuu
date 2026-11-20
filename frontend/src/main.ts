@@ -555,8 +555,17 @@ try {
   btnCopyCode.addEventListener('click', async () => {
     const code = displayRoomCode.textContent;
     if (code && code !== '------') {
-      await navigator.clipboard.writeText(code);
-      showToast(`Đã sao chép mã phòng: ${code}`);
+      try {
+        await navigator.clipboard.writeText(code);
+        showToast(`Đã sao chép mã phòng: ${code}`);
+      } catch {
+        const range = document.createRange();
+        range.selectNodeContents(displayRoomCode);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        showToast(`Mã phòng ${code}. Nhấn Ctrl+C hoặc ⌘C để sao chép.`);
+      }
     }
   });
 

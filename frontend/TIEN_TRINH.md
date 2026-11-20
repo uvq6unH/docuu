@@ -334,3 +334,11 @@ Qua đọc code còn thấy rời MOCK01 giữ socket /mock khi tạo phòng th�
 HUD dùng snapshot và hàm capture/rescue trong shared để kiểm tra cự ly, hướng nhìn, vật cản và trạng thái. Server xóa tiến độ ngay khi người cứu rời điểm hợp lệ. Test server kiểm tra ra khỏi phạm vi khi vẫn giữ E. Bộ test mock đọc snapshot từ namespace /mock. Kiểu sự kiện chung đã khai báo CAPTURE_MISS mà server đang phát.
 
 Kiểm tra đạt lint FE, typecheck và build của FE/shared/backend, 43 unit test FE, 48 test shared, 19 test backend, 10 Chrome E2E sân tập và 4 Chrome E2E tích hợp. Trong phòng sáu người, Chrome xác nhận HUD bắt/cứu, tải lại và ngắt WebSocket khi bị giam, được cứu đúng điểm thả, HUD miễn bắt hiện rồi tắt và xóa phiên khi rời phòng. Vite cảnh báo gói JS chính 717,19 kB (gzip 187,66 kB). Bước tiếp theo là nghiệm thu màn hình kết quả và rematch sáu người trên Chrome.
+
+### 20/11/2026 — Chơi qua IP LAN
+
+Đã thêm dev:lan và hướng dẫn chạy trong README.md. Khi truy cập HTTP trên LAN, FE tự tính SHA-256 trên bytes bản đồ bằng js-sha256 nếu trình duyệt thiếu SubtleCrypto. Nút sao chép mã phòng hỗ trợ chọn mã thủ công khi Clipboard API không khả dụng.
+
+FE đạt lint, typecheck qua build và 44 unit test. Backend build đạt. Đã chạy 4/4 bài tích hợp Chrome qua IP Wi-Fi 172.20.10.5 bằng PLAYWRIGHT_LAN_HOST, gồm phòng sáu người bắt, kết nối lại và cứu người. Các trình duyệt đều chạy trên máy chủ. Trang game cổng 5173 trả HTTP 200 và /healthz trả ok. Build FE có cảnh báo chunk chính 719,76 kB.
+
+Bước tiếp theo là mở địa chỉ Network từ máy vật lý thứ hai cùng Wi-Fi, vào phòng bằng mã, bấm Sẵn sàng và xác nhận hai máy nhìn thấy nhau di chuyển.

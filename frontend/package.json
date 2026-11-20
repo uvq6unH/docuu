@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:lan": "vite --host 0.0.0.0",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -19,6 +20,7 @@
     "test:backend": "playwright test --config playwright.backend.config.ts"
   },
   "dependencies": {
+    "js-sha256": "0.11.1",
     "socket.io-client": "4.8.4",
     "three": "0.187.0"
   },

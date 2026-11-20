@@ -64,11 +64,11 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     await expect(page.locator('#display-room-code')).toHaveText(/^[A-Z2-9]{6}$/);
     const code = (await page.locator('#display-room-code').textContent())!;
     await addPeer(code);
-    await robber.goto('http://127.0.0.1:5175');
+    await robber.goto(page.url());
     await robber.locator('#join-room-code').fill(code);
     await robber.locator('#btn-join-room').click();
     await robber.locator('#btn-toggle-ready').click();
-    await rescuer.goto('http://127.0.0.1:5175');
+    await rescuer.goto(page.url());
     await rescuer.locator('#join-room-code').fill(code);
     await rescuer.locator('#btn-join-room').click();
     await rescuer.locator('#btn-toggle-ready').click();

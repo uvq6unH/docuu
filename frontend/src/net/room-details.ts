@@ -4,7 +4,12 @@ import type { RoomState } from '../../../packages/shared/src/protocol';
 export async function readMapDigest() {
   const response = await fetch(mapUrl);
   if (!response.ok) throw new Error('Map unavailable');
-  const digest = await crypto.subtle.digest('SHA-256', await response.arrayBuffer());
+  const bytes = await response.arrayBuffer();
+  if (!globalThis.crypto?.subtle) {
+    const { sha256 } = await import('js-sha256');
+    return sha256(new Uint8Array(bytes));
+  }
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 

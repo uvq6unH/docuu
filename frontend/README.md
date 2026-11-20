@@ -76,6 +76,22 @@ Mở http://127.0.0.1:5173. Chủ phòng chọn **Tạo phòng mới** và chia 
 
 Nút **Thử nhanh MOCK01** mở chế độ bot. Để chạy kiểm tra tích hợp ở cổng 3017 và 5175, dùng `npm run test:backend` trong frontend sau khi build shared và backend. Với Chrome có sẵn, đặt `$env:PLAYWRIGHT_CHANNEL='chrome'`. Bài này dùng database trong bộ nhớ.
 
+## Chơi từ hai máy cùng Wi-Fi hoặc LAN
+
+Sau khi cài và build theo mục trên, chạy hai lệnh sau trong hai terminal tại thư mục gốc của máy chủ trò chơi.
+
+```powershell
+npm --prefix backend run dev
+```
+
+```powershell
+npm --prefix frontend run dev:lan
+```
+
+Cả hai máy mở cùng địa chỉ **Network** mà Vite in ra, ví dụ `http://192.168.1.10:5173/`. Chủ phòng chọn **Tạo phòng mới**, gửi mã sáu ký tự. Máy còn lại chọn **Vào phòng** rồi cả hai bấm **Sẵn sàng**. Chủ phòng bắt đầu trận, đội trưởng chọn nhà giam và mỗi người bấm **Vào trận đấu**.
+
+Nếu máy khách không mở được trang, kiểm tra hai máy cùng mạng, mạng Wi-Fi cho phép các thiết bị liên lạc và máy chủ cho phép kết nối TCP đến cổng 5173 từ mạng nội bộ. Mở đường dẫn `/healthz` trên cùng địa chỉ để kiểm tra kết nối tới backend. Giữ hai terminal chạy trong lúc chơi.
+
 ## Mô hình A02 và bàn giao backend
 
 Chọn J1, J2 hoặc J3 trong bảng khảo sát để xem mô hình nhà giam tre cùng các điểm cứu và thả. Trong phòng mock, vị trí nhà giam lấy từ jailId trong snapshot. Bụi cỏ, rơm và hàng rào dùng tọa độ của village-v1. Nguồn Blender ở assets/blender; có thể tái tạo bốn mẫu bằng lệnh Blender ở trên với script build_a02.py.

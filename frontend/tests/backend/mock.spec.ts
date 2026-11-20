@@ -26,7 +26,7 @@ test('two browsers receive the room and observe server-confirmed player movement
       remotePos = snapshot.players.find(p => p.id === 'police-1')?.pos;
     });
   });
-  await observer.goto('http://127.0.0.1:5175');
+  await observer.goto(page.url());
   await observer.locator('#btn-mock-mode').click();
   await expect(observer.locator('#hud-role')).toHaveText('CƯỚP');
   await expect.poll(() => remotePos).toBeDefined();
@@ -67,7 +67,7 @@ test('two browsers observe capture: police clicks in range, robber teleports to 
     });
   });
 
-  await robberBrowser.goto('http://127.0.0.1:5175/?backend=mock&spawn=near');
+  await robberBrowser.goto(new URL('/?backend=mock&spawn=near', page.url()).href);
   await expect(robberBrowser.locator('.scene-label')).toContainText('robber-1');
 
   await expect.poll(() => robberSelfPos).toBeDefined();
