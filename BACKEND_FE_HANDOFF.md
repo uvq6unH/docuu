@@ -55,3 +55,13 @@ npm --prefix frontend run test:backend
 ```
 
 Bài cuối dùng Chrome, tự mở backend và FE ở cổng 3017 và 5175 để kiểm tra F06. Khi bàn giao N01/N02, bổ sung integration test riêng cho server thật và giữ bài mock làm hồi quy. Bảng ticket và tiêu chí gốc nằm ở [BACKLOG.md](BACKLOG.md) và [TESTING.md](TESTING.md).
+
+## 20/11/2026 — R01, giữ E bị ngắt khi giữa hai gói input có một tick trống
+
+Trong phòng sáu người, FE đã xác nhận bắt giữ, tải lại và kết nối lại khi đang bị giam. Bài frontend/tests/backend/capture.spec.ts thất bại ở bước giải cứu J1. Sau 12 giây giữ E, số cướp bị giam vẫn là 1/4.
+
+Tái hiện riêng với Room.step() trên bản build server: đặt một cướp vào ô giam J1 và đồng đội ở [2.7, 0, 0], yaw π/2. Gửi một frame rescueHeld=true rồi chạy hai tick liên tiếp. Tick đầu có 33,33 ms tiến độ. Tick sau có hàng đợi rỗng, gói trước mới 10 ms nhưng rescueHeld thành false và tiến độ về 0. INPUT_STALE_TIMEOUT_MS là 250 ms. Nhánh else trong backend/apps/server/src/rooms/room.ts ở phần input xử lý cả hàng đợi rỗng và input hết hạn như nhau.
+
+Đề nghị đội BE giữ trạng thái phím và cờ yêu cầu nhả E qua tick rỗng khi kết nối và input còn hiệu lực. Nhả E, mất kết nối, input quá hạn hoặc mất điều kiện cứu phải hủy tiến độ theo luật. Thêm test server xen tick rỗng giữa các frame giữ E trong hai giây, cùng các trường hợp nhả E, quá hạn và tiếp tục giữ sau một lần cứu. Sau khi build lại server, chạy npm run test:backend trong frontend để xác nhận số bị giam giảm, điểm thả và HUD miễn bắt trong Chrome.
+
+**Đã sửa và nghiệm thu R01 trong workspace ngày 20/11/2026.** Server giữ E qua tick rỗng khi input còn hiệu lực, hủy tiến độ khi nhả E hoặc input quá hạn, và yêu cầu nhả E sau mỗi lần cứu. Test server có trường hợp nhả và nhấn lại trong cùng một lô input. Đã đạt 19/19 test server, typecheck, build và 4/4 bài tích hợp Chrome. Bài phòng sáu người xác nhận thả đúng điểm tại J1 và HUD miễn bắt hiện rồi tắt.

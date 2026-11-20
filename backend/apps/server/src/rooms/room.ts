@@ -607,6 +607,7 @@ export class Room {
           // Track rescue held intent
           session.rescueHeld = Boolean(frame.rescueHeld);
           if (!session.rescueHeld) {
+            session.rescueProgressMs = 0;
             session.rescueNeedsRelease = false;
           }
 
@@ -621,10 +622,11 @@ export class Room {
             crouch: Boolean(frame.crouch),
           };
         }
-      } else {
-        // Stale or disconnected
+      } else if (isStale) {
+        // A fresh held input remains valid between packets. Only a release
+        // frame clears the latch after a completed rescue.
         session.rescueHeld = false;
-        session.rescueNeedsRelease = false;
+        session.inputQueue.length = 0;
       }
 
       // Police frozen in HEAD_START

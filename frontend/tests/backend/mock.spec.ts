@@ -6,8 +6,8 @@ import type { Snapshot } from '../../../packages/shared/src/protocol';
 test('two browsers receive the room and observe server-confirmed player movement', async ({ page, browser, request }) => {
   expect(await (await request.get('/healthz')).json()).toMatchObject({ status: 'ok' });
   await page.goto('/');
-  await page.getByRole('link', { name: 'Kết nối backend thử nghiệm' }).click();
-  await expect(page.locator('.scene-label')).toContainText('police-1 · 6 nhân vật');
+  await page.locator('#btn-mock-mode').click();
+  await expect(page.locator('#hud-role')).toHaveText('CẢNH SÁT');
   const room = page.locator('.room-details');
   await room.locator('summary').click();
   await expect(room.getByRole('listitem')).toHaveCount(6);
@@ -26,8 +26,9 @@ test('two browsers receive the room and observe server-confirmed player movement
       remotePos = snapshot.players.find(p => p.id === 'police-1')?.pos;
     });
   });
-  await observer.goto('http://127.0.0.1:5175/?backend=mock');
-  await expect(observer.locator('.scene-label')).toContainText('robber-1 · 6 nhân vật');
+  await observer.goto('http://127.0.0.1:5175');
+  await observer.locator('#btn-mock-mode').click();
+  await expect(observer.locator('#hud-role')).toHaveText('CƯỚP');
   await expect.poll(() => remotePos).toBeDefined();
   await page.bringToFront();
   await page.locator('#enter').click();
@@ -40,8 +41,8 @@ test('two browsers receive the room and observe server-confirmed player movement
   await page.keyboard.up('w');
   await page.keyboard.press('Escape');
   await observer.close();
-  await page.getByRole('link', { name: 'Về sân offline' }).click();
-  await expect(page.locator('.scene-label')).toContainText('Offline');
+  await page.locator('#btn-leave-room').click();
+  await expect(page.locator('#menu-view')).toBeVisible();
 });
 
 test('two browsers observe capture: police clicks in range, robber teleports to jail J1 and jailedCount becomes 1', async ({ page, browser }) => {

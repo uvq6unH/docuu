@@ -17,10 +17,16 @@ export interface GameSessionCallbacks {
   onStatus: (message: string, isError?: boolean) => void;
   onRoom: (room: RoomState | null) => void;
   onSnapshot: (snapshot: Snapshot) => void;
+  onInterrupted?: () => void;
   onGameEvent?: (event: GameEvent) => void;
 }
 
+type Credentials = { roomCode: string; playerId: string; resumeToken: string };
+const sessionKey = 'folk_tag_room_v1';
+
 export class GameSession {
+  private credentials: Credentials | null = null;
+  private resuming = false;
   private socket: Socket;
   private group: Group;
   private geometry: CapsuleGeometry;
@@ -38,7 +44,6 @@ export class GameSession {
 
   public currentRoom: RoomState | null = null;
   public playerId: string | null = null;
-  public resumeToken: string | null = null;
   public isMock = false;
 
   constructor(scene: Scene, private callbacks: GameSessionCallbacks) {
@@ -70,11 +75,19 @@ export class GameSession {
 
   private setupListeners(): void {
     this.socket.on('connect', () => {
-      this.callbacks.onStatus('Đã kết nối máy chủ Authoritative.', false);
+      if (this.credentials && !this.isMock) {
+        void this.resume(this.credentials);
+      } else {
+        this.callbacks.onStatus('Đã kết nối máy chủ Authoritative.', false);
+      }
     });
 
     this.socket.on('disconnect', (reason) => {
       this.resetMarkers();
+      this.roomReady = false;
+      this.resuming = Boolean(this.credentials);
+      if (reason === 'io client disconnect') return;
+      this.callbacks.onInterrupted?.();
       this.callbacks.onStatus(`Đã ngắt kết nối máy chủ (${reason}). Đang thử kết nối lại…`, true);
     });
 
@@ -82,8 +95,14 @@ export class GameSession {
       this.callbacks.onStatus('Chưa kết nối được máy chủ backend (Port 3001). Đang thử lại…', true);
     });
 
+    this.socket.io.on('reconnect_failed', () => {
+      this.leaveRoom();
+      this.callbacks.onStatus('Không thể kết nối lại máy chủ. Hãy vào lại bằng mã phòng.', true);
+    });
+
     this.socket.on(SERVER_EVENTS.ROOM_STATE, (room: RoomState) => {
-      if (!room) return;
+      if (!room || room.protocolVersion !== PROTOCOL_VERSION || (room.roomCode === 'MOCK01') !== this.isMock) return;
+      if (this.currentRoom?.roomCode !== room.roomCode || room.phase === 'LOBBY') this.resetMarkers();
       this.currentRoom = room;
       this.roomReady = true;
       this.callbacks.onRoom(room);
@@ -93,6 +112,7 @@ export class GameSession {
       if (
         !this.roomReady ||
         snapshot?.protocolVersion !== PROTOCOL_VERSION ||
+        (this.isMock ? snapshot.matchId !== 'mock-match-001' : snapshot.self?.id !== this.playerId) ||
         snapshot.tick <= this.lastTick ||
         !snapshot.self?.pos?.every(Number.isFinite) ||
         !Array.isArray(snapshot.players)
@@ -100,7 +120,17 @@ export class GameSession {
         return;
       }
 
+      if (this.lastTick < 0) {
+        // The live server retains processed input IDs across a resume.
+        this.seq = snapshot.self.ackSeq;
+        this.jumpId = snapshot.self.ackJumpId;
+        this.captureId = snapshot.self.ackCaptureId;
+      }
       this.lastTick = snapshot.tick;
+      if (this.currentRoom && this.currentRoom.phase !== snapshot.phase) {
+        this.currentRoom = { ...this.currentRoom, phase: snapshot.phase };
+        this.callbacks.onRoom(this.currentRoom);
+      }
       const visible = new Set<string>();
 
       for (const p of snapshot.players) {
@@ -108,7 +138,7 @@ export class GameSession {
           !p.connected ||
           !this.materials[p.role] ||
           !p.pos?.every(Number.isFinite) ||
-          (p.role !== snapshot.self.role && p.state === 'HIDDEN')
+          (p.role !== snapshot.self.role && p.state === 'HIDDEN' && Math.hypot(p.pos[0] - snapshot.self.pos[0], p.pos[2] - snapshot.self.pos[2]) > 2)
         ) {
           continue;
         }
@@ -136,6 +166,11 @@ export class GameSession {
     });
 
     this.socket.on(SERVER_EVENTS.GAME_EVENT, (event: GameEvent) => {
+      if (!this.roomReady || !this.currentRoom) return;
+      if (event.type === 'CAPTURE') {
+        const data = event.data as { policeId?: string; robberId?: string } | null;
+        if (!data || ![data.policeId, data.robberId].every(id => this.currentRoom?.roster.some(p => p.id === id))) return;
+      }
       this.callbacks.onGameEvent?.(event);
     });
   }
@@ -144,6 +179,69 @@ export class GameSession {
     this.group.clear();
     this.markers.clear();
     this.lastTick = -1;
+  }
+
+  private remember(data: Credentials | null) {
+    this.credentials = data;
+    this.playerId = data?.playerId ?? null;
+    try {
+      if (data) sessionStorage.setItem(sessionKey, JSON.stringify(data));
+      else sessionStorage.removeItem(sessionKey);
+    } catch { /* A live socket can still reconnect when storage is unavailable. */ }
+  }
+
+  public restore(): boolean {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(sessionKey) ?? 'null');
+      if (!saved) return false;
+      if (![saved.roomCode, saved.playerId, saved.resumeToken].every(v => typeof v === 'string' && v.length > 0)) {
+        this.remember(null);
+        return false;
+      }
+      this.remember(saved);
+    } catch {
+      this.remember(null);
+      return false;
+    }
+    this.resuming = true;
+    this.connect();
+    return true;
+  }
+
+  private async resume(saved: Credentials) {
+    this.resuming = true;
+    const socketId = this.socket.id;
+    this.callbacks.onStatus('Đang khôi phục phiên trong phòng ' + saved.roomCode + '…');
+    const payload = { ...saved, protocolVersion: PROTOCOL_VERSION, requestId: crypto.randomUUID?.() ?? `req-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    try {
+      // A lost ack may follow a successful rotation. Reuse the same requestId.
+      let ack: AckResponse<Credentials>;
+      try {
+        ack = await this.socket.timeout(4000).emitWithAck(CLIENT_EVENTS.ROOM_RESUME, payload);
+      } catch {
+        if (this.socket.id !== socketId || this.credentials !== saved) return;
+        ack = await this.socket.timeout(4000).emitWithAck(CLIENT_EVENTS.ROOM_RESUME, payload);
+      }
+      if (this.socket.id !== socketId || this.credentials !== saved) return;
+      if (!ack.ok && ack.code === 'RATE_LIMIT') {
+        window.setTimeout(() => {
+          if (this.socket.id === socketId && this.credentials === saved) void this.resume(saved);
+        }, 1000);
+        return;
+      }
+      if (!ack.ok || !ack.data) {
+        this.leaveRoom();
+        this.callbacks.onStatus('Phiên phòng không còn khả dụng. Hãy vào lại bằng mã phòng.', true);
+        return;
+      }
+      this.remember(ack.data);
+      this.resuming = false;
+      this.callbacks.onRoom(this.currentRoom);
+      this.callbacks.onStatus('Đã trở lại phòng ' + ack.data.roomCode + '.');
+    } catch {
+      if (this.socket.id !== socketId || this.credentials !== saved) return;
+      this.socket.disconnect().connect();
+    }
   }
 
   public connect(): void {
@@ -174,8 +272,8 @@ export class GameSession {
         },
         (res: AckResponse<{ roomCode: string; playerId: string; resumeToken: string }>) => {
           if (res?.ok && res.data) {
-            this.playerId = res.data.playerId;
-            this.resumeToken = res.data.resumeToken;
+            this.remember(res.data);
+            this.callbacks.onRoom(this.currentRoom);
           }
           resolve(res);
         }
@@ -196,8 +294,8 @@ export class GameSession {
         },
         (res: AckResponse<{ roomCode: string; playerId: string; resumeToken: string }>) => {
           if (res?.ok && res.data) {
-            this.playerId = res.data.playerId;
-            this.resumeToken = res.data.resumeToken;
+            this.remember(res.data);
+            this.callbacks.onRoom(this.currentRoom);
           }
           resolve(res);
         }
@@ -258,7 +356,11 @@ export class GameSession {
   }
 
   public leaveRoom(): void {
-    this.socket.emit(CLIENT_EVENTS.ROOM_LEAVE, {});
+    if (this.socket.connected && !this.isMock && this.currentRoom) this.socket.emit(CLIENT_EVENTS.ROOM_LEAVE, {});
+    this.remember(null);
+    this.resuming = false;
+    this.socket.disconnect();
+    this.isMock = false;
     this.currentRoom = null;
     this.roomReady = false;
     this.resetMarkers();
@@ -274,7 +376,7 @@ export class GameSession {
   }
 
   public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): void {
-    if (!this.socket.connected || !this.roomReady || this.lastTick < 0) return;
+    if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return;
     if (input.jumpPressed) this.jumpId++;
     if (input.capturePressed) this.captureId++;
     const { moveX, moveZ, sprint, crouch, rescueHeld } = input;

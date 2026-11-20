@@ -4,13 +4,13 @@
 
 ## 1. Trạng thái hiện tại
 
-- Cập nhật: 19/11/2026 (Asia/Bangkok).
+- Cập nhật: 20/11/2026 (Asia/Bangkok).
 - Người phụ trách: bạn — B, frontend/client và art; Đức — A, server/shared.
 - Đã hoàn thành M01–M04. Đã kiểm tra đủ 24 tuyến bằng mô phỏng nhân vật. Sân tập FPS offline dùng collider village-v1 và mô phỏng shared 30 Hz.
 - Code ở `frontend/src/`, test ở `frontend/tests/`, tài nguyên ở `frontend/public/` và `frontend/assets/`. Hướng dẫn chạy ở [README frontend](README.md).
-- Node 24.21.0, npm 11.19.0. Đã có `frontend/package.json`, lockfile và scripts dev/lint/typecheck/test/build/test:e2e/preview. Backend commit 66695d1 có workspace riêng, shared và server mock F06.
-- F01 toàn repo **chưa hoàn tất**: backend có workspace riêng, frontend và packages/shared offline vẫn độc lập. Kết nối mock dùng protocol v1 từ backend/packages/shared.
-- A01 và A02 đã hoàn tất. Map và movement trong packages/shared ở gốc là chuẩn cho hai đội. Backend triển khai theo [bàn giao](../BACKEND_FE_HANDOFF.md); FE nối lobby N03 khi có N01. MOCK01 vẫn dùng để kiểm tra transport.
+- Node 24.21.0, npm 11.19.0. Đã có `frontend/package.json`, lockfile và scripts dev/lint/typecheck/test/build/test:e2e/preview. Tại commit 679d578, backend có phòng thật, mô phỏng, bắt/cứu, resume, rematch và SQLite.
+- F01 toàn repo **chưa hoàn tất**: backend có workspace riêng, frontend và packages/shared offline vẫn độc lập. Cả hai phía dùng protocol v1 ở packages/shared.
+- A01 và A02 đã hoàn tất. Map và movement trong packages/shared ở gốc là chuẩn cho hai đội. Lobby N03 đã có create/join/ready/start và chọn jail. FE còn cần gọi room:resume khi mất mạng và hoàn thiện N04. MOCK01 vẫn dùng để kiểm tra transport.
 
 ## 2. Yêu cầu làm việc đã ghi nhớ
 
@@ -79,12 +79,12 @@ Trạng thái: `CHỜ` = chưa triển khai, dependency chưa được xác minh
 | F05 | Pointer lock, WASD/input abstraction, yaw/pitch | F04 | Chuột/phím đúng, clear on blur/unlock, cleanup | XONG LOCAL; CHỜ GHÉP WORKSPACE |
 | M03 | FPS controller tích hợp movement shared | F05, M02 | Jump/sprint/crouch đúng luật shared | ĐẠT · Chrome E2E |
 | M04 | Graybox map và debug collider overlay | F03, F04 | Layout 80m đi được, đúng metadata chung | ĐẠT · 24/24 TUYẾN ĐI BỘ |
-| N03 | Lobby và Socket.IO transport | N01 | Create/join/ready, thông báo lỗi | ĐÃ HIỂN THỊ ROOM:STATE VÀ HASH FE · THAO TÁC PHÒNG CHỜ N01 |
-| N04 | Prediction và remote interpolation | N02, M03 | Hai client đồng bộ, reconcile và reset buffer đúng | CHỜ N02 |
-| G03 | HUD, phase UI và chọn jail cho captain | G01, N03 | Timer/role/count/selection đúng server | CHỜ G01, N03 |
-| G04 | Capture intent và jail render | G02 | Teleport authoritative hiển thị đúng | CHỜ G02 |
+| N03 | Lobby và Socket.IO transport | N01 | Create/join/ready, thông báo lỗi | ĐÃ NỐI PHÒNG THẬT |
+| N04 | Prediction và remote interpolation | N02, M03 | Hai client đồng bộ, reconcile và reset buffer đúng | CÓ SNAPSHOT · CÒN PREDICTION/INTERPOLATION |
+| G03 | HUD, phase UI và chọn jail cho captain | G01, N03 | Timer/role/count/selection đúng server | ĐÃ KIỂM TRA CHỌN JAIL, HEAD_START, PLAYING |
+| G04 | Capture intent và jail render | G02 | Teleport authoritative hiển thị đúng | ĐÃ NỐI CAPTURE VÀ SNAPSHOT JAILED |
 | G05 (AB) | Full match và restart | G02, G03, G04 | Không còn state/input/UI cũ sau rematch | TODO |
-| R04 | Rescue bar, hide/crouch và guard feedback | R01, R02 | Prompt/progress reset đúng, không leak vị trí | CHỜ R01, R02 |
+| R04 | Rescue bar, hide/crouch và guard feedback | R01, R02 | Prompt/progress reset đúng, không leak vị trí | ĐÃ CÓ HUD CƠ BẢN · CẦN E2E CỨU/GUARD |
 | R05 | Spatial footsteps | N04 | Âm lượng theo movement; không leak hidden | TODO, P1 |
 | A01 | Blender houses, trees | M04 | GLB đúng scale và budget | ĐẠT · 5 GLB đã kiểm tra trong Chrome |
 | A02 | Jail, bush, haystack, fence | M04 | Art khớp metadata/collider | ĐẠT · 4 GLB |
@@ -290,3 +290,33 @@ Bộ bàn giao và package chuẩn đã có trong commit 68d1899 trên origin/ma
 
 Phần hiển thị nằm ở src/net/room-details.ts. Test tích hợp hai phiên Chrome đã đối chiếu roster từ backend và hash trình duyệt với hash tính độc lập từ file. Bước tiếp theo là nối create/join và xử lý ack khi backend bàn giao N01 theo tài liệu ở gốc.
 Kiểm tra đạt lint, typecheck, 43 unit test, 10 Chrome E2E, một bài tích hợp hai phiên Chrome và build. Vite cảnh báo chunk JS chính 644,35 kB.
+
+### 20/11/2026 — Đánh giá bản 679d578 và nghiệm thu bắt giữ trong phòng thật
+
+Bản main trên GitHub đã có lobby FE, HUD và backend cho tạo/join/ready/start, chọn nhà giam, capture, rescue, ẩn/canh, kết quả, rematch và resume. Đã build bản mới và chạy 48 test shared cùng 19 test server. Bản này cho phép thử với 2–5 người; phòng đủ sáu dùng 2 cảnh sát và 4 cướp.
+
+Sửa FE nhận nhầm snapshot MOCK01 trên cùng socket với phòng thật, cập nhật danh tính sau ack tạo/vào phòng, chuyển HUD theo phase của snapshot, hiện trạng thái JAILED và lấy tổng cướp từ roster. Chế độ offline và công cụ khảo sát dev đã được kiểm tra lại.
+
+Test phòng thật dùng hai Chrome và bốn peer Socket.IO. Host tạo phòng, các client join/ready, host start và chọn J1. Sau head start, cảnh sát dùng điều khiển FPS, đi bộ đến sát cướp và nhấn chuột trái. Chrome của cảnh sát thấy 1 / 4 bị giam; Chrome của cướp thấy trạng thái JAILED và vị trí X/Z -0,8/-0,8. Hai bài tích hợp phòng mock cũng đạt. Chạy lại bằng npm run test:backend trong frontend.
+
+Thứ tự phát triển FE để chơi trọn ván:
+1. Nối room:resume với resumeToken và roomCode; khôi phục danh tính sau mất mạng/tải lại trong cửa sổ 30 giây, xóa input và marker cũ, đặt lại seq theo contract. Kiểm tra người chơi trở lại đúng vai, vị trí và trạng thái bị giam.
+2. Nghiệm thu bằng trình duyệt phần còn lại của vòng chơi: người thứ ba giữ E ở điểm cứu, cả hai thấy hồi sinh/miễn bắt, HUD tiến độ tự xóa, bắt đủ bốn hoặc hết giờ có kết quả, rematch trả đủ sáu người về lobby. Test backend đã phủ luật; chưa có bằng chứng E2E xuyên suốt cho chuỗi này.
+3. N04 — dự đoán di chuyển local, reconcile bằng ackSeq, nội suy nhân vật khác và xóa buffer khi teleport/ẩn/đổi trận. Đo trên mạng có độ trễ rồi chơi thử sáu người trên sáu thiết bị.
+Frontend đạt lint, typecheck, 43 unit test, 10 Chrome E2E sân tập, 3 bài tích hợp backend và build. Vite cảnh báo chunk JS chính 703,59 kB (gzip 182,97 kB). Chưa chạy playtest sáu người trên mạng thực.
+
+### 20/11/2026 — Khôi phục phiên đang chơi
+
+Đã nối room:resume trong src/net/game-session.ts và src/main.ts. FE lưu phiên theo tab, nhận token mới từ server, khôi phục bộ đếm input theo snapshot, xóa phím đang giữ và marker cũ khi mất mạng. Phiên hết hạn trả về menu. Hướng dẫn chơi đã cập nhật trong README.md.
+
+Bài tests/backend/capture.spec.ts dùng ba trình duyệt và ba peer Socket.IO trong cùng phòng. Đã xác nhận người chơi trở về đúng phòng, đúng danh tính và đúng ô giam sau tải lại, rồi sau ngắt WebSocket. Cả hai lần server đổi token và sau kết nối lại server tiếp tục xác nhận input. Bài phiên hết hạn và hai bài mock đạt. Bài phòng thật dừng ở bước giữ E, HUD vẫn báo 1/4 bị giam sau 12 giây. Chưa nghiệm thu điểm thả, miễn bắt và rời phòng sau giải cứu.
+
+FE đạt lint, typecheck, 43 unit test, 10 Chrome E2E sân tập và build. Build cảnh báo chunk chính 705,66 kB. Bộ tích hợp đạt 3/4. Đã tái hiện riêng trên server việc một tick rỗng xóa giữ E khi input mới 10 ms. Đã ghi cách tái hiện và tiêu chí sửa trong ../BACKEND_FE_HANDOFF.md.
+
+Bước tiếp theo là chạy lại bài phòng sáu người khi BE sửa xử lý tick rỗng và kiểm tra HUD miễn bắt trong 3 giây sau giải cứu. Sau đó kiểm tra kết quả trận và rematch.
+
+### 20/11/2026 — Đã nghiệm thu cứu người sau kết nối lại
+
+Đã sửa R01 tại backend/apps/server/src/rooms/room.ts và bổ sung kiểm tra tick thiếu gói, nhả E, input hết hạn và khóa lần cứu tiếp theo tại backend/apps/server/tests/rescue_and_guard.test.mjs. Trong frontend/tests/backend/capture.spec.ts, Chrome xác nhận người vừa kết nối lại được cứu tại J1, số bị giam giảm từ 1/4 về 0/4, điểm thả X/Z là 3,5/0, HUD miễn bắt hiện rồi tắt và rời phòng xóa phiên trong tab.
+
+Backend đạt typecheck, build và 19/19 test. Bộ tích hợp FE–BE đạt 4/4. Bước tiếp theo là kiểm tra kết quả trận và rematch trong phòng sáu người, gồm trở về lobby và xóa trạng thái ván cũ.

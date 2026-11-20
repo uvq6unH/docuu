@@ -164,7 +164,8 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     db.close();
   });
 
-  it('executes rescue with 2s hold and 3s immunity, audit DB and reset progress (R01)', () => {
+  it('executes rescue with 2s hold and 3s immunity, audit DB and reset progress (R01)', (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     const db = new DatabaseManager(':memory:');
     db.createRoom({ roomCode: 'RESCUE1', hostPlayerId: 'p-1', mapHash: OFFICIAL_MAP_HASH });
     const room = new Room('RESCUE1', 'p-1', OFFICIAL_MAP_HASH);
@@ -204,20 +205,41 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     rescuer.movementState.pos = [-2.5, 0, 0];
     rescuer.lastYaw = -Math.PI / 2; // Facing +X towards jail center [0, 0, 0]
 
-    // 3. Step for 65 ticks (~2166ms > 2000ms RESCUE_REQUIRED_HOLD_MS)
-    for (let tick = 0; tick < 65; tick++) {
+    let seq = 0;
+    function sendRescue(held) {
       room.enqueueInput('p-4', {
-        seq: tick + 1,
+        seq: ++seq,
         moveX: 0,
         moveZ: 0,
         yaw: -Math.PI / 2,
         pitch: 0,
         sprint: false,
         crouch: false,
-        rescueHeld: true,
+        rescueHeld: held,
         jumpId: 0,
         captureId: 0,
       });
+    }
+    sendRescue(true);
+    room.step();
+    const firstTick = rescuer.rescueProgressMs;
+    assert.ok(firstTick > 0);
+    room.step();
+    assert.ok(rescuer.rescueProgressMs > firstTick);
+    // A release and re-press in one batch starts a new hold.
+    sendRescue(false);
+    sendRescue(true);
+    room.step();
+    assert.equal(rescuer.rescueProgressMs, firstTick);
+    t.mock.timers.tick(room.rules.INPUT_STALE_TIMEOUT_MS + 1);
+    room.step();
+    assert.equal(rescuer.rescueProgressMs, 0);
+    assert.equal(rescuer.rescueHeld, false);
+
+    // Deliver input on alternating ticks through a complete rescue.
+    for (let tick = 0; tick < 65; tick++) {
+      if (tick % 2 === 0) sendRescue(true);
+      t.mock.timers.tick(33);
       room.step();
     }
 
@@ -231,6 +253,11 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     assert.equal(rescuer.state, 'FREE');
     // Rescuer progress reset
     assert.equal(rescuer.rescueProgressMs, 0);
+    room.step();
+    assert.equal(rescuer.rescueNeedsRelease, true);
+    sendRescue(false);
+    room.step();
+    assert.equal(rescuer.rescueNeedsRelease, false);
 
     // Verify RESCUE event was broadcast
     const rescueEvent = emittedEvents.find((e) => e.type === 'RESCUE');

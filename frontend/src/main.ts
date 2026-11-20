@@ -6,6 +6,7 @@ import { initialMovement, stepMovement } from '../../packages/shared/src/movemen
 import { movementRules } from '../../packages/shared/src/rules';
 import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
+import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
 import type { RoomState, GameEvent } from '../../packages/shared/src/protocol';
 
@@ -71,7 +72,7 @@ try {
   let playing = false;
   let lastFrame: number | undefined;
   let accumulated = 0;
-  let isOffline = false;
+  let isOffline = true;
   let isReady = false;
   let toastTimer: number | null = null;
 
@@ -103,6 +104,9 @@ try {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
+  const mockDetails = mountRoomDetails(roomView);
+  let resultShown = '';
+  let viewSession = '';
   // Session Callbacks
   const session = new GameSession(scene, {
     onStatus(msg, isErr) {
@@ -110,13 +114,27 @@ try {
       status.style.color = isErr ? '#963624' : '#263d30';
       connectionInfo.textContent = msg;
     },
+    onInterrupted() {
+      controls.input.clear();
+      if (document.pointerLockElement) document.exitPointerLock();
+      hudOverlay.hidden = true;
+    },
     onRoom(room) {
+      if (room) isOffline = false;
       updateRoomUI(room);
     },
     onSnapshot(snapshot) {
       world.setServerJail(snapshot.jailId);
       const self = snapshot.self;
       if (!self) return;
+      const identity = snapshot.matchId + '/' + self.id;
+      if (viewSession !== identity) {
+        yaw = self.yaw;
+        pitch = 0;
+        if (playing) camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        viewSession = identity;
+      }
+      if (session.isMock) sceneLabel.textContent = 'MOCK01 · ' + self.id + ' · ' + session.currentRoom?.roster.length + ' nhân vật';
 
       player = {
         ...player,
@@ -134,7 +152,11 @@ try {
       hudRole.textContent = self.role === 'POLICE' ? 'CẢNH SÁT' : 'CƯỚP';
       hudRole.style.color = self.role === 'POLICE' ? '#58a6ff' : '#ffa657';
       hudJail.textContent = snapshot.jailId || 'Chưa chọn';
-      hudJailedCount.textContent = `${snapshot.jailedCount} / ${snapshot.players.filter(p => p.role === 'ROBBER').length + (self.role === 'ROBBER' ? 1 : 0)}`;
+      const robberCount = session.currentRoom?.roster.filter(p => p.role === 'ROBBER').length ?? 0;
+      requireElement('#hud-action').textContent = self.state === 'JAILED' ? 'Bạn đang bị giam · Chờ đồng đội cứu'
+        : snapshot.phase === 'PLAYING' && self.role === 'POLICE' ? 'Áp sát và nhấn chuột trái để bắt'
+        : self.rescueProgressMs > 0 ? 'Đang cứu ' + Math.round(self.rescueProgressMs / 20) + '%' : '';
+      hudJailedCount.textContent = `${snapshot.jailedCount} / ${robberCount}`;
 
       // Stealth & Immunity HUD flags
       hudStealthCard.hidden = !(self.role === 'ROBBER' && self.state === 'HIDDEN');
@@ -150,7 +172,8 @@ try {
       }
 
       // Check match result
-      if (snapshot.phase === 'RESULT' && snapshot.result) {
+      if (snapshot.phase === 'RESULT' && snapshot.result && resultShown !== snapshot.matchId) {
+        resultShown = snapshot.matchId;
         const winner = snapshot.result.winner;
         const msg = winner === 'POLICE'
           ? '🏆 CẢNH SÁT THẮNG! (Đã tống giam toàn bộ cướp)'
@@ -183,12 +206,15 @@ try {
   });
 
   function updateRoomUI(room: RoomState | null) {
+    mockDetails.update(room?.roomCode === 'MOCK01' ? room : null);
     if (!room) {
+      viewSession = '';
       menuView.hidden = false;
       roomView.hidden = true;
       hudOverlay.hidden = true;
       sceneLabel.textContent = 'Máy chủ Authoritative · Chưa vào phòng';
       notice.textContent = 'Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp';
+      world.setServerJail(null);
       button.textContent = 'Vào sân tập 3D';
       return;
     }
@@ -244,6 +270,8 @@ try {
       rosterList.append(li);
     }
 
+    btnToggleReady.hidden = room.phase !== 'LOBBY';
+    if (room.phase !== 'LOBBY') notice.textContent = 'Nhấn nút vào sân để điều khiển nhân vật. Esc để xem phòng.';
     // Toggle Ready Button state
     const me = room.roster.find((m) => m.id === session.playerId);
     isReady = Boolean(me?.ready);
@@ -293,9 +321,9 @@ try {
       }
       isOffline = false;
       showToast(`Tạo phòng thành công! Mã phòng: ${res.data?.roomCode}`);
-    } catch (err: any) {
+    } catch (err) {
       btnCreateRoom.disabled = false;
-      status.textContent = `Lỗi kết nối: ${err?.message}`;
+      status.textContent = `Lỗi kết nối: ${err instanceof Error ? err.message : String(err)}`;
     }
   });
 
@@ -320,9 +348,9 @@ try {
       }
       isOffline = false;
       showToast(`Đã tham gia phòng ${code}!`);
-    } catch (err: any) {
+    } catch (err) {
       btnJoinRoom.disabled = false;
-      status.textContent = `Lỗi kết nối: ${err?.message}`;
+      status.textContent = `Lỗi kết nối: ${err instanceof Error ? err.message : String(err)}`;
     }
   });
 
@@ -342,9 +370,9 @@ try {
       if (!res.ok) {
         status.textContent = `Lỗi: ${res.message || res.code}`;
       }
-    } catch (err: any) {
+    } catch (err) {
       btnToggleReady.disabled = false;
-      status.textContent = `Lỗi: ${err?.message}`;
+      status.textContent = `Lỗi: ${err instanceof Error ? err.message : String(err)}`;
     }
   });
 
@@ -356,9 +384,9 @@ try {
       if (!res.ok) {
         status.textContent = `Chưa bắt đầu được: ${res.message || res.code}`;
       }
-    } catch (err: any) {
+    } catch (err) {
       btnStartGame.disabled = false;
-      status.textContent = `Lỗi: ${err?.message}`;
+      status.textContent = `Lỗi: ${err instanceof Error ? err.message : String(err)}`;
     }
   });
 
@@ -370,9 +398,9 @@ try {
       if (!res.ok) {
         status.textContent = `Không thể rematch: ${res.message || res.code}`;
       }
-    } catch (err: any) {
+    } catch (err) {
       btnRematch.disabled = false;
-      status.textContent = `Lỗi: ${err?.message}`;
+      status.textContent = `Lỗi: ${err instanceof Error ? err.message : String(err)}`;
     }
   });
 
@@ -393,8 +421,8 @@ try {
         } else {
           status.textContent = `Lỗi chọn nhà giam: ${res.message || res.code}`;
         }
-      } catch (err: any) {
-        status.textContent = `Lỗi: ${err?.message}`;
+      } catch (err) {
+        status.textContent = `Lỗi: ${err instanceof Error ? err.message : String(err)}`;
       }
     });
   });
@@ -402,7 +430,8 @@ try {
   // Quick Mock Mode
   btnMockMode.addEventListener('click', () => {
     isOffline = false;
-    session.connectMock();
+    const query = new URLSearchParams(location.search);
+    session.connectMock(import.meta.env.DEV && query.get('spawn') === 'near' ? 'near' : undefined);
     menuView.hidden = true;
     roomView.hidden = true;
     sceneLabel.textContent = 'Phòng thử nghiệm nhanh · MOCK01';
@@ -455,6 +484,12 @@ try {
   });
 
   let disposed = false;
+  let removePreview: (() => void) | undefined;
+  if (import.meta.env.DEV) {
+    void import('./world/mount-preview').then(({ mountPreview }) => {
+      if (!disposed) removePreview = mountPreview(world, camera, menuView);
+    });
+  }
   container.setAttribute('aria-busy', 'true');
   void loadVillageModels(world.village, world.jailModel, () => disposed).finally(() => {
     if (!disposed) container.setAttribute('aria-busy', 'false');
@@ -509,19 +544,28 @@ try {
 
     if (import.meta.env.DEV) {
       const input = controls.input.peek();
+      debug.dataset.yaw = String(camera.rotation.y);
       debug.dataset.x = player.pos[0].toFixed(3);
       debug.dataset.eye = camera.position.y.toFixed(3);
       debug.dataset.grounded = String(player.grounded);
-      debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Yaw: ${camera.rotation.y.toFixed(2)}`;
+      debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
     }
   });
 
-  // Auto connect to server
-  session.connect();
+  status.textContent = 'Sẵn sàng. Tạo phòng, vào phòng hoặc chọn sân tập offline.';
+
+  if (import.meta.env.DEV && new URLSearchParams(location.search).get('backend') === 'mock') btnMockMode.click();
+  else if (session.restore()) {
+    isOffline = false;
+    menuView.hidden = true;
+    status.textContent = 'Đang kết nối lại phòng…';
+  }
 
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    removePreview?.();
+    mockDetails.dispose();
     session.dispose();
     controls.dispose();
     button.removeEventListener('click', enter);

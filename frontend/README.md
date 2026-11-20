@@ -36,7 +36,7 @@ Build xuất vào `dist/`. Hiện Vite cảnh báo JavaScript chunk lớn hơn 5
 - Bộ công cụ chỉ đặt trong `frontend/`; **F01 toàn repo chưa hoàn tất**. A vẫn sở hữu workspace gốc, server, shared và CI. Không có package.json hoặc workflow mới ở root trong bước này.
 - Vite đã cấu hình proxy `/socket.io` và `/healthz` tới `http://127.0.0.1:3001`, đổi qua `DEV_SERVER_ORIGIN` nếu cần (xem `.env.example`). Chế độ thử backend dùng proxy Socket.IO cùng origin. Không đặt secret vào biến `VITE_*` vì chúng đi vào trình duyệt.
 - Khi workspace gốc sẵn sàng, đưa package frontend vào workspace và thống nhất một lockfile ở root. Không giữ đồng thời hai client/lockfile cạnh tranh sau khi tích hợp; chuyển đổi trong ticket F01 của A.
-- F03 cung cấp map schema/JSON để làm M04. M02 cung cấp simulation shared để làm M03. Transport thử nghiệm dùng protocol của backend. Lobby đầy đủ chờ N01.
+- F03 cung cấp map schema/JSON để làm M04. M02 cung cấp simulation shared để làm M03. Lobby và HUD dùng protocol v1 từ packages/shared. Server xử lý tạo phòng, sẵn sàng, chọn jail, bắt giữ và giải cứu.
 - Tài nguyên web ở `public/`; `.blend` ở `assets/blender/`; nguồn/license ở [assets/LICENSES.md](assets/LICENSES.md). `public/favicon.svg` là SVG primitive tạo trong bước frontend, không có model/texture/audio tải ngoài.
 
 Tham chiếu công cụ đã dùng khi bootstrap: [Vite](https://vite.dev/guide/), [Three.js](https://threejs.org/docs/), [Vitest](https://vitest.dev/guide/). Phiên bản thực tế pin trong `package.json`/`package-lock.json`; TypeScript 6.0.3 được chọn theo peer range của typescript-eslint 8.73.0, thay vì tự động lấy TypeScript mới nhất.
@@ -53,29 +53,35 @@ Nguồn chỉnh sửa nằm trong `assets/blender/`. Sau khi sửa một file Bl
 & 'C:/Program Files/Blender Foundation/Blender 5.2/blender.exe' --background --factory-startup --python-exit-code 1 --python assets/blender/build_a01.py
 ```
 
-## Chạy frontend với backend thử nghiệm
+## Chơi phòng thật trên localhost
 
-Từ thư mục gốc, mở hai terminal. Terminal thứ nhất chạy backend ở cổng 3001.
-
-```powershell
-cd backend
-npm ci
-npm run build
-npm run dev:mock
-```
-
-Terminal thứ hai chạy frontend ở cổng 5173.
+Từ thư mục gốc, dùng Node theo .nvmrc của frontend. Trong terminal thứ nhất:
 
 ```powershell
-cd frontend
-npm ci
-npm run dev
+npm --prefix packages/shared ci
+npm --prefix packages/shared run build
+npm --prefix backend ci
+npm --prefix backend run build
+npm --prefix backend run dev
 ```
 
-Mở http://127.0.0.1:5173 và chọn **Kết nối backend thử nghiệm**. Sau khi thấy MOCK01, bấm **Vào sân tập** để điều khiển bằng WASD. Có thể mở thêm một tab để xem nhân vật di chuyển. **Về sân offline** quay lại mô phỏng M02. Chế độ mock chỉ có trong Vite dev. Bài kiểm tra tự khởi động hai server trên cổng riêng: sau khi build backend, chạy `npm run test:backend` trong frontend (Chrome và cổng 3017, 5175 cần khả dụng).
+Trong terminal thứ hai:
+
+```powershell
+npm --prefix frontend ci
+npm --prefix frontend run dev
+```
+
+Mở http://127.0.0.1:5173. Chủ phòng chọn **Tạo phòng mới** và chia sẻ mã sáu ký tự. Các người chơi khác nhập mã và chọn **Vào phòng**. Tất cả bấm **Sẵn sàng**, chủ phòng bấm **Bắt đầu trận đấu**. Đủ sáu người sẽ chia 2 cảnh sát và 4 cướp; bản BE hiện tại cũng cho thử với 2–5 người. Đội trưởng chọn nhà giam. Bấm nút vào sân để khóa chuột. Khi HUD hiện PLAYING, cảnh sát áp sát, nhìn về phía cướp và nhấn chuột trái; cướp giữ E tại điểm cứu hợp lệ để cứu đồng đội.
+
+Nút **Thử nhanh MOCK01** mở chế độ bot. Để chạy kiểm tra tích hợp ở cổng 3017 và 5175, dùng `npm run test:backend` trong frontend sau khi build shared và backend. Với Chrome có sẵn, đặt `$env:PLAYWRIGHT_CHANNEL='chrome'`. Bài này dùng database trong bộ nhớ.
 
 ## Mô hình A02 và bàn giao backend
 
 Chọn J1, J2 hoặc J3 trong bảng khảo sát để xem mô hình nhà giam tre cùng các điểm cứu và thả. Trong phòng mock, vị trí nhà giam lấy từ jailId trong snapshot. Bụi cỏ, rơm và hàng rào dùng tọa độ của village-v1. Nguồn Blender ở assets/blender; có thể tái tạo bốn mẫu bằng lệnh Blender ở trên với script build_a02.py.
 
 Quyết định dùng chung map/movement, các bước chuyển backend và tiêu chí mở lobby được ghi trong [bàn giao backend](../BACKEND_FE_HANDOFF.md).
+
+## Trở lại ván sau mất kết nối
+
+Tải lại cùng tab hoặc kết nối mạng lại trong vòng 30 giây để trở về phòng đang chơi. Nếu đang bị giam, bạn sẽ thấy lại HUD nhà giam và có thể bấm vào sân để khóa chuột. Nút Rời phòng xóa phiên đã lưu trong tab. Khi server báo phiên hết hạn, màn hình tạo/vào phòng xuất hiện lại.
