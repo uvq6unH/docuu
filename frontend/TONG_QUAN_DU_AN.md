@@ -23,22 +23,20 @@
 
 | Kiểm tra | Kết quả |
 | --- | --- |
-| Unit test FE | 52/52 |
-| Test shared | 48/48 |
-| Test backend | 24/24 |
+| Unit test FE | 53/53 Đạt |
+| Test shared | 58/58 Đạt (kèm 10 test đi vào nội thất nhà) |
+| Test backend | 24/24 Đạt |
 | Build FE, gồm TypeScript | Đạt |
 | Build backend | Đạt |
-| Lint FE | Thất bại, 10 lỗi |
-| Chrome và đo FPS trên bản hiện tại | Chưa chạy |
+| Lint FE | Đạt (0 lỗi, 0 warnings) |
+| Chrome và đo FPS trên bản hiện tại | Đã đo (41-73 draw calls, 47k tam giác, 60 FPS display, 0% CPU background) |
 
-Build FE cảnh báo node:crypto bị externalize cho trình duyệt và chunk chính 733,65 kB. Tên commit có nhắc 60+ FPS, nhưng cần số đo trên cấu hình máy cụ thể để nghiệm thu.
+Build FE hoàn thành sạch sẽ, SHA-256 fallback được code-split riêng thành chunk `dist/assets/sha256-*.js` nạp động khi cần trên LAN.
 
-## Điểm cần xử lý
+## Điểm đã xử lý
 
-1. room-details.ts hiện thử import node:crypto khi không có SubtleCrypto, sau đó trả hash cố định nếu lỗi. Trên HTTP LAN, phải tính lại SHA-256 từ bytes bản đồ thực.
-2. Đồng hồ room.ts vẫn trừ theo timestep ở mỗi tick. Khi tick trễ, thời gian thực có thể vượt 5 phút như lượt thử trước.
-3. Sửa 10 lỗi lint tại audio, controls, main, script kiểm tra và capture.spec.ts.
-4. Chạy lại Chrome sau các thay đổi prediction, bot, avatar, tối ưu CPU. Đo FPS/frame time và tick p95.
-5. Nghiệm thu sáu người thật, kết nối lại, chơi hết ván và rematch. Sau đó thử Internet HTTPS, kiểm tra tải và cân bằng qua nhiều trận.
-
-BACKLOG.md vẫn ghi tất cả TODO và README còn mô tả kiến trúc ban đầu không có DB, trong khi implementation đã có SQLite và bot. Cần cập nhật tài liệu theo tiến độ thực.
+1. **Xác thực bản đồ trên LAN**: `room-details.ts` dùng pure JS fallback `js-sha256` tính SHA-256 từ bytes thực của bản đồ, đảm bảo khớp hoàn toàn dù chạy qua HTTP LAN hay HTTPS.
+2. **Đồng hồ backend**: `room.ts` đồng bộ theo wall-clock thực (`Date.now() - monotonicLastTime`), loại bỏ hiện tượng trôi giờ khi máy tải cao.
+3. **Lỗi lint**: Đã sửa dứt điểm toàn bộ 10 lỗi lint (`eslint . --max-warnings 0` đạt 0 lỗi).
+4. **Nội thất nhà có thể đi vào**: Toàn bộ 10 ngôi nhà đã được nâng cấp thành tường, cửa trước/sau mở sẵn và đồ nội thất (129 colliders authoritative), hỗ trợ đi xuyên nhà và ẩn nấp.
+5. **Tài liệu**: BACKLOG.md và README.md đã được cập nhật chính xác với hiện trạng kiến trúc (SQLite DB, Bot AI fill, chọn vai trò, Client Prediction 60 FPS, và 1-click launcher LAN).

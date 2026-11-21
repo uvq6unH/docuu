@@ -34,7 +34,7 @@ function loadCanonicalMapHash(): string {
       }
     }
   } catch {}
-  return '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
+  return '7c4d777babc02081d43db29fae94f2b31b118aec59d0ccc72ce9b3391a8d3685';
 }
 
 export const OFFICIAL_MAP_HASH = loadCanonicalMapHash();
