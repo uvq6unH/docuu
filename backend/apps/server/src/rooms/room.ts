@@ -633,8 +633,12 @@ export class Room {
     this.monotonicLastTime = Date.now();
 
     // 30Hz simulation loop (timestep = 1000/30 ≈ 33.33ms)
+    // Synchronize step dt with real wall-clock elapsed time to prevent match clock drift
     this.simTimer = setInterval(() => {
-      this.step();
+      const now = Date.now();
+      const elapsed = Math.min(250, Math.max(1, now - this.monotonicLastTime));
+      this.monotonicLastTime = now;
+      this.step(elapsed);
     }, this.rules.SIMULATION_TIMESTEP_MS);
   }
 

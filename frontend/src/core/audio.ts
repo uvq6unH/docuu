@@ -162,7 +162,9 @@ class SoundEngine {
 
       osc.start();
       osc.stop(ctx.currentTime + 0.13);
-    } catch {}
+    } catch {
+      void 0;
+    }
   }
 
   public playCaptureMiss(): void {

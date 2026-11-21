@@ -288,7 +288,9 @@ test('two players finish by capture and start another match in the same room', a
         const artifactDir = 'C:\\Users\\v3411179\\.gemini\\antigravity\\brain\\56aa1232-d0ed-43f3-820f-33729688864e';
         copyFileSync('test-results/police-capturing-robber.png', artifactDir + '\\police-capturing-robber.png');
         copyFileSync('test-results/robber-view-of-police.png', artifactDir + '\\robber-view-of-police.png');
-      } catch {}
+      } catch {
+        void 0;
+      }
       await page.mouse.down();
       await page.mouse.up();
       for (const client of [page, guest]) {

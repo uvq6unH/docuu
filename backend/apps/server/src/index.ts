@@ -1,4 +1,6 @@
 import http from 'node:http';
+import path from 'node:path';
+import fs from 'node:fs';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
@@ -121,11 +123,32 @@ const mockServer = setupMockServer(isMockOnly ? io : (io.of('/mock') as any));
 // 2. Initialize Real Room Manager on default root namespace (/) for real multiplayer lobby & authoritative simulation
 const roomManager = new RoomManager(io, db);
 
-server.listen(PORT, () => {
-  console.log(`[Server] Server listening on http://localhost:${PORT}`);
+// 3. Serve Frontend Static Production Assets if built (Unified Single-Port Deployment)
+const frontendDistCandidates = [
+  path.resolve(process.cwd(), '../../frontend/dist'),
+  path.resolve(process.cwd(), '../frontend/dist'),
+  path.resolve(process.cwd(), 'frontend/dist'),
+];
+const distPath = frontendDistCandidates.find(p => fs.existsSync(p));
+if (distPath) {
+  app.use(express.static(distPath));
+  app.get('*', (req: Request, res: Response, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path === '/healthz') {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+  console.log(`[Server] Serving frontend static assets from: ${distPath}`);
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`[Server] Server listening on http://0.0.0.0:${PORT} (all LAN interfaces)`);
   console.log(`[Server] Health check available at http://localhost:${PORT}/healthz`);
   console.log(`[Server] Metrics available at http://localhost:${PORT}/api/metrics`);
   console.log(`[Server] CORS configured for origin: ${CLIENT_ORIGIN}`);
+  if (process.send) {
+    process.send('ready');
+  }
 });
 
 function gracefulShutdown(signal: string) {

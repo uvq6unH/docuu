@@ -69,7 +69,9 @@ async function runTest() {
   try {
     await page.waitForSelector('[data-jail="J1"]', { timeout: 3000 });
     await page.locator('[data-jail="J1"]').click();
-  } catch {}
+  } catch {
+    void 0;
+  }
 
   // Wait for game phase (HEAD_START or PLAYING)
   console.log('Waiting for game phase...');

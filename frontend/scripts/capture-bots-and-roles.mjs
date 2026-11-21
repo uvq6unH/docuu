@@ -45,7 +45,9 @@ async function runCapture() {
   try {
     await page.waitForSelector('[data-jail="J1"]', { timeout: 3000 });
     await page.locator('[data-jail="J1"]').click();
-  } catch {}
+  } catch {
+    void 0;
+  }
 
   // Wait for PLAYING phase (10s head start)
   console.log('Waiting for PLAYING phase...');

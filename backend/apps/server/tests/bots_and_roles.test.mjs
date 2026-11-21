@@ -148,5 +148,7 @@ test('Bot & Role Selection System', async (t) => {
       Math.abs(newPolicePos[2] - initialPolicePos[2]) > 0.001,
       'Police bot should move autonomously'
     );
+
+    room.stop();
   });
 });

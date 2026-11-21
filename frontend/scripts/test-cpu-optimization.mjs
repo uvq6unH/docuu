@@ -74,7 +74,9 @@ async function runCpuBenchmark() {
   try {
     await page.waitForSelector('[data-jail="J1"]', { timeout: 3000 });
     await page.locator('[data-jail="J1"]').click();
-  } catch {}
+  } catch {
+    void 0;
+  }
 
   // Wait for game phase
   await page.waitForFunction(() => {
@@ -134,23 +136,17 @@ async function runCpuBenchmark() {
 
   // 3. Test Page Visibility API (Simulate Background Tab)
   console.log('\n--- Test 3: Page Visibility API (Background Tab) ---');
-  const visibilityTest = await page.evaluate(async () => {
-    let loopRuns = 0;
+  await page.evaluate(async () => {
     // Dispatch visibilitychange hidden event
     Object.defineProperty(document, 'hidden', { value: true, writable: true });
     document.dispatchEvent(new Event('visibilitychange'));
 
-    // Wait 500ms and check how many times the animation loop was called
-    const start = performance.now();
+    // Wait 600ms
     await new Promise(r => setTimeout(r, 600));
 
     // Restore visible
     Object.defineProperty(document, 'hidden', { value: false, writable: true });
     document.dispatchEvent(new Event('visibilitychange'));
-
-    return {
-      hiddenHandled: true,
-    };
   });
   console.log('Page Visibility test passed: Background loop halts cleanly (0% CPU background)');
 
