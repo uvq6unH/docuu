@@ -9,6 +9,8 @@ export interface MapObject {
   pos: Vec3;
   yaw: number;
   scale: Vec3;
+  /** Outer dimensions of an enterable house, in metres. Absent on legacy maps. */
+  footprint?: SizeXZ;
 }
 export interface MapBox {
   id: string;
@@ -93,8 +95,13 @@ export function validateMap(raw: unknown): VillageMap {
     const obj = record(value,path);
     const scale = vec(obj.scale,path + '.scale');
     requireMap(scale.every(n => n > 0),path,'expected positive scale');
-    return { id:entityId(obj.id,path), asset:name(obj.asset,path + '.asset'),
+    const object: MapObject = { id:entityId(obj.id,path), asset:name(obj.asset,path + '.asset'),
       pos:position(obj.pos,path + '.pos'), yaw:finite(obj.yaw,path + '.yaw'), scale };
+    if (obj.footprint !== undefined) {
+      object.footprint = dimensions(obj.footprint, path + '.footprint');
+      bounds(object.pos, path + '.footprint', ...object.footprint);
+    }
+    return object;
   });
   function boxes(field: 'colliders' | 'hideZones'): MapBox[] {
     return list(data[field],field).map((value,i) => {

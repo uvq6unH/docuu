@@ -2,7 +2,7 @@
 
 ## 1. Làng Bắc Bộ — graybox trước
 
-80×80m, tâm (0,0,0), X đông, Z nam; Y cao (Three.js). Ground phẳng y=0. Biên [-40,40], hàng rào biên không vượt qua được. Nhà một tầng, không vào nội thất trong MVP. Lối đi chính rộng ≥4m, ngõ ≥2.5m, không có ngõ cụt dài >8m. Sân trung tâm ~18×18m, hai lối tiếp cận mỗi jail. Không dùng random map.
+80×80m, tâm (0,0,0), X đông, Z nam; Y cao (Three.js). Ground phẳng y=0. Biên [-40,40], hàng rào biên không vượt qua được. Nhà một tầng có nội thất và hai cửa đi xuyên được theo nâng cấp ngày 21/11/2026. Lối đi chính rộng ≥4m, ngõ ≥2.5m, không có ngõ cụt dài >8m. Sân trung tâm ~18×18m, hai lối tiếp cận mỗi jail. Không dùng random map.
 
 | ID | tâm (x,z) | footprint W×D (m) | cao tường/mái |
 |---|---|---|---|
@@ -76,3 +76,7 @@ Tông màu: tường kem #E6D5A5, ngói #A84E35, cỏ #83A95A, đường #BCA588
 - Ưu tiên tự tạo từ primitive; asset bên ngoài phải có license cho phép phân phối web, lưu author/url/license/modifications vào assets/LICENSES.md.
 - Lưu .blend lớn bằng Git LFS nếu cả nhóm cấu hình; không commit cache/temp. GLB nhỏ commit trực tiếp; mỗi file .blend một owner để tránh merge binary.
 - Asset hoàn thành khi chạy trong browser, collider khớp, đúng budget, không lỗi texture và không che khuất tầm nhìn vô lý. Chỉ bắt đầu polish sau prototype 6 người hoạt động.
+
+## Nhà có nội thất — 21/11/2026
+
+Theo yêu cầu người dùng, 10 nhà có footprint [rộng, sâu], cao tường 3,2 m, cửa trước/sau rộng 1,6 m và cao 2,4 m. Collider Hxx_box nay là tường phía Tây. Mỗi nhà có 11 collider gồm hai tường bên, hai cặp trụ cửa, hai lintel, trần, tủ và ghế hộp. Tổng map có 129 collider. Vị trí và diện tích lô nhà theo bảng giữ vai trò footprint. Client dựng tường và nội thất từ đúng các hộp authoritative. Mái có ba kiểu chữ A, bốn phía và lệch. SHA-256 bản đồ đổi, cần build và khởi động lại backend cùng cập nhật FE.

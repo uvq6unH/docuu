@@ -90,7 +90,7 @@ test('Bot & Role Selection System', async (t) => {
     assert.equal(robberCount, 2);
   });
 
-  await t.test('starts match with bots, respects 6-player role ratio and executes simulation step', () => {
+  await t.test('starts match with bots, respects 6-player role ratio and executes simulation step', (t) => {
     const room = new Room('BOT004', 'p-host', OFFICIAL_MAP_HASH);
     const mockSocket = { join: () => {}, leave: () => {}, emit: () => {}, connected: true };
     const host = room.addPlayer('p-host', 'Host Player', mockSocket, 'token-host', true);
@@ -104,6 +104,7 @@ test('Bot & Role Selection System', async (t) => {
     assert.equal(room.players.size, 6);
 
     const started = room.startMatch(true);
+    t.after(() => room.stop());
     assert.equal(started, true);
 
     const police = Array.from(room.players.values()).filter((p) => p.role === 'POLICE');

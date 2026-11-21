@@ -356,3 +356,31 @@ Bước tiếp theo là kiểm tra một ván hết giờ với cướp còn t�
 Đã thêm bài Chrome hai người chờ ván hết 300 giây mô phỏng. Cả hai thấy Cướp thắng và lý do hết giờ, HUD hành động ẩn, chuột được thả. Chủ phòng bấm Chơi lại, hai người giữ mã phòng, sẵn sàng lại và vào PLAYING tại J3 với số bị giam 0/1. Đã xem ảnh timeout-host.png. Bài đạt trong 7,1 phút, lint FE đạt.
 
 Lượt đầu chờ 330 giây nhưng HUD còn 14 giây nên bài hết thời gian chờ. Server dùng tick cố định để trừ đồng hồ, callback bị trễ khiến thời gian thực dài hơn luật 5 phút. Đã ghi bằng chứng trong ../BACKEND_FE_HANDOFF.md. Giới hạn chờ E2E hiện là 480 giây cho kết quả. Bước tiếp theo là sửa deadline thời gian thực ở backend theo luật, rồi chạy lại bài hết giờ để đo lại thời lượng.
+
+### 21/11/2026 — Chi tiết vật liệu và cảnh làng
+
+Theo yêu cầu tập trung đồ họa FE, đã thêm texture sinh bằng code cho mái ngói, tường vữa, khung tre/gỗ và rơm tại world/surface-detail.ts. Tải GLB sẽ áp vật liệu trong bộ nhớ. Đã thêm cỏ thấp quanh 15 cây và 6 cụm mây ở xa bằng hai InstancedMesh tại world/landscape-detail.ts. main.ts yêu cầu cập nhật shadow map sau khi toàn bộ mô hình tải xong. Đã xem ảnh toàn cảnh và ảnh a02-jail.png, làm nhẹ vân tường và xác nhận bóng nhà/cây hiện trên mặt đất.
+
+Build gồm typecheck đạt. 52/52 unit test đạt. Bộ Chrome sân tập đạt 9/10, bài đi/chạy/cúi thất bại vì chờ data-eye nhưng main hiện không xuất thuộc tính đó. Kiểm tra riêng tải đủ chín model, không có lỗi trình duyệt, đạt sau chỉnh hình ảnh cuối. Lint vẫn có 10 lỗi từ trước tại audio, controls, main và script/test. Chưa đo FPS sau thay đổi. Build vẫn cảnh báo node:crypto và chunk JS lớn.
+
+Bước tiếp theo là nghiệm thu góc nhìn FPS trên hai máy LAN, đo FPS rồi nâng tiếp chi tiết avatar và chuyển động theo phản hồi hình ảnh.
+
+### 21/11/2026 — Biến thể nhà, cây, rào và rơm
+
+Đã tăng scale hiển thị của bốn đống rơm lên 1,12 theo X/Z và 1,3 theo Y, tương đương cao khoảng 1,95 m. Hide zone authoritative vẫn cao 1,5 m nên phần đỉnh và viền lớn hơn là trang trí. Nhà được thêm chân tường, khung cửa, chốt cửa, kiểu chấn song, cửa chia ô hoặc giằng chéo, sống mái và ô thoáng đầu hồi. Màu tường/ngói thay đổi nhẹ theo ID nhà. Cây xoay tán theo ID, đổi sắc lá và có biến thể cây có quả. Rào có mối buộc và kiểu giằng khác nhau.
+
+Chi tiết thêm được batch thành hai InstancedMesh ở world/object-detail.ts. Build gồm typecheck đạt, 52 unit test cũ đạt, hai Chrome test khảo sát cảnh và tải đủ chín GLB đạt. Đã xem ảnh a02-jail.png. Build còn cảnh báo node:crypto và chunk chính 738,62 kB. Chưa đo FPS trên hai máy sau khi thêm chi tiết.
+
+Bước tiếp theo là chơi thử gần từng mẫu nhà/rơm/rào trên LAN và đo FPS để quyết định mức chi tiết phù hợp.
+
+### 21/11/2026 — Nhà có nội thất và ba hình dáng mái
+
+Theo yêu cầu mới của người dùng, đã chuyển 10 nhà thành nhà có cửa trước/sau rộng 1,6 m, cao 2,4 m. FE dựng tường, trần, tủ và ghế hộp từ các collider authoritative. Nhà có sàn ván, xà trần, khung cửa, cửa chớp hai mặt, chân tường, mái ngói chữ A/bốn phía/mái lệch và màu riêng. Renderer tại world/enterable-houses.ts. Mô hình Blender binary được giữ trong kho, hình ảnh nhà mới được sinh từ code. MapObject thêm footprint tùy chọn để duy trì hỗ trợ map cũ.
+
+Map JSON hiện có 129 collider. Cần build shared/backend và khởi động lại backend, tải lại FE tất cả máy và tạo phòng mới. Đã cập nhật MAP_AND_ASSETS.md, GAMEPLAY.md và BACKEND_FE_HANDOFF.md. Hash LAN đã được sửa về tính SHA-256 từ bytes thực vì bản đồ đã đổi.
+
+Kiểm tra đạt 58 test shared, 53 unit test FE, 24 test backend, typecheck/build FE và backend. ESLint các module world mới/được sửa đạt, toàn dự án còn 10 lỗi lint cũ. Bài bot test có thêm cleanup stop timer để không để simulation chạy sau test. Đã khôi phục dữ liệu debug trong DEV và điều chỉnh helper lái của E2E theo nhịp telemetry 10Hz.
+
+Chrome đạt ba bài phòng thật gồm đi xuyên H03 trong hai phiên, bắt/cứu/reload trong phòng sáu người, và kết thúc/rematch. Hai bài đồ họa/đi-chạy-cúi-nhảy đạt. Đã xem house-interior.png và a02-jail.png. Những lượt thử đầu có lỗi điều khiển test/trace và tải lại lúc chỉnh source, các lượt cuối chạy ổn định đã đạt. Build cảnh báo chunk chính khoảng 748 kB. Chưa đo FPS với 129 collider và nội thất trên hai máy vật lý.
+
+Bước tiếp theo là playtest qua LAN để kiểm tra độ sáng nội thất, các lối thoát và FPS khi đuổi bắt qua nhà.

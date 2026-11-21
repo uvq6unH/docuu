@@ -9,12 +9,8 @@ export async function readMapDigest() {
     const digest = await crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
   }
-  try {
-    const nodeCrypto = await import('node:crypto');
-    return nodeCrypto.createHash('sha256').update(new Uint8Array(bytes)).digest('hex');
-  } catch {
-    return '575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba';
-  }
+  const { sha256 } = await import('js-sha256');
+  return sha256(new Uint8Array(bytes));
 }
 
 export function mountRoomDetails(panel: HTMLElement) {

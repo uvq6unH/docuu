@@ -69,3 +69,9 @@ Tái hiện riêng với Room.step() trên bản build server: đặt một cư�
 ### 20/11/2026 — Đồng hồ ván chậm khi máy tải cao
 
 Bài Chrome hai người chờ hết giờ đã quan sát HUD còn 00:14 sau 330 giây kể từ PLAYING. Room.start() gọi step() từ setInterval, còn step() trừ remainingMs bằng SIMULATION_TIMESTEP_MS cố định. Khi callback trễ, đồng hồ ván trễ theo. Cần đối chiếu deadline thực cho phase theo GAMEPLAY.md, đồng thời giữ bước mô phỏng cố định. FE hiện chờ kết quả authoritative. Bài thử đã tăng giới hạn chờ để nghiệm thu giao diện kết quả.
+
+## 21/11/2026 — Nhà có thể đi vào
+
+Theo yêu cầu người dùng, village-v1.json đã đổi từ 10 khối nhà đặc sang các tường, cửa, trần và đồ nội thất. Tổng collider hiện 129. MapObject có footprint tùy chọn để lưu rộng/sâu của nhà. Cửa trước/sau rộng 1,6 m, cao 2,4 m. Rendering FE dùng chính các hộp va chạm trong JSON. Map cũ không có footprint vẫn parse được. Sửa này đổi bytes và SHA-256 bản đồ, cần build shared/backend rồi khởi động lại backend và tải lại FE ở mọi máy. Các phòng cũ cần tạo lại sau restart.
+
+FE cũng khôi phục SHA-256 từ bytes thực trên HTTP LAN bằng js-sha256, vì hash cố định ở bản trước không còn khớp bản đồ mới. Kiểm tra va chạm và LOS cho cả 10 nhà đã đạt. Chrome hai người đã xác nhận server đồng bộ người đi vào H03 và ra cửa đối diện.

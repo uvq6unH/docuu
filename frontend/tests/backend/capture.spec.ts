@@ -4,6 +4,44 @@ import { io, type Socket } from 'socket.io-client';
 import { test, expect, type Page } from '@playwright/test';
 import { CLIENT_EVENTS, PROTOCOL_VERSION, type AckResponse } from '../../../packages/shared/src/protocol';
 
+test('two clients observe a player entering a house and leaving through its other door', async ({ page, browser }) => {
+  test.setTimeout(120000);
+  const guest = await browser.newPage();
+  let observedZ: number | undefined;
+  guest.on('websocket', socket => {
+    socket.on('framereceived', ({ payload }) => {
+      const packet = payload.toString();
+      if (!packet.startsWith('42["game:snapshot",')) return;
+      const [, snapshot] = JSON.parse(packet.slice(2));
+      observedZ = snapshot.players.find((player: { role: string }) => player.role === 'POLICE')?.pos[2];
+    });
+  });
+  try {
+    await page.goto('/');
+    await page.locator('#btn-create-room').click();
+    await expect(page.locator('#display-room-code')).toHaveText(/^[A-Z2-9]{6}$/);
+    const code = (await page.locator('#display-room-code').innerText()).trim();
+    await guest.goto(page.url());
+    await guest.locator('#join-room-code').fill(code);
+    await guest.locator('#btn-join-room').click();
+    for (const client of [page, guest]) await client.locator('#btn-toggle-ready').click();
+    await page.locator('#btn-start-game').click();
+    await page.locator('[data-jail="J1"]').click();
+    await expect(page.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
+    await page.bringToFront();
+    await page.locator('#enter').click();
+    await approach(page, 12, -19, .5);
+    await approach(page, 12, -28, .5);
+    await expect.poll(() => observedZ).toBeLessThan(-27);
+    await page.screenshot({ path: 'test-results/house-interior.png' });
+    await approach(page, 12, -34, .5);
+    await expect.poll(() => observedZ).toBeLessThan(-33);
+    await page.keyboard.press('Escape');
+  } finally {
+    await guest.close();
+  }
+});
+
 test('robbers win after the full five minutes and both players can rematch', async ({ page, browser }) => {
   test.setTimeout(600000);
   const guest = await browser.newPage({ viewport: { width: 900, height: 650 } });
@@ -71,7 +109,9 @@ async function approach(page: Page, x: number, z: number, radius: number) {
         if (Math.hypot(dx, dz) < radius && Math.abs(turn) < .28) return;
         document.dispatchEvent(new MouseEvent('mousemove', { movementX: Math.round(-turn / .002) }));
         walk(Math.abs(turn) < .28 && Math.hypot(dx, dz) >= radius);
-        await new Promise(requestAnimationFrame);
+        // Position/yaw diagnostics refresh at 10Hz. Wait for the next sample
+        // before steering again so delayed telemetry cannot amplify mouse turns.
+        await new Promise(resolve => window.setTimeout(resolve, 120));
       }
       throw new Error('Did not reach waypoint: ' + debug.textContent);
     } finally { walk(false); }

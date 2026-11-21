@@ -105,3 +105,9 @@ Khi ván kết thúc, bảng phòng hiển thị đội thắng và lý do do se
 ## Trở lại ván sau mất kết nối
 
 Tải lại cùng tab hoặc kết nối mạng lại trong vòng 30 giây để trở về phòng đang chơi. Nếu đang bị giam, bạn sẽ thấy lại HUD nhà giam và có thể bấm vào sân để khóa chuột. Nút Rời phòng xóa phiên đã lưu trong tab. Khi server báo phiên hết hạn, màn hình tạo/vào phòng xuất hiện lại.
+
+## Nhà có nội thất
+
+Từ bản nâng cấp ngày 21/11/2026, cả 10 nhà có cửa trước và cửa sau mở sẵn. Dùng WASD đi qua cửa, chạy xuyên nhà hoặc quay lại lối cũ. Bên trong có sàn, xà trần, tủ và ghế hộp có va chạm. Ba kiểu mái và màu tường giúp phân biệt các căn nhà.
+
+Sau khi cập nhật bản này, build lại shared và backend, dừng backend cũ rồi chạy lại theo SOP_CHAY_GAME.md. Tải lại FE ở mọi máy và tạo phòng mới vì dữ liệu bản đồ đã đổi.

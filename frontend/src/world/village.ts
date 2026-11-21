@@ -113,7 +113,7 @@ export function villagePreview(map = villageMap) {
   for (const object of map.objects) {
     const volume = volumes.get(object.id + '_box') ?? volumes.get(object.id + '_hide');
     if (!volume) throw new Error('Missing graybox dimensions for ' + object.id);
-    const [w,h,d] = volume.size;
+    const [w,h,d] = object.footprint ? [object.footprint[0], 5, object.footprint[1]] : volume.size;
     const group = new Group();
     group.name = object.id;
     group.position.set(...object.pos);

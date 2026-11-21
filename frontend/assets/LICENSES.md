@@ -21,3 +21,8 @@ Mỗi model, texture, audio hoặc font được thêm vào phải có một dò
 | avatar (.blend, .glb) | Antigravity tạo cho dự án, 20/11/2026 | Primitive nội bộ Three.js/Blender | Chủ repo quyết định license phân phối | Model tổng hợp 2 vai, đổi material theo phe | blender/build_a03.py, export_avatar_glb.mjs |
 
 Nguồn Blender đặt ở `blender/`; GLB dùng trên web đặt ở `../public/models/`. Asset chỉ phục vụ hình ảnh, không thay thế map JSON/collider shared.
+
+| src/world/surface-detail.ts | Codex tạo cho dự án, 21/11/2026 | Nội bộ, texture sinh bằng code | Chủ repo quyết định license phân phối | Vân ngói, vữa, gỗ và rơm | Không dùng nguồn ngoài |
+| src/world/landscape-detail.ts | Codex tạo cho dự án, 21/11/2026 | Nội bộ, primitive Three.js | Chủ repo quyết định license phân phối | Cỏ thấp và mây được instance | Không dùng nguồn ngoài |
+| src/world/object-detail.ts | Codex tạo cho dự án, 21/11/2026 | Nội bộ, primitive Three.js | Chủ repo quyết định license phân phối | Khung cửa, chân tường, giằng rào, quả và bó rơm | Không dùng nguồn ngoài |
+| src/world/enterable-houses.ts | Codex tạo cho dự án, 21/11/2026 | Nội bộ, primitive Three.js và map JSON dự án | Chủ repo quyết định license phân phối | Nhà có cửa trước/sau, ba kiểu mái, sàn và nội thất | Không dùng nguồn ngoài |

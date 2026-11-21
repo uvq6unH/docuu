@@ -16,7 +16,7 @@ test('shipped map passes validation and preserves its wire representation', () =
   assert.deepEqual(file.size, [80,80]);
   assert.equal(file.id, 'village-v1');
   assert.equal(file.objects.length,39);
-  assert.equal(file.colliders.length,29);
+  assert.equal(file.colliders.length,129);
   assert.equal(file.hideZones.length,10);
 });
 
@@ -27,8 +27,8 @@ test('object positions, static boxes and hide volumes match the design tables', 
     const obj = file.objects.find(o => o.id === id);
     assert.match(obj.asset,/^house_[abc]$/);
     assert.deepEqual(obj.pos,[+x,0,+z]);
-    assert.deepEqual(file.colliders.find(b => b.id === id+'_box'),
-      {id:id+'_box',center:[+x,2.5,+z],size:[+w,5,+d]});
+    assert.deepEqual(obj.footprint,[+w,+d]);
+    assert.equal(file.colliders.filter(b => b.id.startsWith(id+'_')).length,11);
   }
   for (const [prefix,asset,count,size,solid] of [
     ['15 cây',/^tree_[ab]$/,15,[.7,2.5,.7],true],
@@ -66,12 +66,12 @@ test('six spawns and all jail slots and anchors use world coordinates', () => {
 for (const [label,mutate,reason] of [
   ['duplicate across collections',m => m.hideZones[0].id=m.objects[0].id,/duplicate ID/],
   ['outside object',m => m.objects[0].pos[2]=40.01,/bounds/],
-  ['outside collider edge',m => m.colliders[0].center[0]=39,/bounds/],
+  ['outside collider edge',m => m.colliders[0].center[0]=40,/bounds/],
   ['outside hide zone edge',m => m.hideZones[0].center[2]=-40,/bounds/],
   ['outside jail anchor',m => m.jails[0].releaseAnchors[0][2]=41,/bounds/],
-  ['spawn inside a house',m => m.spawns.police[0]=[-27,0,-26],/spawns.police.*H01_box/],
-  ['spawn footprint clips a house',m => m.spawns.robber[0]=[-22.3,0,-26],/H01_box/],
-  ['blocked rescue anchor',m => m.jails[0].rescueAnchors[0]=[-27,0,-26],/rescueAnchors.*H01_box/],
+  ['spawn inside a house',m => m.spawns.police[0]=[-31.38,0,-26],/spawns.police.*H01_box/],
+  ['spawn footprint clips a house',m => m.spawns.robber[0]=[-22.3,0,-26],/H01_wall_e/],
+  ['blocked rescue anchor',m => m.jails[0].rescueAnchors[0]=[-31.38,0,-26],/rescueAnchors.*H01_box/],
   ['same-side rescue anchors',m => m.jails[0].rescueAnchors[0]=[3,0,0],/opposite/],
   ['invalid team count',m => m.spawns.robber.pop(),/expected 4/],
   ['missing jail',m => m.jails.pop(),/expected 3/],

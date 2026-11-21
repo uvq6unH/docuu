@@ -1,5 +1,6 @@
 import { villageMap } from '../world/shared-map';
 import { createGroundMaterial } from '../world/ground-material';
+import { createLandscapeDetail } from '../world/landscape-detail';
 import {
   Color, DirectionalLight, Fog, GridHelper, Group, HemisphereLight, InstancedMesh, Mesh,
   ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
@@ -41,6 +42,7 @@ export function createScene() {
   grid.matrixAutoUpdate = false;
   grid.updateMatrix();
   scene.add(grid);
+  scene.add(createLandscapeDetail());
   return { scene, camera };
 }
 

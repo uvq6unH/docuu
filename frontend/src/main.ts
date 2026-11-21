@@ -1031,7 +1031,10 @@ try {
   }
   container.setAttribute('aria-busy', 'true');
   void loadVillageModels(world.village, world.jailModel, () => disposed).finally(() => {
-    if (!disposed) container.setAttribute('aria-busy', 'false');
+    if (!disposed) {
+      renderer.shadowMap.needsUpdate = true;
+      container.setAttribute('aria-busy', 'false');
+    }
   });
 
   const enter = () => { void controls.lock(); };
@@ -1183,6 +1186,10 @@ try {
       if (time - lastDebugUpdate >= 100) { // 10Hz debug UI updates
         lastDebugUpdate = time;
         const input = controls.input.peek();
+        debug.dataset.x = player.pos[0].toFixed(3);
+        debug.dataset.yaw = String(camera.rotation.y);
+        debug.dataset.eye = camera.position.y.toFixed(3);
+        debug.dataset.grounded = String(player.grounded);
         debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
       }
     }

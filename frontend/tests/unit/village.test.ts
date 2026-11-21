@@ -8,7 +8,7 @@ it('builds the documented layout with all three inspection points', () => {
   expect([...viewpoints.keys()]).toEqual(['J1', 'J2', 'J3']);
   expect(viewpoints.get('J2')).toEqual({ x: -12, z: 10 });
   expect(bounds.visible).toBe(false);
-  expect(bounds.children).toHaveLength(29);
+  expect(bounds.children).toHaveLength(129);
 });
 
 

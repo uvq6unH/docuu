@@ -76,3 +76,7 @@ Reconnect token riêng, giữ slot 30s; input neutral ngay, cướp FREE/HIDDEN 
 ## 9. Cân bằng
 
 Mục tiêu tham khảo: thắng 45–55% sau đủ mẫu; thời gian bắt đầu tiên 30–90s; ít nhất 1 lần cứu/trận ở đa số trận; không jail nào quá chênh lệch. Thử mỗi vị trí jail, đổi phe, ghi dữ liệu. Nếu police thắng nhiều: giảm range 0.15m hoặc tăng cooldown; nếu robber thắng nhiều: giảm sprint robber 0.3m/s hoặc giảm thời gian đầu 5s. Mỗi vòng test chỉ đổi 1 nhóm biến. Không thay luật tùy ý giữa trận.
+
+## Nhà có thể đi vào — 21/11/2026
+
+Theo yêu cầu nâng cấp, người chơi đi vào nhà bằng cửa trước hoặc sau mở sẵn. Tường và nội thất có va chạm authoritative, chặn bắt xuyên tường. Trong nhà áp dụng cùng luật bắt, cứu, di chuyển và ẩn như ngoài sân. Nhà không tự tạo thêm vùng HIDDEN.
