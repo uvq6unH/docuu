@@ -194,3 +194,38 @@ fieldset { margin: 15px 0 0; padding: 8px 12px; border: 1px solid #aab5a5; } fie
 .jail-btn { background: #2876c9 !important; font-size: 13px; }
 .jail-btn:hover { background: #1c5ba0 !important; }
 
+/* GPU Software Rendering Warning Banner */
+.gpu-warning-banner {
+  background: #fdf2e9;
+  color: #78350f;
+  border: 1px solid #f59e0b;
+  border-left: 5px solid #d97706;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.15);
+}
+.gpu-warning-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #b45309;
+  margin-bottom: 6px;
+}
+.gpu-warning-help {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #fcd34d;
+  font-size: 12px;
+}
+.gpu-warning-help code {
+  background: #fef3c7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #fde68a;
+  font-family: monospace;
+  font-weight: 700;
+  color: #92400e;
+}
+

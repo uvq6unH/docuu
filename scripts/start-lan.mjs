@@ -2,6 +2,7 @@ import { networkInterfaces } from 'node:os';
 import { spawn, exec } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const rootDir = resolve(dirname(__filename), '..');
@@ -44,6 +45,23 @@ console.log('📱 \x1b[1mCHO BẠN BÈ / ĐIỆN THOẠI CÙNG MẠNG WIFI (LAN)
 console.log(`   👉 \x1b[32m\x1b[1m${lanUrl}\x1b[0m`);
 console.log('');
 console.log('\x1b[90m(Chỉ cần kết nối cùng Wi-Fi và dán link trên vào trình duyệt Chrome/Edge/Safari)\x1b[0m');
+
+// Check if Edge has hardware acceleration disabled
+try {
+  const localStatePath = resolve(process.env.LOCALAPPDATA || '', 'Microsoft/Edge/User Data/Local State');
+  if (existsSync(localStatePath)) {
+    const data = JSON.parse(readFileSync(localStatePath, 'utf8'));
+    if (data.hardware_acceleration_mode?.enabled === false) {
+      console.log('');
+      console.log('\x1b[33m%s\x1b[0m', '⚠️  CHÚ Ý HIỆU NĂNG: Trình duyệt Edge đang TẮT tính năng Tăng tốc phần cứng (GPU)!');
+      console.log('\x1b[33m%s\x1b[0m', '   Để tránh CPU 100% và chơi mượt 60 FPS: Hãy chạy BAT_TANG_TOC_GPU_EDGE.bat hoặc');
+      console.log('\x1b[33m%s\x1b[0m', '   vào edge://settings/system -> Bật "Sử dụng tính năng tăng tốc đồ họa khi khả dụng".');
+    }
+  }
+} catch {
+  void 0;
+}
+
 console.log('\x1b[90mNhấn Ctrl + C để dừng máy chủ bất cứ lúc nào.\x1b[0m');
 console.log('\x1b[36m%s\x1b[0m', '=============================================================================');
 console.log('');

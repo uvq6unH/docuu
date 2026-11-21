@@ -46,15 +46,42 @@ export function createScene() {
   return { scene, camera };
 }
 
+export interface GpuDiagnostics {
+  isSoftware: boolean;
+  rendererString: string;
+}
+
+export function detectGpuDiagnostics(renderer: WebGLRenderer): GpuDiagnostics {
+  let isSoftware = false;
+  let rendererString = 'WebGL';
+  try {
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    if (ext) {
+      const unmasked = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+      if (typeof unmasked === 'string') {
+        rendererString = unmasked;
+        isSoftware = /swiftshader|llvmpipe|software rasterizer|microsoft basic render/i.test(unmasked);
+      }
+    }
+  } catch {
+    void 0;
+  }
+  return { isSoftware, rendererString };
+}
+
 export function createRenderer(container: HTMLElement) {
   const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  const gpu = detectGpuDiagnostics(renderer);
+
+  renderer.setPixelRatio(gpu.isSoftware ? 1.0 : Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
-  renderer.shadowMap.enabled = true;
+  // Disable costly shadow mapping pass on CPU software rasterizers to prevent 100% CPU lockup
+  renderer.shadowMap.enabled = !gpu.isSoftware;
   renderer.shadowMap.type = PCFShadowMap;
   renderer.shadowMap.autoUpdate = false;
-  renderer.shadowMap.needsUpdate = true;
+  renderer.shadowMap.needsUpdate = !gpu.isSoftware;
   renderer.domElement.setAttribute('aria-label', 'Mặt đất sân thử 3D');
   container.append(renderer.domElement);
   return renderer;

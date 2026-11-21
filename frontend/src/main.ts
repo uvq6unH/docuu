@@ -1,6 +1,6 @@
 import { villagePreview } from './world/village';
 import './style.css';
-import { createRenderer, createScene, disposeScene, resizeScene } from './core/scene';
+import { createRenderer, createScene, detectGpuDiagnostics, disposeScene, resizeScene } from './core/scene';
 import { createControls } from './input/controls';
 import { initialMovement, stepMovement, type MovementState } from '../../packages/shared/src/movement';
 import { movementRules } from '../../packages/shared/src/rules';
@@ -95,6 +95,15 @@ try {
   const world = villagePreview();
   scene.add(world.village);
   const renderer = createRenderer(container);
+  const gpuDiag = detectGpuDiagnostics(renderer);
+  if (gpuDiag.isSoftware) {
+    const gpuBanner = document.getElementById('gpu-warning-banner');
+    const gpuDetail = document.getElementById('gpu-warning-detail');
+    if (gpuBanner && gpuDetail) {
+      gpuDetail.textContent = `Phát hiện đồ họa 3D đang chạy bằng CPU giả lập (${gpuDiag.rendererString}) do trình duyệt đang tắt "Tăng tốc phần cứng", làm CPU tăng vọt 100% và gây giật lag.`;
+      gpuBanner.hidden = false;
+    }
+  }
   if (import.meta.env.DEV) (window as Window & { __THREE_RENDERER__?: unknown }).__THREE_RENDERER__ = renderer;
   const spawn = villageMap.spawns.robber[0]!;
 
