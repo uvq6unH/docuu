@@ -2,10 +2,16 @@ node_modules/
 dist/
 *.tsbuildinfo
 .env
+.env.*
+!.env.example
+*.local
 .DS_Store
 Thumbs.db
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 data/
-
+logs/
+*.log
