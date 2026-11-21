@@ -110,6 +110,7 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
   return {
     input,
     updateLook(_frameMs?: number) {
+      void _frameMs;
       if (!locked || (mouseX === 0 && mouseY === 0)) return;
       // 20-degree ceiling after a stalled frame to bound corrupted device spikes
       const maxAngle = Math.PI / 9;

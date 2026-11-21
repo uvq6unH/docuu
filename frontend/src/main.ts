@@ -95,7 +95,7 @@ try {
   const world = villagePreview();
   scene.add(world.village);
   const renderer = createRenderer(container);
-  if (import.meta.env.DEV) (window as any).__THREE_RENDERER__ = renderer;
+  if (import.meta.env.DEV) (window as Window & { __THREE_RENDERER__?: unknown }).__THREE_RENDERER__ = renderer;
   const spawn = villageMap.spawns.robber[0]!;
 
   let player = initialMovement(spawn);
