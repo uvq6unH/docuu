@@ -296,6 +296,7 @@ export class MockServer {
   }
 
   private broadcastSnapshot(): void {
+    if (this.clients.size === 0) return;
     const now = Date.now();
     const dt = Math.min(0.2, (now - this.lastTickTime) / 1000);
     this.lastTickTime = now;

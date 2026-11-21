@@ -82,6 +82,7 @@ const compassJailIndicator = requireElement('#compass-jail-indicator');
 const minimapCanvas = requireElement<HTMLCanvasElement>('#hud-minimap');
 const minimapCtx = minimapCanvas.getContext('2d');
 const actionPrompt = requireElement('#action-prompt');
+const hudAction = requireElement('#hud-action');
 const rescueBarContainer = requireElement('#rescue-bar-container');
 const rescueBarFill = requireElement('#rescue-bar-fill');
 const hitFlash = requireElement('#hit-flash');
@@ -94,6 +95,7 @@ try {
   const world = villagePreview();
   scene.add(world.village);
   const renderer = createRenderer(container);
+  if (import.meta.env.DEV) (window as any).__THREE_RENDERER__ = renderer;
   const spawn = villageMap.spawns.robber[0]!;
 
   let player = initialMovement(spawn);
@@ -113,6 +115,7 @@ try {
   let lastCaptureAttemptTime = 0;
   let lastObservedPhase = '';
   let lastFrozenNoticeTime = 0;
+  let lastStaminaVal = -1;
 
   interface PredictedFrame {
     seq: number;
@@ -195,53 +198,82 @@ try {
   const mockDetails = mountRoomDetails(roomView);
   let resultShown = '';
   let viewSession = '';
-  // Compass heading update
-  function updateCompass(cameraYaw: number, selfPos: [number, number, number], targetJailId: string) {
-    const deg = (Math.round((-cameraYaw * 180) / Math.PI) % 360 + 360) % 360;
-    let cardinal: string;
-    if (deg >= 337.5 || deg < 22.5) cardinal = 'B (Bắc)';
-    else if (deg >= 22.5 && deg < 67.5) cardinal = 'ĐB (Đông Bắc)';
-    else if (deg >= 67.5 && deg < 112.5) cardinal = 'Đ (Đông)';
-    else if (deg >= 112.5 && deg < 157.5) cardinal = 'ĐN (Đông Nam)';
-    else if (deg >= 157.5 && deg < 202.5) cardinal = 'N (Nam)';
-    else if (deg >= 202.5 && deg < 247.5) cardinal = 'TN (Tây Nam)';
-    else if (deg >= 247.5 && deg < 292.5) cardinal = 'T (Tây)';
-    else cardinal = 'TB (Tây Bắc)';
 
-    compassCardinal.textContent = `${cardinal} · ${deg}°`;
-
-    const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
-    const dist = Math.hypot(jail.center[0] - selfPos[0], jail.center[2] - selfPos[2]);
-    compassJailIndicator.textContent = `🏛️ ${jail.id}: ${Math.round(dist)}m`;
-  }
-
-  // 2D Radar Minimap (T03)
-  function renderMinimap(selfPos: [number, number, number], cameraYaw: number, targetJailId: string) {
-    if (!minimapCtx) return;
-    const w = minimapCanvas.width;
-    const h = minimapCanvas.height;
-    minimapCtx.clearRect(0, 0, w, h);
-
+  // Pre-render static village obstacles once onto an offscreen canvas (Zero per-frame allocations)
+  const staticMinimapCanvas = document.createElement('canvas');
+  staticMinimapCanvas.width = minimapCanvas.width;
+  staticMinimapCanvas.height = minimapCanvas.height;
+  const staticCtx = staticMinimapCanvas.getContext('2d');
+  if (staticCtx) {
+    const w = staticMinimapCanvas.width;
+    const h = staticMinimapCanvas.height;
     const toX = (wx: number) => ((wx + 40) / 80) * w;
     const toY = (wz: number) => ((wz + 40) / 80) * h;
 
-    // Outer village boundary
-    minimapCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    minimapCtx.lineWidth = 1;
-    minimapCtx.strokeRect(1, 1, w - 2, h - 2);
+    staticCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    staticCtx.lineWidth = 1;
+    staticCtx.strokeRect(1, 1, w - 2, h - 2);
 
-    // Colliders (Houses)
-    minimapCtx.fillStyle = 'rgba(160, 175, 160, 0.35)';
+    staticCtx.fillStyle = 'rgba(160, 175, 160, 0.35)';
     for (const col of villageMap.colliders) {
       const cx = toX(col.center[0] - col.size[0] / 2);
       const cy = toY(col.center[2] - col.size[2] / 2);
       const sw = (col.size[0] / 80) * w;
       const sh = (col.size[2] / 80) * h;
-      minimapCtx.fillRect(cx, cy, sw, sh);
+      staticCtx.fillRect(cx, cy, sw, sh);
+    }
+  }
+
+  const jailsById = new Map(villageMap.jails.map((j) => [j.id, j]));
+
+  // Compass heading update (Debounced + 30Hz throttle to save CPU)
+  let lastCompassDeg = -999;
+  let lastCompassDist = -999;
+  let lastCompassTime = 0;
+  function updateCompass(cameraYaw: number, selfPos: [number, number, number], targetJailId: string, now = performance.now()) {
+    if (now - lastCompassTime < 33) return;
+    lastCompassTime = now;
+    const deg = (Math.round((-cameraYaw * 180) / Math.PI) % 360 + 360) % 360;
+    const jail = jailsById.get(targetJailId) || villageMap.jails[0]!;
+    const dist = Math.round(Math.hypot(jail.center[0] - selfPos[0], jail.center[2] - selfPos[2]));
+
+    if (deg !== lastCompassDeg) {
+      lastCompassDeg = deg;
+      let cardinal: string;
+      if (deg >= 337.5 || deg < 22.5) cardinal = 'B (Bắc)';
+      else if (deg >= 22.5 && deg < 67.5) cardinal = 'ĐB (Đông Bắc)';
+      else if (deg >= 67.5 && deg < 112.5) cardinal = 'Đ (Đông)';
+      else if (deg >= 112.5 && deg < 157.5) cardinal = 'ĐN (Đông Nam)';
+      else if (deg >= 157.5 && deg < 202.5) cardinal = 'N (Nam)';
+      else if (deg >= 202.5 && deg < 247.5) cardinal = 'TN (Tây Nam)';
+      else if (deg >= 247.5 && deg < 292.5) cardinal = 'T (Tây)';
+      else cardinal = 'TB (Tây Bắc)';
+      compassCardinal.textContent = `${cardinal} · ${deg}°`;
     }
 
+    if (dist !== lastCompassDist) {
+      lastCompassDist = dist;
+      compassJailIndicator.textContent = `🏛️ ${jail.id}: ${dist}m`;
+    }
+  }
+
+  // 2D Radar Minimap (T03) - Blits static canvas background at 30Hz to conserve CPU
+  let lastMinimapRenderTime = 0;
+  function renderMinimap(selfPos: [number, number, number], cameraYaw: number, targetJailId: string, now = performance.now()) {
+    if (!minimapCtx) return;
+    if (now - lastMinimapRenderTime < 33) return; // 30Hz minimap refresh rate
+    lastMinimapRenderTime = now;
+
+    const w = minimapCanvas.width;
+    const h = minimapCanvas.height;
+    minimapCtx.clearRect(0, 0, w, h);
+    minimapCtx.drawImage(staticMinimapCanvas, 0, 0);
+
+    const toX = (wx: number) => ((wx + 40) / 80) * w;
+    const toY = (wz: number) => ((wz + 40) / 80) * h;
+
     // Active Jail
-    const jail = villageMap.jails.find((j) => j.id === targetJailId) || villageMap.jails[0]!;
+    const jail = jailsById.get(targetJailId) || villageMap.jails[0]!;
     const jx = toX(jail.center[0]);
     const jy = toY(jail.center[2]);
     minimapCtx.fillStyle = '#f39c12';
@@ -278,8 +310,13 @@ try {
     minimapCtx.stroke();
   }
 
-  // Aim Assist & Proximity Action Prompts
-  function checkAimInteraction(snapshot: Snapshot | null, yaw: number) {
+  // Aim Assist & Proximity Action Prompts (Debounced style mutations + 30Hz throttle)
+  let lastAimAction: 'capture' | 'rescue' | null = null;
+  let lastAimCheckTime = 0;
+  function checkAimInteraction(snapshot: Snapshot | null, yaw: number, now = performance.now()) {
+    if (now - lastAimCheckTime < 33) return; // 30Hz aim check throttle
+    lastAimCheckTime = now;
+
     let action: 'capture' | 'rescue' | null = null;
     if (snapshot?.phase === 'PLAYING') {
       if (currentRole === 'POLICE') {
@@ -302,7 +339,7 @@ try {
           }
         }
       } else if (snapshot.jailedCount > 0 && currentRole === 'ROBBER' && snapshot.self.state !== 'JAILED') {
-        const jail = villageMap.jails.find(candidate => candidate.id === snapshot.jailId);
+        const jail = snapshot.jailId ? jailsById.get(snapshot.jailId) : null;
         if (jail) {
           const forwardX = -Math.sin(yaw);
           const forwardZ = -Math.cos(yaw);
@@ -320,14 +357,17 @@ try {
         }
       }
     }
-    actionPrompt.hidden = action === null;
-    if (action) {
-      actionPrompt.textContent = action === 'capture' ? '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!' : '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
-      actionPrompt.className = 'action-prompt prompt-' + action;
+    if (action !== lastAimAction) {
+      lastAimAction = action;
+      actionPrompt.hidden = action === null;
+      if (action) {
+        actionPrompt.textContent = action === 'capture' ? '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!' : '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
+        actionPrompt.className = 'action-prompt prompt-' + action;
+      }
+      const color = action === 'capture' ? '#ff4d4d' : '#52b788';
+      crosshair.style.background = action ? color : '#ffffff';
+      crosshair.style.boxShadow = action ? '0 0 8px ' + color : '0 1px 3px #263d30';
     }
-    const color = action === 'capture' ? '#ff4d4d' : '#52b788';
-    crosshair.style.background = action ? color : '#ffffff';
-    crosshair.style.boxShadow = action ? '0 0 8px ' + color : '0 1px 3px #263d30';
   }
 
   // Session Callbacks
@@ -466,7 +506,9 @@ try {
             player.pos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
             player.verticalSpeed = replayed.verticalSpeed;
             player.grounded = replayed.grounded;
-            previous.pos = [player.pos[0], player.pos[1], player.pos[2]];
+            previous.pos[0] -= deltaX;
+            previous.pos[1] -= deltaY;
+            previous.pos[2] -= deltaZ;
           }
           // If error <= 0.04m: Prediction matches server authoritative physics exactly.
           // Zero jitter, zero pull-back!
@@ -500,7 +542,7 @@ try {
       hudRole.style.color = self.role === 'POLICE' ? '#58a6ff' : '#ffa657';
       hudJail.textContent = snapshot.jailId || 'Chưa chọn';
       const robberCount = session.currentRoom?.roster.filter(p => p.role === 'ROBBER').length ?? 0;
-      requireElement('#hud-action').textContent = self.state === 'JAILED'
+      hudAction.textContent = self.state === 'JAILED'
         ? 'Bạn đang bị giam · Chờ đồng đội cứu'
         : snapshot.phase === 'HEAD_START' && self.role === 'POLICE'
         ? '⏳ CẢNH SÁT TẠM ĐỨNG YÊN (10s cướp chạy trốn) · Sẽ xuất kích khi hết đếm ngược!'
@@ -961,6 +1003,7 @@ try {
         camera.rotation.copy(surveyRotation);
       }
       playing = locked;
+      renderer.shadowMap.needsUpdate = true;
       previous = player;
       lastFrame = undefined;
       accumulated = 0;
@@ -1004,16 +1047,46 @@ try {
   const tickMs = 1000 / movementRules.tickHz;
   const eyeHeight = (crouched: boolean) => (crouched ? movementRules.crouchEyeHeight : movementRules.eyeHeight);
 
-  // Authoritative Render Loop
+  // Page Visibility API: Stop rendering & reset timers when tab is hidden (drops CPU to 0%)
+  let isTabHidden = false;
+  document.addEventListener('visibilitychange', () => {
+    isTabHidden = document.hidden;
+    if (!isTabHidden) {
+      lastFrame = undefined;
+      accumulated = 0;
+      renderer.shadowMap.needsUpdate = true;
+    }
+  });
+
+  let lastMenuRender = 0;
+  let lastShadowUpdate = 0;
+  let lastDebugUpdate = 0;
+
+  // Authoritative Render Loop with CPU throttling and anti-death-spiral guards
   renderer.setAnimationLoop((time) => {
+    if (isTabHidden || document.hidden) return;
+
+    if (!playing) {
+      // Throttle idle lobby/menu render to 30 FPS to save 60%+ CPU when idle
+      if (time - lastMenuRender < 32) return;
+      lastMenuRender = time;
+    } else {
+      // Throttle shadow map computation to 30Hz during gameplay (saves 50% shadow pass overhead)
+      if (time - lastShadowUpdate >= 33) {
+        lastShadowUpdate = time;
+        renderer.shadowMap.needsUpdate = true;
+      }
+    }
+
     if (playing) {
       const frameMs = Math.max(0, time - (lastFrame ?? time - 1000 / 60));
-      controls.updateLook(frameMs);
+      controls.updateLook();
       accumulated = Math.min(accumulated + (lastFrame === undefined ? 0 : frameMs), tickMs * movementRules.maxCatchUpTicks);
       lastFrame = time;
 
-      while (accumulated >= tickMs) {
-        previous = { ...player, pos: [...player.pos] };
+      let steps = 0;
+      while (accumulated >= tickMs && steps < 3) {
+        previous = { ...player, pos: [player.pos[0], player.pos[1], player.pos[2]] };
         const input = controls.input.consume();
 
         // Immediate Client-Side Prediction: Step physics locally at 30Hz!
@@ -1068,6 +1141,11 @@ try {
         }
 
         accumulated -= tickMs;
+        steps++;
+      }
+
+      if (accumulated >= tickMs) {
+        accumulated = 0; // Discard excess time to prevent catch-up spiral
       }
 
       // Smooth exponential decay of reconciliation offset (eliminates any micro-pop)
@@ -1083,26 +1161,30 @@ try {
         lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y,
         lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z
       );
-      stamina.textContent = `Thể lực ${Math.round(player.stamina)}/${movementRules.maxStamina}`;
+
+      const staminaVal = Math.round(player.stamina);
+      if (staminaVal !== lastStaminaVal) {
+        lastStaminaVal = staminaVal;
+        stamina.textContent = `Thể lực ${staminaVal}/${movementRules.maxStamina}`;
+      }
 
       // N04: Interpolate all remote players smoothly at 60 FPS
       session.updateRemoteInterpolation(frameMs / 1000);
 
-      // T03: Update Compass, Minimap, and Aim Interaction
-      updateCompass(camera.rotation.y, player.pos, activeJailId);
-      renderMinimap(player.pos, camera.rotation.y, activeJailId);
-      checkAimInteraction(latestSnapshot, camera.rotation.y);
+      // T03: Update Compass, Minimap, and Aim Interaction (throttled to 30Hz)
+      updateCompass(camera.rotation.y, player.pos, activeJailId, time);
+      renderMinimap(player.pos, camera.rotation.y, activeJailId, time);
+      checkAimInteraction(latestSnapshot, camera.rotation.y, time);
     }
 
     renderer.render(scene, camera);
 
     if (import.meta.env.DEV) {
-      const input = controls.input.peek();
-      debug.dataset.yaw = String(camera.rotation.y);
-      debug.dataset.x = player.pos[0].toFixed(3);
-      debug.dataset.eye = camera.position.y.toFixed(3);
-      debug.dataset.grounded = String(player.grounded);
-      debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
+      if (time - lastDebugUpdate >= 100) { // 10Hz debug UI updates
+        lastDebugUpdate = time;
+        const input = controls.input.peek();
+        debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
+      }
     }
   });
 

@@ -24,9 +24,7 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
   let wantsLock = locked;
   // Chỉ camera setting; không phải gameplay tunable.
   const mouseSensitivity = 0.002;
-  // Limit a single bad device sample before it can bury a real movement
-  // in the opposite direction. The render loop also bounds batched events.
-  const maxSamplePixels = 160;
+  const maxSamplePixels = 240;
   let mouseX = 0;
   let mouseY = 0;
   function clearMouse() {
@@ -111,12 +109,12 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
 
   return {
     input,
-    updateLook(frameMs: number) {
+    updateLook(_frameMs?: number) {
       if (!locked || (mouseX === 0 && mouseY === 0)) return;
-      // Up to two turns/second, with a 20-degree ceiling after a stalled frame.
-      const maxAngle = Math.min(Math.PI / 9, 4 * Math.PI * frameMs / 1000);
+      // 20-degree ceiling after a stalled frame to bound corrupted device spikes
+      const maxAngle = Math.PI / 9;
       const angle = Math.hypot(mouseX, mouseY) * mouseSensitivity;
-      const gain = mouseSensitivity * Math.min(1, maxAngle / angle);
+      const gain = mouseSensitivity * Math.min(1, maxAngle / Math.max(1e-9, angle));
       const look = applyLook(camera.rotation.y, camera.rotation.x, mouseX, mouseY, gain);
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
       clearMouse();

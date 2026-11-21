@@ -31,6 +31,8 @@ export function villagePreview(map = villageMap) {
     mesh.name = name;
     mesh.position.set(x, y, z);
     mesh.scale.set(w, h, d);
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
     village.add(mesh);
     return mesh;
   }
@@ -93,6 +95,7 @@ export function villagePreview(map = villageMap) {
         pad.mesh.position.set(jail.x, pad.position.y, jail.z);
         pad.mesh.scale.set(jail.width, pad.scale.y, jail.depth);
       }
+      pad.mesh.updateMatrix();
     }
   }
   const policeSpawns = map.spawns.police.map(([x,,z]): [number, number] => [x,z]);
@@ -102,6 +105,8 @@ export function villagePreview(map = villageMap) {
     mesh.name = collider.id;
     mesh.scale.set(...collider.size);
     mesh.position.set(...collider.center);
+    mesh.matrixAutoUpdate = false;
+    mesh.updateMatrix();
     bounds.add(mesh);
   }
   const volumes = new Map([...map.colliders,...map.hideZones].map(item => [item.id,item]));
@@ -114,6 +119,8 @@ export function villagePreview(map = villageMap) {
     group.position.set(...object.pos);
     group.scale.set(...object.scale);
     group.rotation.y = object.yaw;
+    group.matrixAutoUpdate = false;
+    group.updateMatrix();
     village.add(group);
     function part(name: string, geometry: BufferGeometry, color: string, y: number, width: number, height: number, depth: number) {
       group.add(shape(name, geometry, color, 0, y, 0, width, height, depth));

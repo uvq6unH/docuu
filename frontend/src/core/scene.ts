@@ -2,7 +2,7 @@ import { villageMap } from '../world/shared-map';
 import { createGroundMaterial } from '../world/ground-material';
 import {
   Color, DirectionalLight, Fog, GridHelper, Group, HemisphereLight, InstancedMesh, Mesh,
-  ACESFilmicToneMapping, PCFSoftShadowMap, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
+  ACESFilmicToneMapping, PCFShadowMap, PerspectiveCamera, PlaneGeometry, Scene, WebGLRenderer,
 } from 'three';
 
 // Chỉ là sân render F04; không phải map/collider hay rules authoritative.
@@ -17,7 +17,7 @@ export function createScene() {
   const sun = new DirectionalLight('#ffe0a8', 3.2);
   sun.position.set(-28, 40, 18);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = sun.shadow.camera.bottom = -54;
   sun.shadow.camera.right = sun.shadow.camera.top = 54;
   sun.shadow.camera.near = 1;
@@ -32,21 +32,27 @@ export function createScene() {
   ground.rotation.x = -Math.PI / 2;
   ground.name = 'render-test-ground';
   ground.receiveShadow = true;
+  ground.matrixAutoUpdate = false;
+  ground.updateMatrix();
   scene.add(ground);
   const grid = new GridHelper(villageMap.size[0], 40, '#546c3d', '#75944f');
   grid.position.y = 0.01;
   grid.visible = false;
+  grid.matrixAutoUpdate = false;
+  grid.updateMatrix();
   scene.add(grid);
   return { scene, camera };
 }
 
 export function createRenderer(container: HTMLElement) {
-  const renderer = new WebGLRenderer({ antialias: true });
+  const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  renderer.shadowMap.type = PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.shadowMap.needsUpdate = true;
   renderer.domElement.setAttribute('aria-label', 'Mặt đất sân thử 3D');
   container.append(renderer.domElement);
   return renderer;

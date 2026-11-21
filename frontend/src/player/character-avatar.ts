@@ -111,11 +111,11 @@ export class CharacterAvatar {
 
     // Reusable shared primitive geometries
     const geoBox = (w: number, h: number, d: number) => new BoxGeometry(w, h, d);
-    const makeMesh = (geo: BoxGeometry | CylinderGeometry, mat: MeshStandardMaterial, name: string) => {
+    const makeMesh = (geo: BoxGeometry | CylinderGeometry, mat: MeshStandardMaterial, name: string, cast = false) => {
       const mesh = new Mesh(geo, mat);
       mesh.name = name;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      mesh.castShadow = cast;
+      mesh.receiveShadow = false;
       return mesh;
     };
 
@@ -125,7 +125,7 @@ export class CharacterAvatar {
     this.hips.position.set(0, 0.76, 0);
     this.root.add(this.hips);
 
-    const pelvisMesh = makeMesh(geoBox(0.30, 0.14, 0.20), this.materials.secondary, 'pelvis_mesh');
+    const pelvisMesh = makeMesh(geoBox(0.30, 0.14, 0.20), this.materials.secondary, 'pelvis_mesh', true);
     this.hips.add(pelvisMesh);
 
     // Belt
@@ -144,7 +144,7 @@ export class CharacterAvatar {
     this.hips.add(this.torso);
 
     // Chest & abdomen (Height 0.42, from Y=0.0 to 0.42)
-    const chestMesh = makeMesh(geoBox(0.34, 0.42, 0.22), this.materials.primary, 'chest_mesh');
+    const chestMesh = makeMesh(geoBox(0.34, 0.42, 0.22), this.materials.primary, 'chest_mesh', true);
     chestMesh.position.set(0, 0.21, 0);
     this.torso.add(chestMesh);
 
@@ -340,6 +340,15 @@ export class CharacterAvatar {
     this.legLowerR.add(footR);
 
     this.setRole(role);
+
+    // Freeze local transformation matrices on all static bone-attached meshes
+    // to eliminate 30+ redundant matrix recomputations per avatar per frame
+    this.root.traverse((node) => {
+      if (node instanceof Mesh) {
+        node.matrixAutoUpdate = false;
+        node.updateMatrix();
+      }
+    });
   }
 
   public setRole(role: 'POLICE' | 'ROBBER'): void {

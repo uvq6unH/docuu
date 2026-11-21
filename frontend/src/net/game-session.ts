@@ -34,8 +34,14 @@ export interface RemotePlayerEntity {
   currentPos: Vector3;
   targetPos: Vector3;
   previousPos: Vector3;
+  fromPos: Vector3;
+  toPos: Vector3;
   currentYaw: number;
   targetYaw: number;
+  fromYaw: number;
+  toYaw: number;
+  interpElapsed: number;
+  interpDuration: number;
   targetScaleY: number;
   state?: string | undefined;
   crouch: boolean;
@@ -168,8 +174,14 @@ export class GameSession {
             currentPos: new Vector3(p.pos[0], targetY, p.pos[2]),
             targetPos: new Vector3(p.pos[0], targetY, p.pos[2]),
             previousPos: new Vector3(p.pos[0], targetY, p.pos[2]),
+            fromPos: new Vector3(p.pos[0], targetY, p.pos[2]),
+            toPos: new Vector3(p.pos[0], targetY, p.pos[2]),
             currentYaw: p.yaw || 0,
             targetYaw: p.yaw || 0,
+            fromYaw: p.yaw || 0,
+            toYaw: p.yaw || 0,
+            interpElapsed: 0,
+            interpDuration: 0.0667,
             targetScaleY: scaleY,
             state: p.state,
             crouch: Boolean(p.crouch),
@@ -180,8 +192,19 @@ export class GameSession {
             entity.role = p.role;
             entity.avatar.setRole(p.role);
           }
-          entity.targetPos.set(p.pos[0], targetY, p.pos[2]);
-          entity.targetYaw = p.yaw || 0;
+          const nextTarget = new Vector3(p.pos[0], targetY, p.pos[2]);
+          if (entity.currentPos.distanceTo(nextTarget) > 3.0) {
+            entity.currentPos.copy(nextTarget);
+            entity.fromPos.copy(nextTarget);
+            entity.toPos.copy(nextTarget);
+          } else {
+            entity.fromPos.copy(entity.currentPos);
+            entity.toPos.copy(nextTarget);
+          }
+          entity.targetPos.copy(nextTarget);
+          entity.fromYaw = entity.currentYaw;
+          entity.toYaw = p.yaw || 0;
+          entity.interpElapsed = 0;
           entity.targetScaleY = scaleY;
           entity.state = p.state;
           entity.crouch = Boolean(p.crouch);
@@ -212,28 +235,34 @@ export class GameSession {
 
   /**
    * N04 Remote Player Interpolation:
-   * Smoothly interpolates remote players' positions and rotations at 60 FPS in render loop,
+   * Smoothly interpolates remote players' positions and rotations with continuous velocity at 60 FPS in render loop,
    * while driving procedural low-poly skeletal animations (walk, run, crouch, idle, jailed).
    */
   public updateRemoteInterpolation(dtSeconds: number): void {
     if (this.entities.size === 0) return;
-    const lerpFactor = Math.min(1, Math.max(0.01, dtSeconds * 22));
 
     for (const entity of this.entities.values()) {
       entity.previousPos.copy(entity.currentPos);
 
-      // If position jumped by more than 3.0m (teleport to jail cell / respawn), snap immediately
-      if (entity.currentPos.distanceTo(entity.targetPos) > 3.0) {
-        entity.currentPos.copy(entity.targetPos);
+      entity.interpElapsed += dtSeconds;
+      const t = Math.min(1.25, entity.interpElapsed / entity.interpDuration);
+
+      if (t <= 1.0) {
+        entity.currentPos.lerpVectors(entity.fromPos, entity.toPos, t);
       } else {
-        entity.currentPos.lerp(entity.targetPos, lerpFactor);
+        // Continuous linear velocity extrapolation between snapshots so entities never stutter
+        const extraTime = (t - 1.0) * entity.interpDuration;
+        const velX = (entity.toPos.x - entity.fromPos.x) / entity.interpDuration;
+        const velZ = (entity.toPos.z - entity.fromPos.z) / entity.interpDuration;
+        entity.currentPos.x = entity.toPos.x + velX * extraTime;
+        entity.currentPos.z = entity.toPos.z + velZ * extraTime;
       }
       entity.avatar.root.position.copy(entity.currentPos);
 
       // Smooth yaw angle interpolation with wrapping
-      let diff = (entity.targetYaw - entity.currentYaw + Math.PI) % (Math.PI * 2) - Math.PI;
+      let diff = (entity.toYaw - entity.fromYaw + Math.PI) % (Math.PI * 2) - Math.PI;
       if (diff < -Math.PI) diff += Math.PI * 2;
-      entity.currentYaw += diff * lerpFactor;
+      entity.currentYaw = entity.fromYaw + diff * Math.min(1.0, t);
       entity.avatar.root.rotation.y = entity.currentYaw;
 
       // Calculate horizontal velocity to drive locomotion animations

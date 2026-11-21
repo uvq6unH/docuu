@@ -480,7 +480,7 @@ export class DatabaseManager {
   }): void {
     const now = Date.now();
     const stmt = this.db.prepare(`
-      INSERT INTO game_events (event_id, match_id, tick, event_type, actor_id, target_id, payload_json, created_at)
+      INSERT OR REPLACE INTO game_events (event_id, match_id, tick, event_type, actor_id, target_id, payload_json, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     stmt.run(

@@ -44,9 +44,13 @@ export async function loadVillageModels(village: Group, jailModel: Group, isDisp
           mesh.setMatrixAt(index, new Matrix4().multiplyMatrices(matrix, part.matrixWorld));
         });
         mesh.computeBoundingSphere();
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
         batch.add(mesh);
       });
       if (!batch.children.length) throw new Error('Empty model');
+      batch.matrixAutoUpdate = false;
+      batch.updateMatrix();
       village.add(batch);
       for (const { placeholder } of placements) placeholder.visible = false;
     } catch (error) {
