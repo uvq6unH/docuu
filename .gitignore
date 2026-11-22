@@ -1,9 +1,13 @@
 # ==========================================
-# Dependencies
+# Dependencies & Package Managers
 # ==========================================
 node_modules/
 .pnp
 .pnp.js
+pnpm-lock.yaml
+.pnpm/
+.pnpm-store/
+yarn.lock
 
 # ==========================================
 # Production & TypeScript Build Artifacts
@@ -54,12 +58,13 @@ yarn-error.log*
 pnpm-debug.log*
 
 # ==========================================
-# Editor & IDE Directories
+# Editor, Agent & IDE Directories
 # ==========================================
 .vscode/*
 !.vscode/extensions.json
 !.vscode/launch.json
 .idea/
+.gemini/
 *.suo
 *.ntvs*
 *.njsproj
@@ -77,6 +82,8 @@ pnpm-debug.log*
 ehthumbs.db
 Thumbs.db
 [Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
 
 # ==========================================
 # Blender & 3D Temporary Files

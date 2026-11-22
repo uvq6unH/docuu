@@ -1,14 +1,31 @@
 import { villagePreview } from './world/village';
 import './style.css';
-import { createRenderer, createScene, detectGpuDiagnostics, disposeScene, resizeScene } from './core/scene';
+import {
+  createRenderer,
+  createScene,
+  detectGpuDiagnostics,
+  disposeScene,
+  resizeScene,
+  setAtmosphere,
+  type AtmospherePreset,
+} from './core/scene';
 import { createControls } from './input/controls';
+import { TouchController } from './input/touch';
 import { initialMovement, stepMovement, type MovementState } from '../../packages/shared/src/movement';
 import { movementRules } from '../../packages/shared/src/rules';
 import { villageMap } from './world/shared-map';
 import { loadVillageModels } from './world/load-village-models';
 import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
-import type { RoomState, GameEvent, Snapshot } from '../../packages/shared/src/protocol';
+import type {
+  RoomState,
+  GameEvent,
+  Snapshot,
+  QuickChatMessage,
+  TacticalPing,
+  PebbleEvent,
+  HatCosmetic,
+} from '../../packages/shared/src/protocol';
 import type { Vec3 } from '../../packages/shared/src/map';
 import { sound } from './core/audio';
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
@@ -90,8 +107,53 @@ const helpModal = requireElement('#help-modal');
 const btnToggleHelp = requireElement<HTMLButtonElement>('#btn-toggle-help');
 const btnCloseHelp = requireElement<HTMLButtonElement>('#btn-close-help');
 
+// Settings Modal & Spectator Elements
+const btnToggleSettings = requireElement<HTMLButtonElement>('#btn-toggle-settings');
+const btnCloseSettings = requireElement<HTMLButtonElement>('#btn-close-settings');
+const settingsModal = requireElement('#settings-modal');
+const settingMouseSens = requireElement<HTMLInputElement>('#setting-mouse-sens');
+const valMouseSens = requireElement('#val-mouse-sens');
+const settingFov = requireElement<HTMLInputElement>('#setting-fov');
+const valFov = requireElement('#val-fov');
+const settingVolume = requireElement<HTMLInputElement>('#setting-volume');
+const valVolume = requireElement('#val-volume');
+const settingTouchToggle = requireElement<HTMLInputElement>('#setting-touch-toggle');
+const settingWeather = requireElement<HTMLSelectElement>('#setting-weather');
+
+const spectatorHud = requireElement('#spectator-hud');
+const spectatorTargetName = requireElement('#spectator-target-name');
+
+// Quick Chat & Radio Elements
+const quickChatFeed = requireElement<HTMLDivElement>('#quick-chat-feed');
+const quickChatHints = requireElement<HTMLDivElement>('#quick-chat-hints');
+
+// MVP & Result Elements
+const mvpCardsContainer = requireElement<HTMLDivElement>('#mvp-cards-container');
+const mvpPoliceName = requireElement<HTMLDivElement>('#mvp-police-name');
+const mvpPoliceStat = requireElement<HTMLDivElement>('#mvp-police-stat');
+const mvpRobberName = requireElement<HTMLDivElement>('#mvp-robber-name');
+const mvpRobberStat = requireElement<HTMLDivElement>('#mvp-robber-stat');
+const matchStatsContainer = requireElement<HTMLDivElement>('#match-stats-container');
+const matchStatsTbody = requireElement<HTMLTableSectionElement>('#match-stats-tbody');
+
+// Public Room Browser & Tutorial Elements
+const publicRoomsList = requireElement<HTMLDivElement>('#public-rooms-list');
+const btnRefreshRooms = requireElement<HTMLButtonElement>('#btn-refresh-rooms');
+const btnTutorial = requireElement<HTMLButtonElement>('#btn-tutorial');
+const tutorialOverlay = requireElement<HTMLDivElement>('#tutorial-overlay');
+const tutorialStepTag = requireElement<HTMLSpanElement>('#tutorial-step-tag');
+const tutorialTitle = requireElement<HTMLHeadingElement>('#tutorial-title');
+const tutorialDesc = requireElement<HTMLParagraphElement>('#tutorial-desc');
+const tutorialProgressFill = requireElement<HTMLDivElement>('#tutorial-progress-fill');
+const btnExitTutorial = requireElement<HTMLButtonElement>('#btn-exit-tutorial');
+
+// Map Variant & Cosmetics Elements
+const mapVariantContainer = requireElement<HTMLDivElement>('#map-variant-container');
+const selectMapVariant = requireElement<HTMLSelectElement>('#select-map-variant');
+const selectCosmeticHat = requireElement<HTMLSelectElement>('#select-cosmetic-hat');
+
 try {
-  const { scene, camera } = createScene();
+  const { scene, camera, sun, hemi } = createScene();
   const world = villagePreview();
   scene.add(world.village);
   const renderer = createRenderer(container);
@@ -125,6 +187,8 @@ try {
   let lastObservedPhase = '';
   let lastFrozenNoticeTime = 0;
   let lastStaminaVal = -1;
+  let spectatorIndex = 0;
+  let isSpectating = false;
 
   interface PredictedFrame {
     seq: number;
@@ -168,6 +232,54 @@ try {
     }
   }
   updateJailRescueBeacons('J1');
+
+  // Folk Costume preferences
+  let currentShirtColor = '';
+  let currentHat: HatCosmetic = 'none';
+
+  // Tactical Ping objects
+  interface ActivePingRing {
+    mesh: Mesh;
+    opacity: number;
+    scale: number;
+  }
+  const activePingRings: ActivePingRing[] = [];
+  const activeMinimapPings: { pos: Vec3; role: string; expireTime: number }[] = [];
+
+  function spawnTacticalPingRing(pos: Vec3, role: string) {
+    const geo = new RingGeometry(0.35, 0.55, 24);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new MeshBasicMaterial({
+      color: role === 'POLICE' ? 0x2876c9 : 0xec8f32,
+      side: DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const mesh = new Mesh(geo, mat);
+    mesh.position.set(pos[0], 0.05, pos[2]);
+    scene.add(mesh);
+    activePingRings.push({ mesh, opacity: 0.9, scale: 1.0 });
+  }
+
+  function spawnPebbleImpact(pos: Vec3) {
+    const geo = new RingGeometry(0.1, 0.25, 16);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new MeshBasicMaterial({
+      color: 0x9e8965,
+      side: DoubleSide,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const mesh = new Mesh(geo, mat);
+    mesh.position.set(pos[0], 0.04, pos[2]);
+    scene.add(mesh);
+    activePingRings.push({ mesh, opacity: 0.75, scale: 0.8 });
+  }
+
+  // Interactive Tutorial state
+  let isTutorial = false;
+  let tutorialStep = 1;
+  let tutorialTimer = 0;
 
   function showToast(message: string, durationMs = 3500) {
     if (toastTimer) clearTimeout(toastTimer);
@@ -317,6 +429,26 @@ try {
     minimapCtx.moveTo(sx, sy);
     minimapCtx.lineTo(sx + forwardX, sy + forwardY);
     minimapCtx.stroke();
+
+    // Tactical Pings on Minimap
+    for (let i = activeMinimapPings.length - 1; i >= 0; i--) {
+      const p = activeMinimapPings[i]!;
+      if (now > p.expireTime) {
+        activeMinimapPings.splice(i, 1);
+      } else {
+        const px = toX(p.pos[0]);
+        const py = toY(p.pos[2]);
+        const progress = Math.max(0, (p.expireTime - now) / 3000);
+        const radius = 3 + (1 - progress) * 8;
+        minimapCtx.save();
+        minimapCtx.strokeStyle = p.role === 'POLICE' ? `rgba(40, 118, 201, ${progress})` : `rgba(236, 143, 50, ${progress})`;
+        minimapCtx.lineWidth = 2;
+        minimapCtx.beginPath();
+        minimapCtx.arc(px, py, radius, 0, Math.PI * 2);
+        minimapCtx.stroke();
+        minimapCtx.restore();
+      }
+    }
   }
 
   // Aim Assist & Proximity Action Prompts (Debounced style mutations + 30Hz throttle)
@@ -410,6 +542,51 @@ try {
             DISCONNECT_TIMEOUT: 'Người chơi mất kết nối quá thời gian cho phép.',
           };
           resultReason.textContent = reasons[reason] ?? reason;
+
+          // Render MVP and Summary Stats Card
+          if (snapshot.result.stats) {
+            matchStatsContainer.hidden = false;
+            matchStatsTbody.replaceChildren();
+            for (const [pId, pStat] of Object.entries(snapshot.result.stats)) {
+              const member = session.currentRoom?.roster.find((m) => m.id === pId);
+              const row = document.createElement('tr');
+              const nameCell = document.createElement('td');
+              nameCell.textContent = member?.name || pId;
+              if (pId === session.playerId) nameCell.style.fontWeight = '700';
+
+              const roleCell = document.createElement('td');
+              roleCell.textContent = member?.role === 'POLICE' ? '👮 Cảnh sát' : '🥷 Cướp';
+
+              const capCell = document.createElement('td');
+              capCell.textContent = String(pStat.captures || 0);
+
+              const resCell = document.createElement('td');
+              resCell.textContent = String(pStat.rescues || 0);
+
+              const jailCell = document.createElement('td');
+              jailCell.textContent = `${Math.round((pStat.timeJailedMs || 0) / 1000)}s`;
+
+              row.append(nameCell, roleCell, capCell, resCell, jailCell);
+              matchStatsTbody.append(row);
+            }
+          }
+
+          if (snapshot.result.mvpPolice || snapshot.result.mvpRobber) {
+            mvpCardsContainer.hidden = false;
+            if (snapshot.result.mvpPolice) {
+              const pMember = session.currentRoom?.roster.find((m) => m.id === snapshot.result!.mvpPolice);
+              const pStat = snapshot.result.stats?.[snapshot.result.mvpPolice];
+              mvpPoliceName.textContent = pMember?.name || snapshot.result.mvpPolice;
+              mvpPoliceStat.textContent = `${pStat?.captures || 0} lần bắt`;
+            }
+            if (snapshot.result.mvpRobber) {
+              const rMember = session.currentRoom?.roster.find((m) => m.id === snapshot.result!.mvpRobber);
+              const rStat = snapshot.result.stats?.[snapshot.result.mvpRobber];
+              mvpRobberName.textContent = rMember?.name || snapshot.result.mvpRobber;
+              mvpRobberStat.textContent = `${rStat?.rescues || 0} lần giải cứu`;
+            }
+          }
+
           resultPanel.hidden = false;
           resultTitle.focus();
         }
@@ -579,6 +756,58 @@ try {
         rescueBarContainer.hidden = true;
       }
 
+      // Spectator Mode handling when Jailed
+      if (self.state === 'JAILED' && self.role === 'ROBBER') {
+        const freeTeammates = snapshot.players.filter((p) => p.role === 'ROBBER' && p.state !== 'JAILED');
+        if (freeTeammates.length > 0) {
+          isSpectating = true;
+          spectatorHud.hidden = false;
+          const target = freeTeammates[spectatorIndex % freeTeammates.length]!;
+          spectatorTargetName.textContent = target.id;
+        } else {
+          isSpectating = false;
+          spectatorHud.hidden = true;
+        }
+      } else {
+        isSpectating = false;
+        spectatorHud.hidden = true;
+      }
+
+      // 3D Spatial Audio & Ambient Atmosphere
+      if (snapshot.phase === 'PLAYING') {
+        sound.startAmbientVillage();
+        for (const other of snapshot.players) {
+          const isMoving = Math.hypot(other.vel[0], other.vel[2]) > 0.4;
+          const isSprinting = Math.hypot(other.vel[0], other.vel[2]) > 4.5;
+          if (isMoving && other.grounded && !other.crouch) {
+            sound.playRemoteFootstep(
+              other.id,
+              other.pos,
+              player.pos,
+              yaw,
+              isSprinting,
+              Boolean(other.crouch)
+            );
+          }
+        }
+
+        if (self.role === 'ROBBER' && self.state !== 'JAILED') {
+          let minPoliceDist = Infinity;
+          for (const other of snapshot.players) {
+            if (other.role === 'POLICE') {
+              const d = Math.hypot(other.pos[0] - player.pos[0], other.pos[2] - player.pos[2]);
+              if (d < minPoliceDist) minPoliceDist = d;
+            }
+          }
+          if (minPoliceDist < 8.0) {
+            const danger = Math.max(0, Math.min(1, (8.0 - minPoliceDist) / 6.0));
+            sound.updateTensionHeartbeat(danger);
+          }
+        }
+      } else {
+        sound.stopAmbientVillage();
+      }
+
       debug.dataset.ack = String(self.ackSeq);
       debug.dataset.z = String(self.pos[2]);
     },
@@ -606,6 +835,37 @@ try {
         showToast(`⏳ Chuyển sang pha: ${data.phase} ${data.jailId ? `(${data.jailId})` : ''}`);
       }
     },
+    onChat(chat: QuickChatMessage) {
+      sound.playQuickChatChime();
+      const item = document.createElement('div');
+      item.className = `quick-chat-item ${chat.role === 'ROBBER' ? 'team-robber' : 'team-police'}`;
+      const sender = document.createElement('span');
+      sender.className = 'quick-chat-sender';
+      sender.textContent = `${chat.role === 'POLICE' ? '👮' : '🥷'} ${chat.senderName}:`;
+      const text = document.createElement('span');
+      text.textContent = chat.text;
+      item.append(sender, text);
+      quickChatFeed.append(item);
+      quickChatFeed.hidden = false;
+      window.setTimeout(() => {
+        item.remove();
+        if (quickChatFeed.children.length === 0) quickChatFeed.hidden = true;
+      }, 4500);
+    },
+    onPing(ping: TacticalPing) {
+      sound.playPingSound();
+      spawnTacticalPingRing(ping.pos, ping.role);
+      activeMinimapPings.push({ pos: ping.pos, role: ping.role, expireTime: performance.now() + 3000 });
+      showToast(`📍 ${ping.role === 'POLICE' ? 'Cảnh sát' : 'Đồng đội'} đã đánh dấu vị trí!`, 1500);
+    },
+    onPebble(pebble: PebbleEvent) {
+      sound.playPebbleThrow();
+      window.setTimeout(() => {
+        sound.playPebbleHit();
+        spawnPebbleImpact(pebble.landingPos);
+      }, 350);
+      showToast('🪨 Có tiếng sỏi rơi ở gần!', 1200);
+    },
   });
 
   function updateRoomUI(room: RoomState | null) {
@@ -614,6 +874,8 @@ try {
     button.hidden = finished;
     if (!finished) {
       resultPanel.hidden = true;
+      mvpCardsContainer.hidden = true;
+      matchStatsContainer.hidden = true;
       resultShown = '';
     }
     if (!room || room.phase === 'LOBBY' || finished) {
@@ -640,6 +902,7 @@ try {
       notice.textContent = 'Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp';
       world.setServerJail(null);
       button.textContent = 'Vào sân tập 3D';
+      void refreshPublicRooms();
       return;
     }
 
@@ -653,6 +916,7 @@ try {
     rosterList.replaceChildren();
     const isHost = session.playerId === room.hostId;
     const isCaptain = session.playerId === room.captainId;
+    mapVariantContainer.hidden = !isHost || room.phase !== 'LOBBY';
 
     for (const member of room.roster) {
       const li = document.createElement('li');
@@ -990,6 +1254,118 @@ try {
     void controls.lock();
   });
 
+  // Public Room Browser
+  async function refreshPublicRooms() {
+    publicRoomsList.replaceChildren();
+    const loading = document.createElement('div');
+    loading.className = 'room-empty-note';
+    loading.textContent = 'Đang làm mới danh sách...';
+    publicRoomsList.append(loading);
+
+    try {
+      const rooms = await session.listRooms();
+      publicRoomsList.replaceChildren();
+      if (!rooms || rooms.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'room-empty-note';
+        empty.textContent = 'Chưa có phòng nào đang mở. Hãy tạo phòng mới!';
+        publicRoomsList.append(empty);
+        return;
+      }
+
+      for (const r of rooms) {
+        const item = document.createElement('div');
+        item.className = 'public-room-item';
+        const info = document.createElement('div');
+        info.innerHTML = `<span class="room-code-tag">${r.roomCode}</span> · <strong>${r.hostName}</strong> (${r.playerCount}/${r.maxPlayers})`;
+
+        const btnJoin = document.createElement('button');
+        btnJoin.className = 'btn-tool';
+        btnJoin.style.fontSize = '11px';
+        btnJoin.style.padding = '3px 8px';
+        btnJoin.textContent = r.phase === 'LOBBY' ? 'Vào phòng' : 'Đang chơi';
+        btnJoin.disabled = r.phase !== 'LOBBY' || r.playerCount >= r.maxPlayers;
+        btnJoin.addEventListener('click', () => {
+          joinRoomCodeInput.value = r.roomCode;
+          btnJoinRoom.click();
+        });
+
+        item.append(info, btnJoin);
+        publicRoomsList.append(item);
+      }
+    } catch {
+      publicRoomsList.replaceChildren();
+      const errNote = document.createElement('div');
+      errNote.className = 'room-empty-note';
+      errNote.textContent = 'Chưa có phòng trực tuyến khả dụng.';
+      publicRoomsList.append(errNote);
+    }
+  }
+  btnRefreshRooms.addEventListener('click', () => { void refreshPublicRooms(); });
+
+  // Interactive 1-Player Tutorial Mode
+  btnTutorial.addEventListener('click', () => {
+    isOffline = true;
+    isTutorial = true;
+    tutorialStep = 1;
+    tutorialTimer = 0;
+    session.leaveRoom();
+    currentRole = 'ROBBER';
+    player = initialMovement([-15, 0, 8]);
+    previous = { ...player, pos: [...player.pos] };
+    yaw = 0;
+    pitch = 0;
+    menuView.hidden = true;
+    roomView.hidden = true;
+    hudOverlay.hidden = false;
+    tutorialOverlay.hidden = false;
+    tutorialStepTag.textContent = 'Bước 1/3';
+    tutorialTitle.textContent = 'Vượt chướng ngại vật';
+    tutorialDesc.textContent = 'Dùng phím W, A, S, D di chuyển, giữ Shift chạy nhanh và bấm Space để nhảy qua hàng rào gỗ.';
+    tutorialProgressFill.style.width = '33%';
+    void controls.lock();
+  });
+
+  btnExitTutorial.addEventListener('click', () => {
+    isTutorial = false;
+    tutorialOverlay.hidden = true;
+    hudOverlay.hidden = true;
+    if (document.pointerLockElement) document.exitPointerLock();
+    menuView.hidden = false;
+    status.textContent = 'Đã thoát chế độ hướng dẫn.';
+  });
+
+  // Folk Costume Customization Listeners
+  selectCosmeticHat.addEventListener('change', () => {
+    currentHat = selectCosmeticHat.value as HatCosmetic;
+    void session.setCosmetic({ hat: currentHat, shirtColor: currentShirtColor || undefined });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>('.shirt-swatch').forEach((swatch) => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('.shirt-swatch').forEach((s) => s.classList.remove('active'));
+      swatch.classList.add('active');
+      currentShirtColor = swatch.dataset.color || '';
+      void session.setCosmetic({ hat: currentHat, shirtColor: currentShirtColor || undefined });
+    });
+  });
+
+  // Map Variant Selection
+  selectMapVariant.addEventListener('change', () => {
+    showToast(`Bản đồ đã chọn: ${selectMapVariant.options[selectMapVariant.selectedIndex]?.text}`);
+  });
+
+  // Weather / Atmosphere Setup
+  const savedWeather = (localStorage.getItem('folk_tag_weather') as AtmospherePreset) || 'midday';
+  settingWeather.value = savedWeather;
+  setAtmosphere(savedWeather, scene, sun, hemi);
+
+  settingWeather.addEventListener('change', () => {
+    const val = settingWeather.value as AtmospherePreset;
+    setAtmosphere(val, scene, sun, hemi);
+    localStorage.setItem('folk_tag_weather', val);
+  });
+
   // Controls setup
   const controls = createControls({
     canvas: renderer.domElement,
@@ -1029,6 +1405,220 @@ try {
       } else if (!locked) button.focus({ preventScroll: true });
     },
     onError(message) { status.textContent = message; },
+  });
+
+  // Touch Controller Initialization for Mobile / Tablet Devices
+  const touchController = new TouchController({
+    onMovement(moveX, moveZ) {
+      if (moveX === 1) controls.pressVirtual('KeyD');
+      else if (moveX === -1) controls.pressVirtual('KeyA');
+      else { controls.releaseVirtual('KeyD'); controls.releaseVirtual('KeyA'); }
+
+      if (moveZ === 1) controls.pressVirtual('KeyW');
+      else if (moveZ === -1) controls.pressVirtual('KeyS');
+      else { controls.releaseVirtual('KeyW'); controls.releaseVirtual('KeyS'); }
+    },
+    onLook(dx, dy) {
+      controls.addLookDelta(dx, dy);
+    },
+    onSprint(sprinting) {
+      if (sprinting) controls.pressVirtual('ShiftLeft');
+      else controls.releaseVirtual('ShiftLeft');
+    },
+    onCrouch(crouched) {
+      if (crouched) controls.pressVirtual('KeyC');
+      else controls.releaseVirtual('KeyC');
+    },
+    onJump() {
+      controls.pressVirtual('Space');
+      setTimeout(() => controls.releaseVirtual('Space'), 120);
+    },
+    onAction(held) {
+      if (currentRole === 'POLICE') {
+        if (held) controls.triggerCapture();
+      } else {
+        if (held) controls.pressVirtual('KeyE');
+        else controls.releaseVirtual('KeyE');
+      }
+    },
+  });
+  touchController.mount(document.body);
+
+  // Settings Modal Controls
+  function toggleSettings(open?: boolean) {
+    const shouldOpen = open !== undefined ? open : settingsModal.hidden;
+    settingsModal.hidden = !shouldOpen;
+    if (shouldOpen && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }
+  btnToggleSettings.addEventListener('click', () => toggleSettings(true));
+  btnCloseSettings.addEventListener('click', () => toggleSettings(false));
+
+  const savedSens = parseFloat(localStorage.getItem('folk_tag_sens') || '1.0');
+  if (savedSens && !isNaN(savedSens)) {
+    settingMouseSens.value = savedSens.toString();
+    valMouseSens.textContent = savedSens.toFixed(1);
+    controls.setSensitivity(savedSens);
+  }
+  settingMouseSens.addEventListener('input', () => {
+    const val = parseFloat(settingMouseSens.value);
+    valMouseSens.textContent = val.toFixed(1);
+    controls.setSensitivity(val);
+    localStorage.setItem('folk_tag_sens', val.toString());
+  });
+
+  const savedFov = parseInt(localStorage.getItem('folk_tag_fov') || '75', 10);
+  if (savedFov && !isNaN(savedFov)) {
+    settingFov.value = savedFov.toString();
+    valFov.textContent = savedFov.toString();
+    camera.fov = savedFov;
+    camera.updateProjectionMatrix();
+  }
+  settingFov.addEventListener('input', () => {
+    const val = parseInt(settingFov.value, 10);
+    valFov.textContent = val.toString();
+    camera.fov = val;
+    camera.updateProjectionMatrix();
+    localStorage.setItem('folk_tag_fov', val.toString());
+  });
+
+  const savedVol = parseFloat(localStorage.getItem('folk_tag_vol') || '1.0');
+  if (!isNaN(savedVol)) {
+    settingVolume.value = Math.round(savedVol * 100).toString();
+    valVolume.textContent = Math.round(savedVol * 100).toString();
+    sound.setMasterVolume(savedVol);
+  }
+  settingVolume.addEventListener('input', () => {
+    const val = parseInt(settingVolume.value, 10);
+    valVolume.textContent = val.toString();
+    sound.setMasterVolume(val / 100);
+    localStorage.setItem('folk_tag_vol', (val / 100).toString());
+  });
+
+  const savedTouch = localStorage.getItem('folk_tag_touch');
+  if (savedTouch === '1') {
+    settingTouchToggle.checked = true;
+    touchController.setVisible(true);
+  } else if (savedTouch === '0') {
+    settingTouchToggle.checked = false;
+    touchController.setVisible(false);
+  } else {
+    settingTouchToggle.checked = touchController.enabled;
+  }
+  settingTouchToggle.addEventListener('change', () => {
+    touchController.setVisible(settingTouchToggle.checked);
+    localStorage.setItem('folk_tag_touch', settingTouchToggle.checked ? '1' : '0');
+  });
+
+  // Spectator, Quick Chat & Tactical Interaction
+  window.addEventListener('keydown', (e) => {
+    if (isSpectating && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+      e.preventDefault();
+      spectatorIndex += e.code === 'ArrowRight' ? 1 : -1;
+      if (spectatorIndex < 0) spectatorIndex = 999;
+      return;
+    }
+
+    if (!playing) return;
+
+    // Quick Radio Chat (hotkeys 1, 2, 3, 4)
+    if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3' || e.code === 'Digit4') {
+      e.preventDefault();
+      const index = parseInt(e.code.replace('Digit', ''), 10);
+      const presetsPolice = [
+        'Cảnh sát đây, tập trung vây bắt!',
+        'Phát hiện cướp gần đống rơm!',
+        'Bảo vệ nhà giam cẩn thận!',
+        'Đã bắt được 1 tên cướp!',
+      ];
+      const presetsRobber = [
+        'Cảnh sát đang tới gần, tản ra mau!',
+        'Tôi chuẩn bị cứu bốt, yểm trợ!',
+        'Núp kỹ trong đống rơm đi!',
+        'Đã cứu thành công đồng đội!',
+      ];
+      const text = (currentRole === 'POLICE' ? presetsPolice : presetsRobber)[index - 1]!;
+      session.sendChat(text, true);
+      sound.playQuickChatChime();
+      showToast(`📢 Bạn: "${text}"`, 1800);
+      return;
+    }
+
+    // Tactical Ping (hotkey Q)
+    if (e.code === 'KeyQ') {
+      e.preventDefault();
+      const fX = -Math.sin(camera.rotation.y);
+      const fZ = -Math.cos(camera.rotation.y);
+      const pingPos: Vec3 = [
+        player.pos[0] + fX * 12,
+        0.05,
+        player.pos[2] + fZ * 12,
+      ];
+      session.sendPing(pingPos);
+      sound.playPingSound();
+      spawnTacticalPingRing(pingPos, currentRole || 'ROBBER');
+      activeMinimapPings.push({ pos: pingPos, role: currentRole || 'ROBBER', expireTime: performance.now() + 3000 });
+      showToast('📍 Đã đánh dấu vị trí chiến thuật!', 1500);
+      return;
+    }
+
+    // Distraction Pebble (hotkey F)
+    if (e.code === 'KeyF' && currentRole === 'ROBBER' && latestSnapshot?.self?.state !== 'JAILED') {
+      e.preventDefault();
+      const fX = -Math.sin(camera.rotation.y);
+      const fZ = -Math.cos(camera.rotation.y);
+      const landingPos: Vec3 = [
+        player.pos[0] + fX * 10,
+        0.05,
+        player.pos[2] + fZ * 10,
+      ];
+      session.sendPebble(player.pos, landingPos);
+      sound.playPebbleThrow();
+      window.setTimeout(() => {
+        sound.playPebbleHit();
+        spawnPebbleImpact(landingPos);
+      }, 350);
+      showToast('🪨 Đã ném sỏi đánh lạc hướng cảnh sát!', 1600);
+      return;
+    }
+  });
+
+  // Renderer canvas mouse clicks for Ping (Middle mouse) and Pebble (Right click)
+  renderer.domElement.addEventListener('mousedown', (e) => {
+    if (!playing) return;
+    if (e.button === 1) { // Middle click -> Ping
+      e.preventDefault();
+      const fX = -Math.sin(camera.rotation.y);
+      const fZ = -Math.cos(camera.rotation.y);
+      const pingPos: Vec3 = [
+        player.pos[0] + fX * 12,
+        0.05,
+        player.pos[2] + fZ * 12,
+      ];
+      session.sendPing(pingPos);
+      sound.playPingSound();
+      spawnTacticalPingRing(pingPos, currentRole || 'ROBBER');
+      activeMinimapPings.push({ pos: pingPos, role: currentRole || 'ROBBER', expireTime: performance.now() + 3000 });
+    } else if (e.button === 2 && currentRole === 'ROBBER' && latestSnapshot?.self?.state !== 'JAILED') { // Right click -> Pebble
+      e.preventDefault();
+      const fX = -Math.sin(camera.rotation.y);
+      const fZ = -Math.cos(camera.rotation.y);
+      const landingPos: Vec3 = [
+        player.pos[0] + fX * 10,
+        0.05,
+        player.pos[2] + fZ * 10,
+      ];
+      session.sendPebble(player.pos, landingPos);
+      sound.playPebbleThrow();
+      window.setTimeout(() => {
+        sound.playPebbleHit();
+        spawnPebbleImpact(landingPos);
+      }, 350);
+    }
+  });
+  spectatorHud.addEventListener('click', () => {
+    spectatorIndex++;
   });
 
   let disposed = false;
@@ -1168,11 +1758,26 @@ try {
 
       const blend = accumulated / tickMs;
       const lerp = (from: number, to: number) => from + (to - from) * blend;
-      camera.position.set(
-        lerp(previous.pos[0], player.pos[0]) + visualErrorOffset.x,
-        lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y,
-        lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z
-      );
+
+      const freeTeammates = latestSnapshot?.players.filter((p) => p.role === 'ROBBER' && p.state !== 'JAILED') || [];
+      const spectateTarget = (isSpectating && freeTeammates.length > 0)
+        ? freeTeammates[spectatorIndex % freeTeammates.length]
+        : null;
+
+      if (spectateTarget) {
+        camera.position.set(
+          spectateTarget.pos[0],
+          spectateTarget.pos[1] + eyeHeight(Boolean(spectateTarget.crouch)),
+          spectateTarget.pos[2]
+        );
+        camera.rotation.set(0, spectateTarget.yaw, 0, 'YXZ');
+      } else {
+        camera.position.set(
+          lerp(previous.pos[0], player.pos[0]) + visualErrorOffset.x,
+          lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y,
+          lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z
+        );
+      }
 
       const staminaVal = Math.round(player.stamina);
       if (staminaVal !== lastStaminaVal) {
@@ -1187,6 +1792,72 @@ try {
       updateCompass(camera.rotation.y, player.pos, activeJailId, time);
       renderMinimap(player.pos, camera.rotation.y, activeJailId, time);
       checkAimInteraction(latestSnapshot, camera.rotation.y, time);
+
+      // Update and fade 3D tactical ping rings
+      for (let i = activePingRings.length - 1; i >= 0; i--) {
+        const pingRing = activePingRings[i]!;
+        pingRing.scale += 0.012;
+        pingRing.opacity *= 0.95;
+        pingRing.mesh.scale.set(pingRing.scale, pingRing.scale, 1);
+        (pingRing.mesh.material as MeshBasicMaterial).opacity = pingRing.opacity;
+        if (pingRing.opacity <= 0.04) {
+          scene.remove(pingRing.mesh);
+          pingRing.mesh.geometry.dispose();
+          (pingRing.mesh.material as MeshBasicMaterial).dispose();
+          activePingRings.splice(i, 1);
+        }
+      }
+
+      // Interactive Tutorial step progression
+      if (isTutorial) {
+        if (tutorialStep === 1) {
+          tutorialStepTag.textContent = 'Bước 1/3';
+          tutorialTitle.textContent = 'Vượt chướng ngại vật';
+          tutorialDesc.textContent = 'Dùng WASD di chuyển, giữ Shift chạy nhanh và bấm Space để nhảy qua hàng rào gỗ.';
+          tutorialProgressFill.style.width = '33%';
+          if (player.pos[2] < 0.0) {
+            tutorialStep = 2;
+            sound.playRescueSound();
+            showToast('🎉 Xuất sắc! Bạn đã vượt qua hàng rào gỗ.', 2500);
+          }
+        } else if (tutorialStep === 2) {
+          tutorialStepTag.textContent = 'Bước 2/3';
+          tutorialTitle.textContent = 'Ẩn nấp rơm rạ (Tàng hình)';
+          tutorialDesc.textContent = 'Chạy đến đống rơm gần đó và giữ phím C để cúi người tàng hình.';
+          tutorialProgressFill.style.width = '66%';
+          if (player.crouched) {
+            tutorialTimer += 1;
+            if (tutorialTimer >= 45) { // 1.5s
+              tutorialStep = 3;
+              tutorialTimer = 0;
+              sound.playRescueSound();
+              showToast('🌾 Đã tàng hình thành công! Cảnh sát ngoài 2m sẽ không thể nhìn thấy bạn.', 3000);
+            }
+          } else {
+            tutorialTimer = 0;
+          }
+        } else if (tutorialStep === 3) {
+          tutorialStepTag.textContent = 'Bước 3/3';
+          tutorialTitle.textContent = 'Giải cứu đồng đội';
+          tutorialDesc.textContent = 'Tiến lại gần nhà giam J1 trung tâm và giữ phím E trong 2 giây để bẻ khóa cứu đồng đội!';
+          tutorialProgressFill.style.width = '90%';
+          const distToJail = Math.hypot(villageMap.jails[0]!.center[0] - player.pos[0], villageMap.jails[0]!.center[2] - player.pos[2]);
+          if (distToJail <= 4.0 && controls.input.peek().rescueHeld) {
+            tutorialTimer += 1;
+            if (tutorialTimer >= 60) { // 2s
+              tutorialStep = 4;
+              tutorialProgressFill.style.width = '100%';
+              sound.playRescueSound();
+              flashScreen('flash-rescue');
+              tutorialStepTag.textContent = 'Hoàn thành';
+              tutorialTitle.textContent = '🏆 Huấn luyện hoàn tất!';
+              tutorialDesc.textContent = 'Bạn đã nắm vững toàn bộ kỹ năng vượt rào, ẩn nấp và giải cứu! Hãy tham gia phòng chơi thực tế để so tài.';
+            }
+          }
+        }
+      }
+
+      quickChatHints.hidden = !playing || isSpectating;
     }
 
     renderer.render(scene, camera);

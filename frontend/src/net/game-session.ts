@@ -10,6 +10,11 @@ import {
   type GameEvent,
   type AckResponse,
   type Role,
+  type QuickChatMessage,
+  type TacticalPing,
+  type PebbleEvent,
+  type PublicRoomSummary,
+  type CosmeticPreferences,
 } from '../../../packages/shared/src/protocol';
 import type { InputState } from '../input/state';
 import { readMapDigest } from './room-details';
@@ -21,6 +26,9 @@ export interface GameSessionCallbacks {
   onSnapshot: (snapshot: Snapshot) => void;
   onInterrupted?: () => void;
   onGameEvent?: (event: GameEvent) => void;
+  onChat?: (chat: QuickChatMessage) => void;
+  onPing?: (ping: TacticalPing) => void;
+  onPebble?: (pebble: PebbleEvent) => void;
 }
 
 type Credentials = { roomCode: string; playerId: string; resumeToken: string };
@@ -164,6 +172,7 @@ export class GameSession {
           const avatar = createCharacterModel(p.role);
           avatar.root.position.set(p.pos[0], targetY, p.pos[2]);
           avatar.root.rotation.y = p.yaw || 0;
+          if (p.cosmetic) avatar.setCosmetics(p.cosmetic);
           this.group.add(avatar.root);
 
           entity = {
@@ -191,6 +200,9 @@ export class GameSession {
           if (entity.role !== p.role) {
             entity.role = p.role;
             entity.avatar.setRole(p.role);
+          }
+          if (p.cosmetic) {
+            entity.avatar.setCosmetics(p.cosmetic);
           }
           const nextTarget = new Vector3(p.pos[0], targetY, p.pos[2]);
           if (entity.currentPos.distanceTo(nextTarget) > 3.0) {
@@ -230,6 +242,18 @@ export class GameSession {
         if (!data || ![data.policeId, data.robberId].every(id => this.currentRoom?.roster.some(p => p.id === id))) return;
       }
       this.callbacks.onGameEvent?.(event);
+    });
+
+    this.socket.on(SERVER_EVENTS.GAME_CHAT_EVENT, (chat: QuickChatMessage) => {
+      this.callbacks.onChat?.(chat);
+    });
+
+    this.socket.on(SERVER_EVENTS.GAME_PING_EVENT, (ping: TacticalPing) => {
+      this.callbacks.onPing?.(ping);
+    });
+
+    this.socket.on(SERVER_EVENTS.GAME_PEBBLE_EVENT, (pebble: PebbleEvent) => {
+      this.callbacks.onPebble?.(pebble);
     });
   }
 
@@ -543,6 +567,49 @@ export class GameSession {
           requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         },
         (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
+  public sendChat(text: string, teamOnly = false): void {
+    if (this.socket.connected) {
+      this.socket.emit(CLIENT_EVENTS.GAME_CHAT, { text, teamOnly });
+    }
+  }
+
+  public sendPing(pos: [number, number, number]): void {
+    if (this.socket.connected) {
+      this.socket.emit(CLIENT_EVENTS.GAME_PING, { pos });
+    }
+  }
+
+  public sendPebble(fromPos: [number, number, number], landingPos: [number, number, number]): void {
+    if (this.socket.connected) {
+      this.socket.emit(CLIENT_EVENTS.GAME_PEBBLE, { fromPos, landingPos });
+    }
+  }
+
+  public async setCosmetic(cosmetic: CosmeticPreferences): Promise<AckResponse> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_SET_COSMETIC,
+        {
+          cosmetic,
+          requestId: `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        },
+        (res: AckResponse) => resolve(res)
+      );
+    });
+  }
+
+  public async listRooms(): Promise<PublicRoomSummary[]> {
+    return new Promise((resolve) => {
+      this.socket.emit(
+        CLIENT_EVENTS.ROOM_LIST,
+        { requestId: `req-${Date.now()}` },
+        (res: AckResponse<PublicRoomSummary[]>) => {
+          resolve(res?.data || []);
+        }
       );
     });
   }

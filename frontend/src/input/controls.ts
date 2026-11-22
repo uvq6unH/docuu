@@ -22,11 +22,13 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
   let requesting = false;
   let locked = document.pointerLockElement === canvas;
   let wantsLock = locked;
-  // Chỉ camera setting; không phải gameplay tunable.
-  const mouseSensitivity = 0.002;
+  // Camera look sensitivity setting
+  let sensitivityMultiplier = 1.0;
+  const baseMouseSensitivity = 0.002;
   const maxSamplePixels = 240;
   let mouseX = 0;
   let mouseY = 0;
+  let hasTouchLook = false;
   function clearMouse() {
     mouseX = 0;
     mouseY = 0;
@@ -109,13 +111,34 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
 
   return {
     input,
+    setSensitivity(multiplier: number) {
+      if (Number.isFinite(multiplier) && multiplier > 0) {
+        sensitivityMultiplier = Math.max(0.1, Math.min(5.0, multiplier));
+      }
+    },
+    addLookDelta(deltaX: number, deltaY: number) {
+      mouseX += deltaX;
+      mouseY += deltaY;
+      hasTouchLook = true;
+    },
+    pressVirtual(code: string) {
+      input.press(code);
+    },
+    releaseVirtual(code: string) {
+      input.release(code);
+    },
+    triggerCapture() {
+      input.capture();
+    },
     updateLook(_frameMs?: number) {
       void _frameMs;
-      if (!locked || (mouseX === 0 && mouseY === 0)) return;
+      if ((!locked && !hasTouchLook) || (mouseX === 0 && mouseY === 0)) return;
+      hasTouchLook = false;
+      const currentSens = baseMouseSensitivity * sensitivityMultiplier;
       // 20-degree ceiling after a stalled frame to bound corrupted device spikes
       const maxAngle = Math.PI / 9;
-      const angle = Math.hypot(mouseX, mouseY) * mouseSensitivity;
-      const gain = mouseSensitivity * Math.min(1, maxAngle / Math.max(1e-9, angle));
+      const angle = Math.hypot(mouseX, mouseY) * currentSens;
+      const gain = currentSens * Math.min(1, maxAngle / Math.max(1e-9, angle));
       const look = applyLook(camera.rotation.y, camera.rotation.x, mouseX, mouseY, gain);
       camera.rotation.set(look.pitch, look.yaw, 0, 'YXZ');
       clearMouse();

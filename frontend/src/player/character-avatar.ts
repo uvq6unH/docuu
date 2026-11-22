@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   Color,
+  ConeGeometry,
   CylinderGeometry,
   DoubleSide,
   Group,
@@ -8,12 +9,14 @@ import {
   MeshStandardMaterial,
   type Object3D,
 } from 'three';
+import type { CosmeticPreferences, HatCosmetic } from '../../../packages/shared/src/protocol';
 
 export interface AvatarMotionState {
   speed: number;
   crouch: boolean;
   grounded: boolean;
   jailed?: boolean;
+  action?: 'capture' | 'rescue' | 'none';
 }
 
 export interface AvatarMaterials {
@@ -98,6 +101,11 @@ export class CharacterAvatar {
   // Hat / Accessory containers
   private policeAccessories: Group;
   private robberAccessories: Group;
+  private cosmeticGroup: Group;
+  private nonLaMesh: Mesh;
+  private khanRanGroup: Group;
+  private muNanGroup: Group;
+  private currentCosmeticHat: HatCosmetic = 'none';
 
   private materials: AvatarMaterials;
   private animTime = 0;
@@ -236,6 +244,67 @@ export class CharacterAvatar {
     bandanaKnot.rotation.z = 0.2;
     this.robberAccessories.add(bandanaKnot);
 
+    // Traditional Folk Costume Accessories (Nón lá, Khăn rằn, Mũ nan)
+    this.cosmeticGroup = new Group();
+    this.cosmeticGroup.name = 'folk_cosmetics';
+    this.headGroup.add(this.cosmeticGroup);
+
+    // 1. Nón lá (Traditional Conical Straw Hat)
+    const strawMat = new MeshStandardMaterial({
+      color: new Color('#edd69a'),
+      roughness: 0.9,
+      flatShading: true,
+      side: DoubleSide,
+    });
+    this.nonLaMesh = new Mesh(new ConeGeometry(0.25, 0.13, 16), strawMat);
+    this.nonLaMesh.name = 'hat_non_la';
+    this.nonLaMesh.position.set(0, 0.36, 0);
+    this.nonLaMesh.visible = false;
+    this.cosmeticGroup.add(this.nonLaMesh);
+
+    // 2. Khăn rằn (Checked traditional scarf wrap)
+    this.khanRanGroup = new Group();
+    this.khanRanGroup.name = 'hat_khan_ran';
+    const scarfMat = new MeshStandardMaterial({
+      color: new Color('#f0ece1'),
+      roughness: 0.85,
+      flatShading: true,
+    });
+    const scarfWrap = makeMesh(geoBox(0.28, 0.07, 0.28), scarfMat, 'scarf_head_wrap');
+    scarfWrap.position.set(0, 0.26, 0);
+    this.khanRanGroup.add(scarfWrap);
+    const scarfTailL = makeMesh(geoBox(0.04, 0.18, 0.02), scarfMat, 'scarf_tail_L');
+    scarfTailL.position.set(0.12, 0.16, 0.14);
+    scarfTailL.rotation.z = -0.15;
+    this.khanRanGroup.add(scarfTailL);
+    const scarfTailR = makeMesh(geoBox(0.04, 0.15, 0.02), scarfMat, 'scarf_tail_R');
+    scarfTailR.position.set(-0.10, 0.18, 0.14);
+    scarfTailR.rotation.z = 0.15;
+    this.khanRanGroup.add(scarfTailR);
+    this.khanRanGroup.visible = false;
+    this.cosmeticGroup.add(this.khanRanGroup);
+
+    // 3. Mũ nan (Flat-brim woven rustic straw hat)
+    this.muNanGroup = new Group();
+    this.muNanGroup.name = 'hat_mu_nan';
+    const muNanMat = new MeshStandardMaterial({
+      color: new Color('#cbb082'),
+      roughness: 0.88,
+      flatShading: true,
+    });
+    const muNanBrim = new Mesh(new CylinderGeometry(0.22, 0.22, 0.025, 16), muNanMat);
+    muNanBrim.position.set(0, 0.31, 0);
+    this.muNanGroup.add(muNanBrim);
+    const muNanCrown = new Mesh(new CylinderGeometry(0.14, 0.15, 0.07, 16), muNanMat);
+    muNanCrown.position.set(0, 0.35, 0);
+    this.muNanGroup.add(muNanCrown);
+    this.muNanGroup.visible = false;
+    this.cosmeticGroup.add(this.muNanGroup);
+
+    // Set initial role accessories visibility
+    this.policeAccessories.visible = role === 'POLICE';
+    this.robberAccessories.visible = role === 'ROBBER';
+
     // 4. Arms
     // Left Shoulder & Arm
     this.shoulderL = new Group();
@@ -354,10 +423,11 @@ export class CharacterAvatar {
   public setRole(role: 'POLICE' | 'ROBBER'): void {
     this.role = role;
     const isPolice = role === 'POLICE';
-    this.policeAccessories.visible = isPolice;
-    this.policeAccessories.traverse((child) => { child.visible = isPolice; });
-    this.robberAccessories.visible = !isPolice;
-    this.robberAccessories.traverse((child) => { child.visible = !isPolice; });
+    const hasCustomHat = this.currentCosmeticHat !== 'none';
+    this.policeAccessories.visible = isPolice && !hasCustomHat;
+    this.policeAccessories.traverse((child) => { child.visible = isPolice && !hasCustomHat; });
+    this.robberAccessories.visible = !isPolice && !hasCustomHat;
+    this.robberAccessories.traverse((child) => { child.visible = !isPolice && !hasCustomHat; });
 
     const colors = {
       POLICE: {
@@ -389,7 +459,7 @@ export class CharacterAvatar {
    */
   public update(dtSeconds: number, motion: AvatarMotionState): void {
     this.animTime += dtSeconds;
-    const { speed, crouch, jailed } = motion;
+    const { speed, crouch, jailed, action } = motion;
 
     // Smooth crouch blending (0 = standing ~1.7m, 1 = crouching ~1.1m)
     const targetCrouch = crouch ? 1 : 0;
@@ -471,6 +541,48 @@ export class CharacterAvatar {
       this.armUpperR.rotation.x = -breath * 0.04;
       this.armLowerL.rotation.x = -0.15;
       this.armLowerR.rotation.x = -0.15;
+    }
+
+    // Dynamic Upper-Body Action Overrides (Tag Capture / Rescue Untie)
+    if (action === 'capture') {
+      this.armUpperL.rotation.x = -1.25;
+      this.armUpperR.rotation.x = -1.25;
+      this.armLowerL.rotation.x = -0.45;
+      this.armLowerR.rotation.x = -0.45;
+      this.torso.rotation.x = 0.25;
+    } else if (action === 'rescue') {
+      this.armUpperL.rotation.x = -0.75;
+      this.armUpperR.rotation.x = -0.75;
+      this.armLowerL.rotation.x = -0.85;
+      this.armLowerR.rotation.x = -0.85;
+      this.torso.rotation.x = 0.40;
+    }
+  }
+
+  /**
+   * Applies folk costume preferences (Hat & Rustic Shirt Color).
+   */
+  public setCosmetics(cosmetics?: CosmeticPreferences): void {
+    const hat = cosmetics?.hat ?? 'none';
+    this.currentCosmeticHat = hat;
+
+    const hasCustomHat = hat !== 'none';
+    this.nonLaMesh.visible = hat === 'non_la';
+    this.khanRanGroup.visible = hat === 'khan_ran';
+    this.muNanGroup.visible = hat === 'mu_nan';
+
+    // If custom hat is worn, hide standard role cap/bandana
+    if (this.role === 'POLICE') {
+      this.policeAccessories.visible = !hasCustomHat;
+    } else {
+      this.robberAccessories.visible = !hasCustomHat;
+    }
+
+    // Shirt Color customization
+    if (cosmetics?.shirtColor) {
+      this.materials.primary.color.set(cosmetics.shirtColor);
+    } else {
+      this.materials.primary.color.set(this.role === 'POLICE' ? '#2876c9' : '#ec8f32');
     }
   }
 

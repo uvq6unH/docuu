@@ -14,7 +14,8 @@ export function createScene() {
   const camera = new PerspectiveCamera(75, 1, 0.1, 150);
   // Camera cố định cho sân thử; M03 sẽ dùng vị trí/chiều cao từ shared.
   camera.position.set(0, 1.55, 12);
-  scene.add(new HemisphereLight('#d9edff', '#82704c', 1.7));
+  const hemi = new HemisphereLight('#d9edff', '#82704c', 1.7);
+  scene.add(hemi);
   const sun = new DirectionalLight('#ffe0a8', 3.2);
   sun.position.set(-28, 40, 18);
   sun.castShadow = true;
@@ -43,7 +44,58 @@ export function createScene() {
   grid.updateMatrix();
   scene.add(grid);
   scene.add(createLandscapeDetail());
-  return { scene, camera };
+  return { scene, camera, sun, hemi };
+}
+
+export type AtmospherePreset = 'midday' | 'sunset' | 'mist';
+
+export function setAtmosphere(
+  preset: AtmospherePreset,
+  scene: Scene,
+  sun?: DirectionalLight,
+  hemi?: HemisphereLight
+): void {
+  if (preset === 'sunset') {
+    scene.background = new Color('#dd7e50');
+    scene.fog = new Fog('#bf6544', 35, 110);
+    if (sun) {
+      sun.color = new Color('#ff9238');
+      sun.intensity = 2.8;
+      sun.position.set(-50, 16, 12);
+    }
+    if (hemi) {
+      hemi.color = new Color('#ffaa77');
+      hemi.groundColor = new Color('#5c3826');
+      hemi.intensity = 1.4;
+    }
+  } else if (preset === 'mist') {
+    scene.background = new Color('#a8bcc7');
+    scene.fog = new Fog('#a8bcc7', 15, 60);
+    if (sun) {
+      sun.color = new Color('#e0eef7');
+      sun.intensity = 1.8;
+      sun.position.set(-15, 25, 20);
+    }
+    if (hemi) {
+      hemi.color = new Color('#b8cdd9');
+      hemi.groundColor = new Color('#4a5e52');
+      hemi.intensity = 1.5;
+    }
+  } else {
+    // Default Midday
+    scene.background = new Color('#c5dce0');
+    scene.fog = new Fog('#c5dce0', 45, 125);
+    if (sun) {
+      sun.color = new Color('#ffe0a8');
+      sun.intensity = 3.2;
+      sun.position.set(-28, 40, 18);
+    }
+    if (hemi) {
+      hemi.color = new Color('#d9edff');
+      hemi.groundColor = new Color('#82704c');
+      hemi.intensity = 1.7;
+    }
+  }
 }
 
 export interface GpuDiagnostics {

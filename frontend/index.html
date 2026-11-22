@@ -35,6 +35,15 @@
           <div class="hud-card hud-stealth" id="hud-stealth-card" hidden>🌿 ĐANG ẨN NẤP (TÀNG HÌNH)</div>
           <div class="hud-card hud-immune" id="hud-immune-card" hidden>🛡️ MIỄN NHIỄM: <span id="hud-immune-sec">3.0</span>s</div>
           <button id="btn-toggle-help" type="button" class="btn-help-pill" title="Xem hướng dẫn (Phím H)">❓ Trợ giúp [H]</button>
+          <button id="btn-toggle-settings" type="button" class="btn-help-pill" title="Cài đặt trò chơi">⚙️ Cài đặt</button>
+        </div>
+      </div>
+
+      <!-- Spectator Overlay for Jailed Players -->
+      <div id="spectator-hud" class="spectator-hud" hidden>
+        <div class="spectator-card">
+          <div class="spectator-title">👁️ ĐANG THEO DÕI: <strong id="spectator-target-name">---</strong></div>
+          <div class="spectator-hint">(Bấm phím [◄] / [►] hoặc chạm màn hình để đổi đồng đội)</div>
         </div>
       </div>
 
@@ -74,11 +83,86 @@
                 <div><code>C</code></div><div>Cúi người / Nấp bụi tàng hình</div>
                 <div><code>Chuột trái / E</code></div><div>Cảnh sát: Bắt cướp (khi trong tầm 2m)</div>
                 <div><code>Giữ E hoặc F (2s)</code></div><div>Cướp: Giải cứu đồng đội tại nhà giam</div>
+                <div><code>1, 2, 3, 4</code></div><div>Báo hiệu radio nhanh trong đội</div>
+                <div><code>Q / Chuột giữa</code></div><div>Đánh dấu tọa độ chiến thuật (Tactical Ping)</div>
+                <div><code>F / Chuột phải</code></div><div>Cướp: Ném sỏi đánh lạc hướng cảnh sát máy</div>
                 <div><code>H</code></div><div>Bật / tắt bảng hướng dẫn này</div>
                 <div><code>Esc</code></div><div>Nhả chuột để thao tác sảnh chờ / cài đặt</div>
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Settings Modal -->
+      <div id="settings-modal" class="help-modal" hidden>
+        <div class="help-content">
+          <div class="help-header">
+            <h2>⚙️ Cài Đặt Trò Chơi</h2>
+            <button id="btn-close-settings" type="button" class="btn-close-modal">✕</button>
+          </div>
+          <div class="help-body">
+            <div class="settings-group">
+              <label for="setting-mouse-sens">Độ nhạy chuột: <strong id="val-mouse-sens">1.0</strong>x</label>
+              <input type="range" id="setting-mouse-sens" min="0.2" max="3.0" step="0.1" value="1.0" />
+            </div>
+            <div class="settings-group">
+              <label for="setting-fov">Góc nhìn (FOV): <strong id="val-fov">75</strong>°</label>
+              <input type="range" id="setting-fov" min="60" max="100" step="1" value="75" />
+            </div>
+            <div class="settings-group">
+              <label for="setting-volume">Âm lượng chính: <strong id="val-volume">100</strong>%</label>
+              <input type="range" id="setting-volume" min="0" max="100" step="5" value="100" />
+            </div>
+            <div class="settings-group">
+              <label for="setting-weather">Thời tiết & Bầu không khí:</label>
+              <select id="setting-weather" class="custom-select">
+                <option value="midday">☀️ Trưa hè (Mặc định)</option>
+                <option value="sunset">🌅 Hoàng hôn Bắc Bộ (Nắng vàng & bóng dài)</option>
+                <option value="mist">🌫️ Sương sớm (Sương mù & se lạnh)</option>
+              </select>
+            </div>
+            <div class="settings-group">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="setting-touch-toggle" style="width: 18px; height: 18px;" />
+                <span>Bật phím cảm ứng màn hình (Touch Controls cho Mobile/Tablet)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Chat Feed & Radio Hint Bar -->
+      <div id="quick-chat-feed" class="quick-chat-feed" hidden></div>
+      <div id="quick-chat-hints" class="quick-chat-hints" hidden>
+        <span>[1,2,3,4] Báo hiệu · [Q] Ping · [F] Ném sỏi</span>
+      </div>
+
+      <!-- Interactive Tutorial Guided Overlay -->
+      <div id="tutorial-overlay" class="tutorial-overlay" hidden>
+        <div class="tutorial-card">
+          <div class="tutorial-header">
+            <span id="tutorial-step-tag" class="tutorial-badge">Bước 1/3</span>
+            <h3 id="tutorial-title">Vượt chướng ngại vật</h3>
+          </div>
+          <p id="tutorial-desc">Dùng phím W, A, S, D để di chuyển, giữ Shift chạy nhanh và bấm Space để nhảy qua hàng rào gỗ.</p>
+          <div class="tutorial-progress-bar"><div id="tutorial-progress-fill" class="tutorial-progress-fill" style="width: 33%;"></div></div>
+          <button id="btn-exit-tutorial" type="button" class="btn-tool" style="margin-top: 10px; font-size: 11px; width: 100%;">✕ Thoát chế độ hướng dẫn</button>
+        </div>
+      </div>
+
+      <!-- Mobile Touch Controls Overlay -->
+      <div id="touch-controls" class="touch-controls" hidden>
+        <div id="touch-joystick-zone" class="touch-joystick-zone">
+          <div id="touch-joystick-base" class="touch-joystick-base">
+            <div id="touch-joystick-knob" class="touch-joystick-knob"></div>
+          </div>
+        </div>
+        <div id="touch-actions-zone" class="touch-actions-zone">
+          <button id="touch-btn-sprint" class="touch-btn touch-btn-sprint" type="button" title="Chạy nhanh">🏃</button>
+          <button id="touch-btn-jump" class="touch-btn touch-btn-jump" type="button" title="Nhảy">🦘</button>
+          <button id="touch-btn-crouch" class="touch-btn touch-btn-crouch" type="button" title="Cúi / Nấp">🧎</button>
+          <button id="touch-btn-action" class="touch-btn touch-btn-action" type="button" title="Bắt / Cứu">⚡</button>
         </div>
       </div>
 
@@ -120,6 +204,19 @@
               <button id="btn-mock-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Thử nhanh MOCK01</button>
               <button id="btn-offline-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Sân tập offline</button>
             </div>
+
+            <button id="btn-tutorial" type="button" class="btn-ready" style="background: #236942; border-color: #236942; margin-top: 8px;">🎓 Hướng dẫn tân thủ (3 bước)</button>
+
+            <!-- Public Room Browser -->
+            <div class="public-browser-container">
+              <div class="browser-header">
+                <span style="font-size: 13px; font-weight: 700; color: #263d30;">🌐 Phòng chơi công khai</span>
+                <button id="btn-refresh-rooms" type="button" class="btn-tool" style="padding: 2px 8px; font-size: 11px;">🔄 Làm mới</button>
+              </div>
+              <div id="public-rooms-list" class="public-rooms-list">
+                <div class="room-empty-note">Đang tải danh sách phòng...</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -135,9 +232,73 @@
               <h2 id="result-title" tabindex="-1"></h2>
               <p id="result-reason"></p>
             </div>
+
+            <!-- MVP Cards Display -->
+            <div id="mvp-cards-container" class="mvp-cards-container" hidden>
+              <div class="mvp-card mvp-police">
+                <div class="mvp-title">⭐ MVP CẢNH SÁT</div>
+                <div id="mvp-police-name" class="mvp-player">---</div>
+                <div id="mvp-police-stat" class="mvp-sub">0 lần bắt</div>
+              </div>
+              <div class="mvp-card mvp-robber">
+                <div class="mvp-title">🎖️ MVP CƯỚP</div>
+                <div id="mvp-robber-name" class="mvp-player">---</div>
+                <div id="mvp-robber-stat" class="mvp-sub">0 lần giải cứu</div>
+              </div>
+            </div>
+
+            <!-- Match Stats Summary Table -->
+            <div id="match-stats-container" class="match-stats-container" hidden>
+              <table class="match-stats-table">
+                <thead>
+                  <tr>
+                    <th>Người chơi</th>
+                    <th>Phe</th>
+                    <th>Bắt</th>
+                    <th>Cứu</th>
+                    <th>Bị giam</th>
+                  </tr>
+                </thead>
+                <tbody id="match-stats-tbody"></tbody>
+              </table>
+            </div>
+
             <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại</button>
             <p id="result-wait" hidden>Đang chờ chủ phòng chọn chơi lại.</p>
           </section>
+
+          <!-- Map Variant Layout Selection (Host Only) -->
+          <div id="map-variant-container" class="map-variant-card" hidden>
+            <label for="select-map-variant" style="font-size: 12px; font-weight: 700; color: #263d30;">Bản đồ & Bố cục:</label>
+            <select id="select-map-variant" class="custom-select" style="font-size: 12px;">
+              <option value="village-v1">🏡 Làng quê Bắc Bộ (Mặc định)</option>
+              <option value="market-v1">🏮 Sân Đình & Chợ Quê (Bố cục mở rộng)</option>
+            </select>
+          </div>
+
+          <!-- Folk Costume Customization UI -->
+          <div id="costume-picker" class="costume-picker-card">
+            <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #263d30;">👘 Trang phục truyền thống dân gian:</div>
+            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+              <label for="select-cosmetic-hat" style="font-size: 11px; width: 35%;">Mũ / Nón:</label>
+              <select id="select-cosmetic-hat" class="custom-select" style="font-size: 11px; width: 65%;">
+                <option value="none">Mặc định theo vai</option>
+                <option value="non_la">🌾 Nón lá Bắc Bộ</option>
+                <option value="khan_ran">🧣 Khăn rằn truyền thống</option>
+                <option value="mu_nan">👒 Mũ nan đan lát</option>
+              </select>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <span style="font-size: 11px; width: 35%;">Màu áo bà ba:</span>
+              <div class="shirt-palette">
+                <button type="button" class="shirt-swatch active" data-color="" title="Mặc định theo vai" style="background: #999;"></button>
+                <button type="button" class="shirt-swatch" data-color="#5c3a21" title="Nâu sồng" style="background: #5c3a21;"></button>
+                <button type="button" class="shirt-swatch" data-color="#2e4c6d" title="Chàm lam" style="background: #2e4c6d;"></button>
+                <button type="button" class="shirt-swatch" data-color="#8b3a2b" title="Đỏ gạch" style="background: #8b3a2b;"></button>
+                <button type="button" class="shirt-swatch" data-color="#d8d3c5" title="Trắng ngà" style="background: #d8d3c5;"></button>
+              </div>
+            </div>
+          </div>
           <!-- Role Selection UI -->
           <div id="role-picker-container" class="role-selector-card">
             <span class="role-selector-label">Vai trò của bạn:</span>

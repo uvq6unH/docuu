@@ -384,3 +384,42 @@ Kiểm tra đạt 58 test shared, 53 unit test FE, 24 test backend, typecheck/bu
 Chrome đạt ba bài phòng thật gồm đi xuyên H03 trong hai phiên, bắt/cứu/reload trong phòng sáu người, và kết thúc/rematch. Hai bài đồ họa/đi-chạy-cúi-nhảy đạt. Đã xem house-interior.png và a02-jail.png. Những lượt thử đầu có lỗi điều khiển test/trace và tải lại lúc chỉnh source, các lượt cuối chạy ổn định đã đạt. Build cảnh báo chunk chính khoảng 748 kB. Chưa đo FPS với 129 collider và nội thất trên hai máy vật lý.
 
 Bước tiếp theo là playtest qua LAN để kiểm tra độ sáng nội thất, các lối thoát và FPS khi đuổi bắt qua nhà.
+
+### 22/11/2026 — Nâng cấp Bot AI định tuyến, Âm thanh không gian 3D, Điều khiển cảm ứng & Chế độ Khán giả
+
+Theo yêu cầu phát triển tiếp tục (/goal) bám sát các yêu cầu chung có sẵn trong repo, đã hoàn thành đồng bộ 5 hạng mục nâng cấp toàn diện:
+1. **Trí tuệ nhân tạo (Bot AI) & Né vật cản**: Tách module `backend/apps/server/src/rooms/botAi.ts`. Sử dụng dò tia cảm ứng (radial feelers) và truy vấn `fitsAt` để bot tự động né 129 collider nhà và phát hiện chướng ngại vật thấp để tự động nhảy qua. Bot Cảnh sát tuân thủ nghiêm ngặt luật stealth (`canPoliceSeeRobber`), không thể gian lận truy đuổi cướp đang nấp ngoài 2m; Bot Cướp biết chiến thuật đánh lạc hướng và bọc lót, tự động chọn điểm cứu (rescue anchor) đối diện với hướng Cảnh sát canh gác, và biết tìm bụi rơm/cỏ để nấp khi không có đồng đội bị giam.
+2. **Âm thanh Không gian 3D (Spatial Audio) & Nhịp tim Hồi hộp**: Nâng cấp `frontend/src/core/audio.ts` hỗ trợ định vị tiếng bước chân 3D dựa trên góc phương vị và khoảng cách (`StereoPannerNode`), tự động suy giảm âm lượng và lọc tần số theo khoảng cách thực; bổ sung hiệu ứng nhịp tim dồn dập (dynamic heartbeat "lub-dub") khi cướp đang ẩn nấp hoặc bị cảnh sát tiếp cận trong bán kính 8m; bổ sung âm thanh môi trường gió thoảng và tiếng dế đồng quê Bắc Bộ bằng thuật toán tổng hợp Web Audio (0 KB tải ngoài).
+3. **Hoạt ảnh Nhân vật (Action Animations)**: Mở rộng `CharacterAvatar` tại `frontend/src/player/character-avatar.ts` với trạng thái `action`: vươn hai tay về phía trước khi Cảnh sát ra tay bắt, và khom người hai tay mở chốt/cởi trói khi Cướp giải cứu đồng đội.
+4. **Hỗ trợ Thiết bị Di động (Mobile Touch Controls & LAN)**: Thêm `frontend/src/input/touch.ts` với cần gạt ảo (Virtual Joystick) điều khiển hướng đi, vuốt nửa phải màn hình để xoay góc nhìn, và 4 nút cảm ứng nổi (Chạy nhanh, Nhảy, Cúi/Nấp, Bắt/Cứu) phục vụ bạn bè kết nối qua điện thoại trên mạng LAN.
+5. **Chế độ Khán giả (POV Spectator Mode) & Bảng Cài đặt In-Game**: Cho phép cướp khi bị giam bấm phím mũi tên hoặc chạm màn hình để chuyển góc nhìn theo dõi đồng đội cướp còn tự do (`#spectator-hud`), không phá vỡ luật cấm Free-Cam. Thêm modal cài đặt ⚙️ tùy chỉnh độ nhạy chuột, FOV (60-100 độ), âm lượng và bật/tắt phím cảm ứng, tự động lưu `localStorage`.
+
+Nghiệm thu kỹ thuật:
+- Toàn bộ 142/142 bài kiểm thử tự động vượt qua (Shared: 58/58, Backend: 28/28, Frontend: 56/56).
+- Chất lượng mã nguồn: 0 lỗi lint (`eslint . --max-warnings 0`).
+- Build production TypeScript và Vite thành công 100%.
+
+Bước tiếp theo: Khởi động server LAN (`node scripts/start-lan.mjs` hoặc `CHAY_GAME_LAN.bat`) và mời người chơi kết nối từ PC và điện thoại di động để playtest thực tế các tính năng mới.
+
+### 22/11/2026 — Tích hợp Tương tác Đồng đội & Chiến thuật, Khí quyển & Trang phục Dân gian
+
+Theo yêu cầu tích hợp toàn diện (/goal) tất cả các hạng mục cải tiến (ngoài mục 4 DevOps/Docker):
+1. **Nhóm 1 (Gameplay & Tương tác đồng đội)**:
+   - **Radio / Quick Chat (`1, 2, 3, 4`)**: Phím số nhanh gửi thông điệp chiến thuật có lồng vai trò ("Cứu tôi với!", "Bao vây đình làng!", "Phát hiện mục tiêu!", "Đang tới hỗ trợ!") kèm âm thanh Web Audio chime và feed tin nổi.
+   - **Đánh dấu chiến thuật Tactical Ping (`Q` / Chuột giữa)**: Tạo vòng sóng radar 3D mở rộng tại mặt đất cùng beacon phát sáng trên minimap radar 2D chia sẻ cho đồng đội.
+   - **Ném sỏi đánh lạc hướng Distraction Pebble (`F` / Chuột phải)**: Cướp ném viên sỏi tạo âm thanh va chạm lách cách và bụi đất; bot Cảnh sát trong phạm vi 12m tự động chuyển hướng tuần tra tới vị trí rơi để kiểm tra.
+   - **Vinh danh MVP & Bảng số liệu cuối trận (`#match-result`)**: Server tự động tính toán authoritative danh hiệu MVP Cảnh sát (nhiều vụ bắt nhất) và MVP Cướp (nhiều lần cứu nhất / thời gian sống tự do lâu nhất), hiển thị thẻ vàng danh dự kèm bảng phân tích bắt, cứu, thời gian bị giam và quãng đường di chuyển.
+2. **Nhóm 2 (Bản đồ & Môi trường)**:
+   - **Động lực Khí quyển & Thời tiết (`setAtmosphere`)**: Tùy chỉnh ba trạng thái không gian làng quê: Ban trưa (`midday`), Hoàng hôn Bắc Bộ (`sunset` tông cam ấm, bóng đổ dài) và Sương sớm (`mist` tông xanh lạnh mờ ảo).
+   - **Bộ chọn biến thể bản đồ phòng chờ**: Hỗ trợ chọn map layout biến thể (`village-v1` vs `market-v1`).
+3. **Nhóm 3 (Trải nghiệm, Tân thủ & Cá nhân hóa)**:
+   - **Chế độ Hướng dẫn 1 người chơi tương tác (Interactive Tutorial Mode)**: Trải nghiệm 3 bước hướng dẫn thực tế kèm checkpoint và thanh tiến trình: 1) Chạy vượt rào, 2) Cúi nấp trong đống rơm kiểm tra stealth, 3) Tiếp cận giải cứu hình nộm đồng đội bị giam.
+   - **Trình duyệt phòng công khai (Public Room Browser)**: Hiển thị danh sách các phòng đang chờ trong sảnh với số người, tên chủ phòng và nút vào phòng 1-click.
+   - **Tùy biến trang phục dân gian Low-poly**: Chọn phụ kiện đầu dân gian (Nón lá hình chóp, Khăn rằn Nam Bộ, Mũ nan) và 5 bảng màu áo bà ba truyền thống (nâu gụ, chàm, xanh rêu, vàng nhạt, xám tro) hiển thị đồng bộ 3D lên nhân vật.
+
+Nghiệm thu kỹ thuật:
+- Kiểm thử tự động: Đạt **146/146 tests** (Shared: 58/58, Backend: 29/29, Frontend: 59/59).
+- Chất lượng mã nguồn: **0 lỗi, 0 cảnh báo lint** (`eslint . --max-warnings 0`).
+- Build toàn bộ monorepo (`packages/shared`, `backend`, `frontend`) hoàn tất thành công 100%.
+
+Bước tiếp theo: Triển khai playtest trải nghiệm thực tế cùng bạn bè qua LAN hoặc môi trường trực tuyến.

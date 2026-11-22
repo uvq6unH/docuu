@@ -9,6 +9,13 @@ export type Phase = 'LOBBY' | 'JAIL_SELECTION' | 'HEAD_START' | 'PLAYING' | 'RES
 
 export type RobberState = 'FREE' | 'HIDDEN' | 'JAILED' | 'IMMUNE';
 
+export type HatCosmetic = 'none' | 'non_la' | 'khan_ran' | 'mu_nan';
+
+export interface CosmeticPreferences {
+  hat: HatCosmetic;
+  shirtColor?: string;
+}
+
 export interface PlayerView {
   id: string;
   role: Role;
@@ -20,6 +27,7 @@ export interface PlayerView {
   state?: RobberState; // Robber-only state
   guard?: boolean; // Police-only flag: true if inside active jail guard zone
   connected: boolean;
+  cosmetic?: CosmeticPreferences;
 }
 
 export interface SelfPlayerView extends PlayerView {
@@ -41,6 +49,8 @@ export interface MatchResult {
   winner: 'POLICE' | 'ROBBER' | 'ABORTED';
   reason: string;
   stats?: Record<string, PlayerStats>;
+  mvpPolice?: string;
+  mvpRobber?: string;
 }
 
 export interface Snapshot {
@@ -79,6 +89,37 @@ export interface RosterMember {
   isHost?: boolean;
   isCaptain?: boolean;
   isBot?: boolean;
+  cosmetic?: CosmeticPreferences;
+}
+
+export interface QuickChatMessage {
+  senderId: string;
+  senderName: string;
+  role: Role;
+  text: string;
+  teamOnly: boolean;
+  time: number;
+}
+
+export interface TacticalPing {
+  senderId: string;
+  role: Role;
+  pos: Vec3;
+  time: number;
+}
+
+export interface PebbleEvent {
+  senderId: string;
+  fromPos: Vec3;
+  landingPos: Vec3;
+}
+
+export interface PublicRoomSummary {
+  roomCode: string;
+  hostName: string;
+  playerCount: number;
+  maxPlayers: number;
+  phase: Phase;
 }
 
 export interface RoomState {
@@ -134,13 +175,22 @@ export const CLIENT_EVENTS = {
   ROOM_REMOVE_BOT: 'room:remove_bot',
   ROOM_SET_ROLE: 'room:set_role',
   ROOM_AUTO_ROLES: 'room:auto_roles',
+  ROOM_SET_COSMETIC: 'room:set_cosmetic',
+  ROOM_LIST: 'room:list',
   JAIL_SELECT: 'jail:select',
   GAME_INPUT: 'game:input',
+  GAME_CHAT: 'game:chat',
+  GAME_PING: 'game:ping',
+  GAME_PEBBLE: 'game:pebble',
 } as const;
 
 export const SERVER_EVENTS = {
   ROOM_STATE: 'room:state',
+  ROOM_LIST_RESPONSE: 'room:list_response',
   GAME_SNAPSHOT: 'game:snapshot',
   GAME_EVENT: 'game:event',
+  GAME_CHAT_EVENT: 'game:chat_event',
+  GAME_PING_EVENT: 'game:ping_event',
+  GAME_PEBBLE_EVENT: 'game:pebble_event',
   ROOM_ERROR: 'room:error',
 } as const;

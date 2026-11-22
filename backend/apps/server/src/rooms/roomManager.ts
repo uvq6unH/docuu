@@ -11,6 +11,12 @@ import {
   SERVER_EVENTS,
   AckResponse,
   InputFrame,
+  PublicRoomSummary,
+  QuickChatMessage,
+  TacticalPing,
+  PebbleEvent,
+  CosmeticPreferences,
+  Vec3,
 } from '@folk-tag/shared';
 import { Room } from './room.js';
 import type { DatabaseManager } from '../db/index.js';
@@ -705,6 +711,142 @@ export class RoomManager {
             this.broadcastRoomState(room);
             return { ok: true };
           });
+        }
+      );
+
+      // 14. room:list (Public Room Browser)
+      socket.on(
+        CLIENT_EVENTS.ROOM_LIST,
+        (_payload?: { requestId?: string }, ack?: (res: AckResponse<PublicRoomSummary[]>) => void) => {
+          const summaries: PublicRoomSummary[] = Array.from(this.rooms.values()).map((r) => {
+            const host = r.players.get(r.hostId);
+            return {
+              roomCode: r.roomCode,
+              hostName: host ? host.name : 'Chủ phòng',
+              playerCount: r.players.size,
+              maxPlayers: GAME_RULES.REQUIRED_PLAYERS,
+              phase: r.phase,
+            };
+          });
+          if (ack) {
+            ack({ ok: true, data: summaries });
+          }
+          socket.emit(SERVER_EVENTS.ROOM_LIST_RESPONSE, summaries);
+        }
+      );
+
+      // 15. room:set_cosmetic (Folk costume customization)
+      socket.on(
+        CLIENT_EVENTS.ROOM_SET_COSMETIC,
+        (
+          payload: { requestId?: string; cosmetic: CosmeticPreferences },
+          ack?: (res: AckResponse) => void
+        ) => {
+          if (!this.rateLimiter.checkAction(socket.id)) {
+            if (ack) ack({ ok: false, code: 'RATE_LIMIT', message: 'Action rate limit exceeded' });
+            return;
+          }
+
+          this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+            const binding = this.socketBindings.get(socket.id);
+            if (!binding) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Not in a room' };
+            const room = this.rooms.get(binding.roomCode);
+            if (!room) return { ok: false, code: 'ROOM_NOT_FOUND', message: 'Room not found' };
+
+            const success = room.setPlayerCosmetic(binding.playerId, payload?.cosmetic);
+            if (success) {
+              this.broadcastRoomState(room);
+            }
+            return { ok: success };
+          });
+        }
+      );
+
+      // 16. game:chat (Quick radio messages)
+      socket.on(
+        CLIENT_EVENTS.GAME_CHAT,
+        (payload: { text: string; teamOnly?: boolean }) => {
+          if (!this.rateLimiter.checkAction(socket.id)) return;
+          const binding = this.socketBindings.get(socket.id);
+          if (!binding) return;
+          const room = this.rooms.get(binding.roomCode);
+          if (!room) return;
+          const player = room.players.get(binding.playerId);
+          if (!player || !player.role) return;
+
+          const rawText = String(payload?.text || '').trim();
+          if (!rawText || rawText.length > 120) return;
+
+          const chatMsg: QuickChatMessage = {
+            senderId: player.id,
+            senderName: player.name,
+            role: player.role,
+            text: rawText,
+            teamOnly: Boolean(payload.teamOnly),
+            time: Date.now(),
+          };
+
+          if (chatMsg.teamOnly) {
+            for (const p of room.players.values()) {
+              if (p.role === player.role && p.socket && p.socket.connected) {
+                p.socket.emit(SERVER_EVENTS.GAME_CHAT_EVENT, chatMsg);
+              }
+            }
+          } else {
+            this.io.to(room.roomCode).emit(SERVER_EVENTS.GAME_CHAT_EVENT, chatMsg);
+          }
+        }
+      );
+
+      // 17. game:ping (Tactical Ping ground beacon)
+      socket.on(
+        CLIENT_EVENTS.GAME_PING,
+        (payload: { pos: Vec3 }) => {
+          if (!this.rateLimiter.checkAction(socket.id)) return;
+          const binding = this.socketBindings.get(socket.id);
+          if (!binding) return;
+          const room = this.rooms.get(binding.roomCode);
+          if (!room) return;
+          const player = room.players.get(binding.playerId);
+          if (!player || !player.role) return;
+          if (!Array.isArray(payload?.pos) || payload.pos.length !== 3) return;
+
+          const ping: TacticalPing = {
+            senderId: player.id,
+            role: player.role,
+            pos: [Number(payload.pos[0]), Number(payload.pos[1]), Number(payload.pos[2])],
+            time: Date.now(),
+          };
+
+          for (const p of room.players.values()) {
+            if (p.role === player.role && p.socket && p.socket.connected) {
+              p.socket.emit(SERVER_EVENTS.GAME_PING_EVENT, ping);
+            }
+          }
+        }
+      );
+
+      // 18. game:pebble (Robber distraction pebble throw)
+      socket.on(
+        CLIENT_EVENTS.GAME_PEBBLE,
+        (payload: { fromPos: Vec3; landingPos: Vec3 }) => {
+          if (!this.rateLimiter.checkAction(socket.id)) return;
+          const binding = this.socketBindings.get(socket.id);
+          if (!binding) return;
+          const room = this.rooms.get(binding.roomCode);
+          if (!room) return;
+          const player = room.players.get(binding.playerId);
+          if (!player || player.role !== 'ROBBER' || player.state === 'JAILED') return;
+          if (!Array.isArray(payload?.fromPos) || !Array.isArray(payload?.landingPos)) return;
+
+          const pebble: PebbleEvent = {
+            senderId: player.id,
+            fromPos: [payload.fromPos[0], payload.fromPos[1], payload.fromPos[2]],
+            landingPos: [payload.landingPos[0], payload.landingPos[1], payload.landingPos[2]],
+          };
+
+          this.io.to(room.roomCode).emit(SERVER_EVENTS.GAME_PEBBLE_EVENT, pebble);
+          room.handlePebble(pebble.landingPos);
         }
       );
 
