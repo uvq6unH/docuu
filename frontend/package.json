@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "24.21.0",
-    "npm": ">=11 <12"
+    "node": ">=24",
+    "npm": ">=10"
   },
   "scripts": {
     "dev": "vite --host 127.0.0.1",

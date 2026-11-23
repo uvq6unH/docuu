@@ -13,7 +13,7 @@ export type HatCosmetic = 'none' | 'non_la' | 'khan_ran' | 'mu_nan';
 
 export interface CosmeticPreferences {
   hat: HatCosmetic;
-  shirtColor?: string;
+  shirtColor?: string | undefined;
 }
 
 export interface PlayerView {
