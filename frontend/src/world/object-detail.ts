@@ -86,9 +86,13 @@ export function createObjectDetail() {
         fruit.push({ matrix: new Matrix4().multiplyMatrices(parent, pose.matrix), color: index % 2 ? '#d7a245' : '#ab6139' });
       }
     } else if (object.asset === 'haystack') {
-      for (let n = 0; n < 12; n++) {
-        const angle = n / 12 * Math.PI * 2;
-        box(Math.cos(angle) * 1.05, .15, Math.sin(angle) * 1.05, .12, .3, .12, n % 2 ? '#c7a054' : '#b68a42', Math.sin(angle) * .2);
+      for (let n = 0; n < 16; n++) {
+        const angle = (n / 16) * Math.PI * 2;
+        box(Math.cos(angle) * 1.08, .16, Math.sin(angle) * 1.08, .14, .34, .14, n % 2 ? '#dcb35e' : '#c49645', Math.sin(angle) * .24);
+      }
+      for (let n = 0; n < 8; n++) {
+        const angle = (n / 8) * Math.PI * 2 + 0.3;
+        box(Math.cos(angle) * 0.85, .82, Math.sin(angle) * 0.85, .12, .24, .12, n % 2 ? '#eed378' : '#d2a74c', Math.cos(angle) * .2);
       }
     }
   });

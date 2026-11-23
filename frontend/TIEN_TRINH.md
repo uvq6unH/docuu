@@ -430,4 +430,83 @@ Bước tiếp theo: Triển khai playtest trải nghiệm thực tế cùng b�
 
 Shared build/typecheck đạt. Backend build/typecheck đạt, 29/29 test đạt từ dist vừa build. FE build gồm typecheck, lint và 59/59 unit test đạt. Vite còn cảnh báo chunk chính 775,55 kB. Chưa chạy Chrome trong lượt sửa build này.
 
-Bước tiếp theo là nghiệm thu các tính năng mới bằng Chrome và một ván sáu người thật trên LAN.
+### 23/11/2026 — Nâng cấp FPS Viewmodel Hands & Smooth Spectator Camera
+
+1. **Góc nhìn khán giả mượt mà (Smooth Spectator System) khi Cướp bị giam**:
+   - **Xử lý triệt để nguyên nhân giật khựng**: Chuyển nguồn tọa độ spectator từ snapshot thô (chu kỳ 20Hz) sang thực thể nội suy mịn 60 FPS (`remoteEntity.currentPos`, `remoteEntity.currentYaw`) từ `session.getRemoteEntities()`, đồng thời dời lệnh cập nhật nội suy lên trước khi tính camera.
+   - **Góc nhìn thứ ba bám sau lưng (Third-Person Follow Cam) làm mặc định**: Đặt camera lùi sau lưng đồng đội 2.4m, cao hơn tầm mắt, nhìn bao quát đồng đội đang chạy trốn, né cảnh sát, ẩn nấp rơm rạ; áp dụng bộ giảm chấn làm mượt hàm mũ (`1 - Math.exp(-12 * dt)`), triệt tiêu hoàn toàn góc nhìn bị đâm xuyên vào bên trong sọ nhân vật.
+   - **Linh hoạt chuyển đổi góc nhìn thứ nhất (POV Mode)**: Nhấn phím `V` hoặc bấm nút UI `#btn-spectator-mode` trên HUD để chuyển đổi giữa Người thứ 3 và Người thứ 1. Khi ở Người thứ 1, tự động ẩn mesh avatar đồng đội để không bị clipping đa giác đầu/nón vào camera frustum; góc xoay yaw được nội suy mượt mà qua ranh giới $\pm \pi$.
+   - **Chuyển đồng đội mượt mà**: Bấm phím mũi tên [◄] / [►] hoặc chạm HUD để lướt camera chuyển mục tiêu mà không bị giật/nhảy cóc khung hình. Khôi phục hiển thị avatar đầy đủ khi người chơi được cứu thoát giam hoặc hết ván.
+
+2. **Hệ thống First-Person Viewmodel Hands & Motion sinh động**:
+   - **Mô hình đôi cánh tay 3D low-poly**: Gắn trực tiếp vào camera góc nhìn thứ nhất, hỗ trợ đổi màu áo đồng bộ thời gian thực theo vai trò (Xanh cảnh sát / Nâu cam cướp dân gian / Màu áo bà ba tùy chọn) và viền cổ tay.
+   - **Chuyển động vung tay (Arm Swing Motion)**:
+     - Đi bộ: Vung tay nhịp nhàng so le trái/phải theo bước chân (~8.5 rad/s).
+     - Chạy nước rút (Shift): Tần số guồng tay tăng vọt (~14 rad/s) với biên độ sải tay lớn, tạo cảm giác tốc độ mạnh mẽ.
+     - Đứng yên: Cánh tay hạ tự nhiên với nhịp thở nhẹ nhàng.
+     - Cúi người (C): Cánh tay thu sát người theo tư thế rình rập, luồn lách.
+   - **Cử chỉ hành động tương tác (Action Gestures)**:
+     - Cảnh sát bắt cướp (Chuột trái / E): Cánh tay phải vung mạnh về phía tâm ngắm thực hiện cú túm bắt uy lực.
+     - Cướp giải cứu (Giữ E gần nhà giam): Đôi tay hướng về phía trước thực hiện động tác bẻ khóa / tháo nút buộc với độ rung cơ học sinh động.
+   - **Chuyển động góc nhìn đi kèm (Immersive Camera Dynamics)**:
+     - Head bobbing: Nhấp nhô đầu nhẹ nhàng theo nhịp bước chân (bước ngắn khi đi bộ, nhún mạnh khi chạy).
+     - Strafe roll banking: Nghiêng nhẹ góc camera khi di chuyển ngang A/D hoặc quay chuột nhanh.
+     - Viewmodel sway inertia: Đôi tay có độ trễ quán tính mượt mà khi lia chuột.
+     - Landing dip: Camera và tay nhún xuống hấp thụ lực va chạm khi tiếp đất từ cú nhảy.
+     - Dynamic sprint FOV: Tự động mở rộng trường nhìn FOV (+5 độ) khi chạy nước rút và co nhẹ khi cúi người.
+
+Nghiệm thu kỹ thuật:
+- Toàn bộ monorepo đạt **152/152 tests** (Shared: 58/58, Backend: 29/29, Frontend: 65/65).
+- Frontend lint: **0 lỗi, 0 cảnh báo** (`eslint . --max-warnings 0`).
+- Frontend production build: Hoàn tất trong **333ms**.
+- Đã nghiệm thu tự động bằng Playwright xuất ảnh minh chứng: `demo-14-viewmodel-hands-idle.png`, `demo-15-viewmodel-sprint-swing.png`, `demo-16-viewmodel-capture-swipe.png`, `demo-17-multiplayer-match-firstperson.png`, `demo-18-spectator-third-person.png`, `demo-19-spectator-first-person-pov.png`.
+
+
+### 23/11/2026 — Sửa triệt để xé hình Z-fighting nhà cửa, Nâng cấp đồ họa thiên nhiên, Thiết kế lại UI/UX sảnh chờ & True Fullscreen Corner HUD
+
+1. **Khắc phục triệt để Z-fighting, nhấp nháy, xé hình giữa cửa/tường nhà (`enterable-houses.ts`)**:
+   - **Xác định nguyên nhân gốc rễ**: Các đố cửa sổ, thanh dầm cửa đi (`jamb`, `lintel`), khung viền và móng nhà trước đây được đặt ở cùng tọa độ độ sâu `face = z + side * (d/2 - 0.12)` với collider tường (chỉ chênh 1.5 cm) và dùng `DoubleSide` trên vật liệu ngói; ở khoảng cách xa, độ phân giải Z-buffer hữu hạn khiến mặt phẳng tường và khung cửa tranh chấp bề mặt gây sọc nhấp nháy, răng cưa giật xé.
+   - **Giải pháp dứt điểm**:
+     - Cấp độ sâu nhô ra ngoài rõ rệt (`proud geometric offset`): Khung cửa đi (`depth = 0.34m`, nhô ra 5cm cả mặt trước và mặt sau tường 0.24m), dầm ngang (`lintel depth = 0.34m`, cao 0.14m), chân móng (`depth = 0.32m`), cột góc (`0.24m x 0.24m`).
+     - Áp dụng `polygonOffset` chuẩn phần cứng (`polygonOffset = true`, `factor = -1`, `units = -2`) cho toàn bộ batch vật liệu gỗ và móng trang trí, đảm bảo khung gỗ luôn được rasterizer ưu tiên hiển thị sạch sẽ trước mặt phẳng tường.
+     - Chuyển vật liệu mái ngói sang `FrontSide` đơn diện, loại bỏ tranh chấp mặt trái/phải với trần nhà.
+
+2. **Nâng cấp toàn diện đồ họa thiên nhiên, bầu trời, mây và mặt đất**:
+   - **Bầu trời & Mây bồng bềnh (`landscape-detail.ts`)**:
+     - Thay thế các khối dodecahedron bẹp phẳng trước đây bằng các cụm mây tích cumulus đa khối cầu (`SphereGeometry` xếp chồng hữu cơ từ 5-7 khối mỗi đám) mềm mại, màu trắng ngà ấm áp với ánh nắng chiếu xiên.
+     - Bổ sung hiệu ứng mây trôi tự nhiên (`clouds-cluster` tự động trôi dọc trục X với tốc độ 0.4 m/s trong render loop), mang lại sức sống cho thế giới làng quê.
+   - **Mặt đất làng quê Bắc Bộ (`ground-material.ts`)**:
+     - Nâng cấp độ phân giải texture thủ tục từ 512 lên 1024x1024, tạo các lớp chuyển màu mượt mà: thảm cỏ xanh mướt (`#4c8e30`), vệt cỏ nắng vàng, đường mòn đất nện uốn lượn nối liền các ngôi nhà và sân đình với viền mờ tự nhiên (smoothstep), kết hợp hạt cát sỏi mịn up-close.
+   - **Thảm hoa cỏ dại (`landscape-detail.ts`)**:
+     - Bổ sung 96 bụi hoa dại (hoa mao lương vàng rực `#f5cb42` và hoa cúc dại trắng `#fdfbf7`) điểm xuyết cùng thảm cỏ ven hàng rào, gốc cây và chân tường.
+   - **Tán cây & Đống rơm hữu cơ (`load-village-models.ts`, `object-detail.ts`)**:
+     - Tăng độ bão hòa màu tán cây từ 0.16 lên 0.55-0.58 với dải màu nhiệt đới xanh rì đầy sức sống thay cho màu xám bạc phấn trước đây.
+     - Đống rơm được bổ sung thêm nhiều tầng sợi rơm so le màu vàng óng tự nhiên (`#dcb35e`, `#c49645`).
+
+3. **Thiết kế lại toàn bộ UI/UX sảnh chờ & màn hình chờ (`index.html`, `style.css`)**:
+   - Thiết kế dạng modal nổi trung tâm hiện đại mang phong cách gốm sứ/dân gian sang trọng với kính mờ cao cấp (`backdrop-filter: blur(24px)`, nền tối `rgba(20, 26, 32, 0.93)`).
+   - **Màn hình chọn sảnh (`#menu-view`)**: Thẻ hero chia rõ hai lối chơi Tạo phòng (👑 Chủ phòng) và Tham gia phòng (🔗 Nhập mã 6 ký tự), cùng thanh công cụ nhanh (MOCK01, Offline, Tân thủ 3 bước).
+   - **Màn hình chờ trận (`#room-view`)**: Bố cục 2 cột trực quan:
+     - Cột trái: Danh sách người chơi với huy hiệu (Chủ phòng 👑, Máy 🤖, Sẵn sàng) và các nút điều khiển máy (Thêm/Bớt bot, Cân bằng vai).
+     - Cột phải: Chọn nguyện vọng vai trò (🎲 Tự động, 👮 Cảnh sát, 🥷 Cướp), Tùy chỉnh trang phục dân gian (Nón lá Bắc Bộ, Khăn rằn, Mũ nan, Màu áo bà ba) và Bản đồ/bố cục.
+
+4. **Chỉ cần Chủ phòng bắt đầu trận đấu (`main.ts`)**:
+   - Khi người chơi (hoặc máy) vào phòng, client tự động kích hoạt trạng thái sẵn sàng trong sảnh, loại bỏ thao tác thủ công rườm rà.
+   - Nút **"🚀 BẮT ĐẦU TRẬN ĐẤU"** của Chủ phòng luôn sẵn sàng ngay khi phòng có từ 2 người trở lên, nổi bật với hiệu ứng ánh sáng gradient vàng cam dân gian rực rỡ. Chủ phòng chỉ cần 1 click là trận đấu khởi tranh ngay lập tức!
+
+5. **True 100vw/100vh Fullscreen Canvas & Corner HUD Chips**:
+   - **Xóa bỏ hoàn toàn thanh footer giấy thô cứng cố định ở đáy màn hình**: Canvas 3D chiếm trọn 100% diện tích màn hình, không padding, không margin dưới.
+   - **HUD góc gọn gàng, tinh tế**:
+     - Góc dưới trái (`#hud-corner-bl`): Chip thể lực kính mờ nhỏ gọn kèm biểu tượng sấm sét `⚡`, thanh tiến trình xanh mượt và số đo thể lực.
+     - Góc dưới phải (`#hud-corner-br`): Chip trạng thái kết nối máy chủ và tọa độ/FPS tinh gọn.
+
+Nghiệm thu kỹ thuật:
+- Toàn bộ monorepo đạt **152/152 tests** (Shared: 58/58, Backend: 29/29, Frontend: 65/65).
+- Frontend lint: **0 lỗi, 0 cảnh báo** (`eslint . --max-warnings 0`).
+- Frontend production build: Hoàn tất trong **791ms**.
+- Đã nghiệm thu tự động bằng Playwright xuất ảnh minh chứng:
+  - `demo-20-lobby-redesign.png`: Giao diện sảnh chờ mới sang trọng.
+  - `demo-21-room-view-waiting.png`: Màn hình phòng chờ 2 cột trực quan kèm nút Chủ phòng bắt đầu trận nổi bật.
+  - `demo-22-fullscreen-corner-hud.png`: Trải nghiệm tràn viền fullscreen 100% với HUD chip góc nhỏ gọn.
+  - `demo-23-house-door-seamless.png`: Khung cửa, tường và móng nhà liền lạc, triệt tiêu hoàn toàn xé hình Z-fighting.
+  - `demo-24-lush-environment-clouds.png`: Bầu trời mây cumulus bồng bềnh trôi, hoa cỏ và mặt đất xanh mướt.

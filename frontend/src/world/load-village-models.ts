@@ -57,9 +57,13 @@ export async function loadVillageModels(village: Group, jailModel: Group, isDisp
           mesh.setMatrixAt(index, new Matrix4().multiplyMatrices(matrix, part.matrixWorld));
           const color = new Color('#ffffff');
           if (part.material instanceof MeshStandardMaterial && part.material.name === 'canopy') {
-            color.setHSL(.17 + variant % 4 * .025, .16, .76 + variant % 3 * .05);
+            // Rich lush Vietnamese tropical foliage (deep bamboo green to fresh summer canopy)
+            color.setHSL(0.24 + (variant % 4) * 0.03, 0.55, 0.40 + (variant % 3) * 0.06);
+          } else if (asset === 'haystack') {
+            // Warm golden thatch
+            color.setHSL(0.11, 0.62, 0.50 + (variant % 3) * 0.05);
           } else {
-            color.setHSL(.08, variant % 3 * .035, .88 + variant % 4 * .035);
+            color.setHSL(0.09, 0.30 + (variant % 3) * 0.05, 0.75 + (variant % 4) * 0.04);
           }
           mesh.setColorAt(index, color);
         });

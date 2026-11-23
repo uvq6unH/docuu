@@ -43,7 +43,8 @@
       <div id="spectator-hud" class="spectator-hud" hidden>
         <div class="spectator-card">
           <div class="spectator-title">👁️ ĐANG THEO DÕI: <strong id="spectator-target-name">---</strong></div>
-          <div class="spectator-hint">(Bấm phím [◄] / [►] hoặc chạm màn hình để đổi đồng đội)</div>
+          <div class="spectator-hint">(Bấm [◄] / [►] đổi đồng đội · Phím [V] đổi góc nhìn)</div>
+          <button id="btn-spectator-mode" class="spectator-mode-btn" type="button">🎥 Góc nhìn: Người thứ 3 (Sau lưng)</button>
         </div>
       </div>
 
@@ -190,28 +191,41 @@
         <!-- Tab Menu: Chưa vào phòng -->
         <div id="menu-view">
           <div class="lobby-form">
-            <label for="player-name" style="font-size: 13px; font-weight: 600;">Tên của bạn:</label>
-            <input id="player-name" type="text" maxlength="20" placeholder="Nhập tên người chơi..." />
-            
-            <button id="btn-create-room" type="button" class="btn-ready">Tạo phòng mới (Chủ phòng)</button>
-            
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <input id="join-room-code" type="text" maxlength="6" placeholder="Mã 6 chữ (VD: ABCDEF)" style="text-transform: uppercase; font-family: monospace; font-weight: 700; width: 60%;" />
-              <button id="btn-join-room" type="button" class="btn-secondary" style="width: 40%;">Vào phòng</button>
-            </div>
-            
-            <div class="lobby-actions">
-              <button id="btn-mock-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Thử nhanh MOCK01</button>
-              <button id="btn-offline-mode" type="button" class="btn-secondary" style="font-size: 12px; padding: 8px;">Sân tập offline</button>
+            <div class="lobby-input-card">
+              <label for="player-name" class="lobby-label">👤 Biệt danh của bạn:</label>
+              <input id="player-name" type="text" maxlength="20" placeholder="Nhập tên người chơi..." class="lobby-text-input" />
             </div>
 
-            <button id="btn-tutorial" type="button" class="btn-ready" style="background: #236942; border-color: #236942; margin-top: 8px;">🎓 Hướng dẫn tân thủ (3 bước)</button>
+            <div class="lobby-hero-grid">
+              <div class="lobby-card lobby-card-create">
+                <div class="lobby-card-badge">👑 Chủ phòng</div>
+                <div class="lobby-card-title">Tạo phòng mới</div>
+                <p class="lobby-card-desc">Khởi tạo phòng chơi LAN / Trực tuyến và bắt đầu ngay</p>
+                <button id="btn-create-room" type="button" class="btn-ready btn-action-hero">Tạo phòng ngay</button>
+              </div>
+
+              <div class="lobby-card lobby-card-join">
+                <div class="lobby-card-badge">🔗 Vào phòng</div>
+                <div class="lobby-card-title">Tham gia phòng</div>
+                <p class="lobby-card-desc">Nhập mã phòng 6 chữ cái để kết nối</p>
+                <div class="lobby-join-row">
+                  <input id="join-room-code" type="text" maxlength="6" placeholder="MÃ PHÒNG" class="lobby-code-input" />
+                  <button id="btn-join-room" type="button" class="btn-secondary btn-action-join">Vào phòng</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="lobby-tools-strip">
+              <button id="btn-mock-mode" type="button" class="btn-tool">⚡ Thử nhanh MOCK01</button>
+              <button id="btn-offline-mode" type="button" class="btn-tool">🎮 Sân tập offline</button>
+              <button id="btn-tutorial" type="button" class="btn-tool btn-tool-tutorial">🎓 Tân thủ (3 bước)</button>
+            </div>
 
             <!-- Public Room Browser -->
             <div class="public-browser-container">
               <div class="browser-header">
-                <span style="font-size: 13px; font-weight: 700; color: #263d30;">🌐 Phòng chơi công khai</span>
-                <button id="btn-refresh-rooms" type="button" class="btn-tool" style="padding: 2px 8px; font-size: 11px;">🔄 Làm mới</button>
+                <span class="browser-title">🌐 Phòng chơi công khai</span>
+                <button id="btn-refresh-rooms" type="button" class="btn-tool btn-tool-refresh">🔄 Làm mới</button>
               </div>
               <div id="public-rooms-list" class="public-rooms-list">
                 <div class="room-empty-note">Đang tải danh sách phòng...</div>
@@ -222,11 +236,17 @@
 
         <!-- Room View: Đã vào phòng -->
         <div id="room-view" hidden>
-          <div class="room-badge">
-            <span>Phòng: <strong class="badge-code" id="display-room-code">------</strong></span>
-            <button id="btn-copy-code" type="button" style="width: auto; padding: 4px 8px; font-size: 11px;">Sao chép mã</button>
+          <div class="room-top-header">
+            <div class="room-code-chip">
+              <span class="room-code-label">MÃ PHÒNG:</span>
+              <strong class="badge-code" id="display-room-code">------</strong>
+              <button id="btn-copy-code" type="button" class="btn-copy-chip" title="Sao chép mã phòng">📋 Copy</button>
+            </div>
+            <div class="room-capacity-pill">
+              <span id="room-capacity-label">Chờ chủ phòng bắt đầu</span>
+            </div>
           </div>
-          
+
           <section id="match-result" aria-labelledby="result-title" hidden>
             <div role="status">
               <h2 id="result-title" tabindex="-1"></h2>
@@ -267,70 +287,90 @@
             <p id="result-wait" hidden>Đang chờ chủ phòng chọn chơi lại.</p>
           </section>
 
-          <!-- Map Variant Layout Selection (Host Only) -->
-          <div id="map-variant-container" class="map-variant-card" hidden>
-            <label for="select-map-variant" style="font-size: 12px; font-weight: 700; color: #263d30;">Bản đồ & Bố cục:</label>
-            <select id="select-map-variant" class="custom-select" style="font-size: 12px;">
-              <option value="village-v1">🏡 Làng quê Bắc Bộ (Mặc định)</option>
-              <option value="market-v1">🏮 Sân Đình & Chợ Quê (Bố cục mở rộng)</option>
-            </select>
-          </div>
+          <!-- Modern 2-Column Responsive Room Layout -->
+          <div class="room-columns-layout">
+            <!-- Left Column: Roster & Host Bots -->
+            <div class="room-col-roster">
+              <div class="room-col-header">
+                <span class="room-col-title">👥 Người chơi trong phòng</span>
+              </div>
+              <ul class="roster-list" id="roster-list"></ul>
 
-          <!-- Folk Costume Customization UI -->
-          <div id="costume-picker" class="costume-picker-card">
-            <div style="font-size: 12px; font-weight: 700; margin-bottom: 6px; color: #263d30;">👘 Trang phục truyền thống dân gian:</div>
-            <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
-              <label for="select-cosmetic-hat" style="font-size: 11px; width: 35%;">Mũ / Nón:</label>
-              <select id="select-cosmetic-hat" class="custom-select" style="font-size: 11px; width: 65%;">
-                <option value="none">Mặc định theo vai</option>
-                <option value="non_la">🌾 Nón lá Bắc Bộ</option>
-                <option value="khan_ran">🧣 Khăn rằn truyền thống</option>
-                <option value="mu_nan">👒 Mũ nan đan lát</option>
-              </select>
+              <!-- Host Bot Controls & Auto Roles UI (Only visible to host in LOBBY) -->
+              <div id="host-room-controls" class="host-controls-card" hidden>
+                <div class="host-controls-title">⚙️ Quản lý phòng (Chủ phòng):</div>
+                <div class="host-btn-row">
+                  <button id="btn-add-bot" type="button" class="btn-tool btn-tool-bot">🤖 + Thêm Bot</button>
+                  <button id="btn-remove-bot" type="button" class="btn-tool btn-tool-remove">➖ Bớt Bot</button>
+                  <button id="btn-auto-roles" type="button" class="btn-tool btn-tool-auto">⚖️ Cân bằng vai</button>
+                </div>
+              </div>
             </div>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <span style="font-size: 11px; width: 35%;">Màu áo bà ba:</span>
-              <div class="shirt-palette">
-                <button type="button" class="shirt-swatch active" data-color="" title="Mặc định theo vai" style="background: #999;"></button>
-                <button type="button" class="shirt-swatch" data-color="#5c3a21" title="Nâu sồng" style="background: #5c3a21;"></button>
-                <button type="button" class="shirt-swatch" data-color="#2e4c6d" title="Chàm lam" style="background: #2e4c6d;"></button>
-                <button type="button" class="shirt-swatch" data-color="#8b3a2b" title="Đỏ gạch" style="background: #8b3a2b;"></button>
-                <button type="button" class="shirt-swatch" data-color="#d8d3c5" title="Trắng ngà" style="background: #d8d3c5;"></button>
+
+            <!-- Right Column: Role Picker, Customization, Map -->
+            <div class="room-col-setup">
+              <!-- Role Selection UI -->
+              <div id="role-picker-container" class="role-selector-card">
+                <div class="role-selector-header">🎯 Nguyện vọng vai trò:</div>
+                <div class="role-btn-group">
+                  <button id="btn-role-auto" type="button" class="btn-role active" data-role="auto">🎲 Tự động</button>
+                  <button id="btn-role-police" type="button" class="btn-role btn-role-police" data-role="POLICE">👮 Cảnh sát</button>
+                  <button id="btn-role-robber" type="button" class="btn-role btn-role-robber" data-role="ROBBER">🥷 Cướp</button>
+                </div>
+              </div>
+
+              <!-- Folk Costume Customization UI -->
+              <div id="costume-picker" class="costume-picker-card">
+                <div class="costume-title">👘 Trang phục truyền thống dân gian:</div>
+                <div class="costume-field">
+                  <label for="select-cosmetic-hat" class="costume-label">Mũ / Nón:</label>
+                  <select id="select-cosmetic-hat" class="custom-select">
+                    <option value="none">Mặc định theo vai</option>
+                    <option value="non_la">🌾 Nón lá Bắc Bộ</option>
+                    <option value="khan_ran">🧣 Khăn rằn truyền thống</option>
+                    <option value="mu_nan">👒 Mũ nan đan lát</option>
+                  </select>
+                </div>
+                <div class="costume-field">
+                  <span class="costume-label">Màu áo bà ba:</span>
+                  <div class="shirt-palette">
+                    <button type="button" class="shirt-swatch active" data-color="" title="Mặc định theo vai" style="background: #999;"></button>
+                    <button type="button" class="shirt-swatch" data-color="#5c3a21" title="Nâu sồng" style="background: #5c3a21;"></button>
+                    <button type="button" class="shirt-swatch" data-color="#2e4c6d" title="Chàm lam" style="background: #2e4c6d;"></button>
+                    <button type="button" class="shirt-swatch" data-color="#8b3a2b" title="Đỏ gạch" style="background: #8b3a2b;"></button>
+                    <button type="button" class="shirt-swatch" data-color="#d8d3c5" title="Trắng ngà" style="background: #d8d3c5;"></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Map Variant Layout Selection (Host Only) -->
+              <div id="map-variant-container" class="map-variant-card" hidden>
+                <label for="select-map-variant" class="costume-label">Bản đồ & Bố cục:</label>
+                <select id="select-map-variant" class="custom-select">
+                  <option value="village-v1">🏡 Làng quê Bắc Bộ (Mặc định)</option>
+                  <option value="market-v1">🏮 Sân Đình & Chợ Quê (Bố cục mở rộng)</option>
+                </select>
+              </div>
+
+              <!-- Captain Jail Selection UI in JAIL_SELECTION phase -->
+              <div id="captain-jail-picker" class="jail-picker" hidden>
+                <p class="captain-jail-title">👮 Bạn là Đội trưởng Cảnh sát! Chọn nhà giam:</p>
+                <div class="jail-btn-col">
+                  <button type="button" class="jail-btn" data-jail="J1">Chọn J1 (Trung tâm làng)</button>
+                  <button type="button" class="jail-btn" data-jail="J2">Chọn J2 (Khu chuồng trại phía Tây)</button>
+                  <button type="button" class="jail-btn" data-jail="J3">Chọn J3 (Bìa rừng phía Đông)</button>
+                </div>
               </div>
             </div>
           </div>
-          <!-- Role Selection UI -->
-          <div id="role-picker-container" class="role-selector-card">
-            <span class="role-selector-label">Vai trò của bạn:</span>
-            <div class="role-btn-group">
-              <button id="btn-role-auto" type="button" class="btn-role active" data-role="auto">🎲 Tự động</button>
-              <button id="btn-role-police" type="button" class="btn-role btn-role-police" data-role="POLICE">👮 Cảnh sát</button>
-              <button id="btn-role-robber" type="button" class="btn-role btn-role-robber" data-role="ROBBER">🥷 Cướp</button>
+
+          <!-- Room Action Bar (Host Start & Controls) -->
+          <div class="room-action-footer">
+            <button id="btn-start-game" type="button" class="btn-start-match" hidden>🚀 BẮT ĐẦU TRẬN ĐẤU</button>
+            <div class="room-secondary-actions">
+              <button id="btn-toggle-ready" type="button" class="btn-ready">Sẵn sàng</button>
+              <button id="btn-leave-room" type="button" class="btn-danger">Rời phòng</button>
             </div>
-          </div>
-
-          <!-- Host Bot Controls & Auto Roles UI (Only visible to host in LOBBY) -->
-          <div id="host-room-controls" class="host-controls-card" hidden>
-            <button id="btn-add-bot" type="button" class="btn-tool btn-tool-bot">🤖 + Thêm máy</button>
-            <button id="btn-remove-bot" type="button" class="btn-tool btn-tool-remove">➖ Bớt máy</button>
-            <button id="btn-auto-roles" type="button" class="btn-tool btn-tool-auto">⚖️ Chia vai auto</button>
-          </div>
-
-          <ul class="roster-list" id="roster-list"></ul>
-
-          <!-- Captain Jail Selection UI in JAIL_SELECTION phase -->
-          <div id="captain-jail-picker" class="jail-picker" hidden>
-            <p style="font-size: 13px; font-weight: 700; color: #2876c9; margin-bottom: 4px;">👮 Bạn là Đội trưởng Cảnh sát! Chọn nhà giam:</p>
-            <button type="button" class="jail-btn" data-jail="J1">Chọn J1 (Trung tâm làng)</button>
-            <button type="button" class="jail-btn" data-jail="J2">Chọn J2 (Khu chuồng trại phía Tây)</button>
-            <button type="button" class="jail-btn" data-jail="J3">Chọn J3 (Bìa rừng phía Đông)</button>
-          </div>
-
-          <!-- Room Action Buttons -->
-          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-            <button id="btn-toggle-ready" type="button" class="btn-ready">Sẵn sàng</button>
-            <button id="btn-start-game" type="button" class="btn-ready" hidden>Bắt đầu trận đấu</button>
-            <button id="btn-leave-room" type="button" class="btn-danger" style="padding: 8px 12px; font-size: 12px;">Rời phòng</button>
           </div>
         </div>
 
@@ -350,11 +390,24 @@
       </section>
 
       <div class="crosshair" aria-hidden="true" hidden></div>
-      <footer>
-        <span id="stamina">Thể lực 100/100</span>
-        <span id="connection-info">Máy chủ: Đang kết nối…</span>
-        <output id="debug" hidden aria-label="Input debug"></output>
-      </footer>
+
+      <!-- Modern Corner Glassmorphism HUD (True Fullscreen, Zero Bottom Margin) -->
+      <div id="hud-corner-bl" class="hud-corner-bl">
+        <div id="hud-stamina-container" class="hud-chip hud-stamina-chip">
+          <span class="hud-chip-icon">⚡</span>
+          <div class="hud-stamina-track">
+            <div id="hud-stamina-bar" class="hud-stamina-bar"></div>
+          </div>
+          <span id="stamina" class="hud-chip-text">100/100</span>
+        </div>
+      </div>
+
+      <div id="hud-corner-br" class="hud-corner-br">
+        <div id="hud-connection-container" class="hud-chip hud-connection-chip">
+          <span id="connection-info">Máy chủ: Đang kết nối…</span>
+          <output id="debug" hidden aria-label="Input debug"></output>
+        </div>
+      </div>
       <noscript>Cần bật JavaScript để hiển thị game 3D.</noscript>
     </main>
     <script type="module" src="/src/main.ts"></script>

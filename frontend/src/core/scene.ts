@@ -9,14 +9,14 @@ import {
 // Chỉ là sân render F04; không phải map/collider hay rules authoritative.
 export function createScene() {
   const scene = new Scene();
-  scene.background = new Color('#c5dce0');
-  scene.fog = new Fog('#c5dce0', 45, 125);
+  scene.background = new Color('#a8d3e8');
+  scene.fog = new Fog('#bcdbe8', 50, 130);
   const camera = new PerspectiveCamera(75, 1, 0.1, 150);
   // Camera cố định cho sân thử; M03 sẽ dùng vị trí/chiều cao từ shared.
   camera.position.set(0, 1.55, 12);
-  const hemi = new HemisphereLight('#d9edff', '#82704c', 1.7);
+  const hemi = new HemisphereLight('#eef6ff', '#5f7347', 1.8);
   scene.add(hemi);
-  const sun = new DirectionalLight('#ffe0a8', 3.2);
+  const sun = new DirectionalLight('#fff1ce', 3.4);
   sun.position.set(-28, 40, 18);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);

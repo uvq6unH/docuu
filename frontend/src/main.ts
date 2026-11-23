@@ -29,7 +29,8 @@ import type {
 } from '../../packages/shared/src/protocol';
 import type { Vec3 } from '../../packages/shared/src/map';
 import { sound } from './core/audio';
-import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry } from 'three';
+import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, Vector3 } from 'three';
+import { ViewModelHands } from './player/viewmodel';
 
 function requireElement<T extends HTMLElement>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -123,6 +124,7 @@ const settingWeather = requireElement<HTMLSelectElement>('#setting-weather');
 
 const spectatorHud = requireElement('#spectator-hud');
 const spectatorTargetName = requireElement('#spectator-target-name');
+const btnSpectatorMode = requireElement<HTMLButtonElement>('#btn-spectator-mode');
 
 // Quick Chat & Radio Elements
 const quickChatFeed = requireElement<HTMLDivElement>('#quick-chat-feed');
@@ -155,6 +157,12 @@ const selectCosmeticHat = requireElement<HTMLSelectElement>('#select-cosmetic-ha
 
 try {
   const { scene, camera, sun, hemi } = createScene();
+  scene.add(camera);
+
+  const viewmodel = new ViewModelHands('ROBBER');
+  viewmodel.attachToCamera(camera);
+  viewmodel.setVisible(false);
+
   const world = villagePreview();
   scene.add(world.village);
   const renderer = createRenderer(container);
@@ -190,6 +198,20 @@ try {
   let lastStaminaVal = -1;
   let spectatorIndex = 0;
   let isSpectating = false;
+  let spectatorMode: 'THIRD_PERSON' | 'FIRST_PERSON' = 'THIRD_PERSON';
+  const spectatorCamPos = new Vector3();
+  let spectatorCamYaw = 0;
+  let hasValidSpectatorCamPos = false;
+  let lastSpectatedTargetId: string | null = null;
+  let prevCameraYaw = 0;
+  let prevCameraPitch = 0;
+  let currentBaseFov = 75;
+
+  function updateSpectatorModeButton(): void {
+    btnSpectatorMode.textContent = spectatorMode === 'THIRD_PERSON'
+      ? '🎥 Góc nhìn: Người thứ 3 (Sau lưng)'
+      : '👁️ Góc nhìn: Người thứ 1 (Mắt đồng đội)';
+  }
 
   interface PredictedFrame {
     seq: number;
@@ -601,6 +623,7 @@ try {
       if (!self) return;
       const identity = snapshot.matchId + '/' + self.id;
       currentRole = self.role;
+      viewmodel.setRole(self.role);
 
       // Phase transition or new match: Snap cleanly to authoritative spawn point & clear prediction history
       if (lastObservedPhase !== snapshot.phase || viewSession !== identity) {
@@ -765,6 +788,7 @@ try {
           spectatorHud.hidden = false;
           const target = freeTeammates[spectatorIndex % freeTeammates.length]!;
           spectatorTargetName.textContent = target.id;
+          updateSpectatorModeButton();
         } else {
           isSpectating = false;
           spectatorHud.hidden = true;
@@ -772,6 +796,13 @@ try {
       } else {
         isSpectating = false;
         spectatorHud.hidden = true;
+      }
+
+      if (!isSpectating && lastSpectatedTargetId) {
+        const prevEntity = session.getRemoteEntities().get(lastSpectatedTargetId);
+        if (prevEntity) prevEntity.avatar.root.visible = true;
+        lastSpectatedTargetId = null;
+        hasValidSpectatorCamPos = false;
       }
 
       // 3D Spatial Audio & Ambient Atmosphere
@@ -990,15 +1021,27 @@ try {
     btnToggleReady.textContent = isReady ? 'Hủy sẵn sàng' : 'Sẵn sàng';
     btnToggleReady.className = isReady ? 'btn-unready' : 'btn-ready';
 
-    // Host start button (available in LOBBY when >= 2 players and all ready)
+    // Auto-ready player in LOBBY so only host start is needed
+    if (room.phase === 'LOBBY' && me && !me.ready) {
+      session.toggleReady(true).catch(() => {});
+    }
+
+    // Host start button (available in LOBBY when >= 2 players; host can start directly!)
     const canStart = isHost && room.phase === 'LOBBY';
     btnStartGame.hidden = !canStart;
     if (canStart) {
-      const allReady = room.roster.length >= 2 && room.roster.every((m) => m.ready);
-      btnStartGame.disabled = !allReady;
-      btnStartGame.textContent = allReady
-        ? `Bắt đầu trận đấu (${room.roster.length} người)`
-        : `Chờ mọi người sẵn sàng (${room.roster.filter(m => m.ready).length}/${room.roster.length})`;
+      const canLaunch = room.roster.length >= 2;
+      btnStartGame.disabled = !canLaunch;
+      btnStartGame.textContent = canLaunch
+        ? `🚀 Bắt đầu trận đấu (${room.roster.length} người)`
+        : `Chờ thêm người chơi (${room.roster.length}/6)`;
+    }
+
+    const roomCapacityLabel = document.getElementById('room-capacity-label');
+    if (roomCapacityLabel) {
+      roomCapacityLabel.textContent = isHost
+        ? (room.roster.length >= 2 ? `Sẵn sàng (${room.roster.length}/6 người)` : 'Cần ít nhất 2 người')
+        : 'Chờ chủ phòng bắt đầu';
     }
 
     // Host rematch button (available in RESULT phase)
@@ -1103,6 +1146,9 @@ try {
   btnStartGame.addEventListener('click', async () => {
     btnStartGame.disabled = true;
     try {
+      if (!isReady) {
+        await session.toggleReady(true);
+      }
       const res = await session.startMatch();
       btnStartGame.disabled = false;
       if (!res.ok) {
@@ -1349,6 +1395,7 @@ try {
       document.querySelectorAll('.shirt-swatch').forEach((s) => s.classList.remove('active'));
       swatch.classList.add('active');
       currentShirtColor = swatch.dataset.color || '';
+      viewmodel.setShirtColor(currentShirtColor || undefined);
       const cosmetic: CosmeticPreferences = { hat: currentHat };
       if (currentShirtColor) cosmetic.shirtColor = currentShirtColor;
       void session.setCosmetic(cosmetic);
@@ -1393,6 +1440,11 @@ try {
         camera.rotation.copy(surveyRotation);
       }
       playing = locked;
+      viewmodel.setVisible(locked && !isSpectating);
+      if (locked) {
+        prevCameraYaw = camera.rotation.y;
+        prevCameraPitch = camera.rotation.x;
+      }
       renderer.shadowMap.needsUpdate = true;
       previous = player;
       lastFrame = undefined;
@@ -1478,12 +1530,14 @@ try {
     settingFov.value = savedFov.toString();
     valFov.textContent = savedFov.toString();
     camera.fov = savedFov;
+    currentBaseFov = savedFov;
     camera.updateProjectionMatrix();
   }
   settingFov.addEventListener('input', () => {
     const val = parseInt(settingFov.value, 10);
     valFov.textContent = val.toString();
     camera.fov = val;
+    currentBaseFov = val;
     camera.updateProjectionMatrix();
     localStorage.setItem('folk_tag_fov', val.toString());
   });
@@ -1518,11 +1572,21 @@ try {
 
   // Spectator, Quick Chat & Tactical Interaction
   window.addEventListener('keydown', (e) => {
-    if (isSpectating && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
-      e.preventDefault();
-      spectatorIndex += e.code === 'ArrowRight' ? 1 : -1;
-      if (spectatorIndex < 0) spectatorIndex = 999;
-      return;
+    if (isSpectating) {
+      if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        e.preventDefault();
+        spectatorIndex += e.code === 'ArrowRight' ? 1 : -1;
+        if (spectatorIndex < 0) spectatorIndex = 999;
+        hasValidSpectatorCamPos = false;
+        return;
+      }
+      if (e.code === 'KeyV') {
+        e.preventDefault();
+        spectatorMode = spectatorMode === 'THIRD_PERSON' ? 'FIRST_PERSON' : 'THIRD_PERSON';
+        updateSpectatorModeButton();
+        hasValidSpectatorCamPos = false;
+        return;
+      }
     }
 
     if (!playing) return;
@@ -1622,8 +1686,17 @@ try {
       }, 350);
     }
   });
-  spectatorHud.addEventListener('click', () => {
+  btnSpectatorMode.addEventListener('click', (e) => {
+    e.stopPropagation();
+    spectatorMode = spectatorMode === 'THIRD_PERSON' ? 'FIRST_PERSON' : 'THIRD_PERSON';
+    updateSpectatorModeButton();
+    hasValidSpectatorCamPos = false;
+  });
+
+  spectatorHud.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement).closest('#btn-spectator-mode')) return;
     spectatorIndex++;
+    hasValidSpectatorCamPos = false;
   });
 
   let disposed = false;
@@ -1744,6 +1817,7 @@ try {
             crosshair.classList.remove('swing');
             void crosshair.offsetWidth; // trigger reflow for animation
             crosshair.classList.add('swing');
+            viewmodel.triggerCapture();
           }
         }
 
@@ -1764,34 +1838,149 @@ try {
       const blend = accumulated / tickMs;
       const lerp = (from: number, to: number) => from + (to - from) * blend;
 
+      // N04: Interpolate all remote players smoothly at 60 FPS before computing camera position
+      session.updateRemoteInterpolation(frameMs / 1000);
+
       const freeTeammates = latestSnapshot?.players.filter((p) => p.role === 'ROBBER' && p.state !== 'JAILED') || [];
       const spectateTarget = (isSpectating && freeTeammates.length > 0)
         ? freeTeammates[spectatorIndex % freeTeammates.length]
         : null;
 
       if (spectateTarget) {
-        camera.position.set(
-          spectateTarget.pos[0],
-          spectateTarget.pos[1] + eyeHeight(Boolean(spectateTarget.crouch)),
-          spectateTarget.pos[2]
-        );
-        camera.rotation.set(0, spectateTarget.yaw, 0, 'YXZ');
+        viewmodel.setVisible(false);
+        const remoteEntity = session.getRemoteEntities().get(spectateTarget.id);
+        const targetPos = remoteEntity
+          ? remoteEntity.currentPos
+          : new Vector3(spectateTarget.pos[0], spectateTarget.pos[1], spectateTarget.pos[2]);
+        const targetYaw = remoteEntity ? remoteEntity.currentYaw : spectateTarget.yaw;
+        const targetCrouch = remoteEntity ? remoteEntity.crouch : Boolean(spectateTarget.crouch);
+
+        // If target changed, restore previous target's avatar visibility
+        if (lastSpectatedTargetId && lastSpectatedTargetId !== spectateTarget.id) {
+          const prevEntity = session.getRemoteEntities().get(lastSpectatedTargetId);
+          if (prevEntity) prevEntity.avatar.root.visible = true;
+          hasValidSpectatorCamPos = false;
+        }
+
+        if (spectatorMode === 'THIRD_PERSON') {
+          if (remoteEntity) remoteEntity.avatar.root.visible = true;
+          lastSpectatedTargetId = null;
+
+          const camDist = 2.4;
+          const camHeight = targetCrouch ? 1.05 : 1.45;
+          const lookHeight = targetCrouch ? 0.85 : 1.25;
+
+          const desiredX = targetPos.x + Math.sin(targetYaw) * camDist;
+          const desiredY = Math.max(0.4, targetPos.y + camHeight);
+          const desiredZ = targetPos.z + Math.cos(targetYaw) * camDist;
+
+          const clampedX = Math.max(-38.5, Math.min(38.5, desiredX));
+          const clampedZ = Math.max(-38.5, Math.min(38.5, desiredZ));
+
+          const camLerp = 1 - Math.exp(-12 * (frameMs / 1000));
+          if (!hasValidSpectatorCamPos) {
+            spectatorCamPos.set(clampedX, desiredY, clampedZ);
+            hasValidSpectatorCamPos = true;
+          } else {
+            spectatorCamPos.lerp(new Vector3(clampedX, desiredY, clampedZ), camLerp);
+          }
+          camera.position.copy(spectatorCamPos);
+          camera.lookAt(targetPos.x, targetPos.y + lookHeight, targetPos.z);
+        } else {
+          // First-person POV: Hide avatar to prevent head clipping!
+          if (remoteEntity) remoteEntity.avatar.root.visible = false;
+          lastSpectatedTargetId = spectateTarget.id;
+
+          const targetEyeY = targetPos.y + eyeHeight(targetCrouch);
+          const camLerp = 1 - Math.exp(-22 * (frameMs / 1000));
+          if (!hasValidSpectatorCamPos) {
+            spectatorCamPos.set(targetPos.x, targetEyeY, targetPos.z);
+            spectatorCamYaw = targetYaw;
+            hasValidSpectatorCamPos = true;
+          } else {
+            spectatorCamPos.lerp(new Vector3(targetPos.x, targetEyeY, targetPos.z), camLerp);
+          }
+          camera.position.copy(spectatorCamPos);
+
+          let diff = (targetYaw - spectatorCamYaw + Math.PI) % (Math.PI * 2) - Math.PI;
+          if (diff < -Math.PI) diff += Math.PI * 2;
+          spectatorCamYaw += diff * (1 - Math.exp(-18 * (frameMs / 1000)));
+          camera.rotation.set(0, spectatorCamYaw, 0, 'YXZ');
+        }
       } else {
-        camera.position.set(
-          lerp(previous.pos[0], player.pos[0]) + visualErrorOffset.x,
-          lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y,
-          lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z
+        if (lastSpectatedTargetId) {
+          const prevEntity = session.getRemoteEntities().get(lastSpectatedTargetId);
+          if (prevEntity) prevEntity.avatar.root.visible = true;
+          lastSpectatedTargetId = null;
+        }
+        hasValidSpectatorCamPos = false;
+        viewmodel.setVisible(true);
+
+        const baseCamX = lerp(previous.pos[0], player.pos[0]) + visualErrorOffset.x;
+        const baseCamY = lerp(previous.pos[1] + eyeHeight(previous.crouched), player.pos[1] + eyeHeight(player.crouched)) + visualErrorOffset.y;
+        const baseCamZ = lerp(previous.pos[2], player.pos[2]) + visualErrorOffset.z;
+
+        const horizDist = Math.hypot(player.pos[0] - previous.pos[0], player.pos[2] - previous.pos[2]);
+        const speed = horizDist / (tickMs / 1000);
+
+        const deltaYaw = camera.rotation.y - prevCameraYaw;
+        const deltaPitch = camera.rotation.x - prevCameraPitch;
+        prevCameraYaw = camera.rotation.y;
+        prevCameraPitch = camera.rotation.x;
+
+        const peekInput = controls.input.peek();
+        const distToJail = Math.hypot(
+          villageMap.jails[0]!.center[0] - player.pos[0],
+          villageMap.jails[0]!.center[2] - player.pos[2]
         );
+        const isRescuing = currentRole === 'ROBBER' && peekInput.rescueHeld && distToJail <= 4.0;
+
+        const motion = viewmodel.update({
+          dtSeconds: frameMs / 1000,
+          speed,
+          sprint: peekInput.sprint && (peekInput.moveX !== 0 || peekInput.moveZ !== 0),
+          crouch: player.crouched,
+          grounded: player.grounded,
+          verticalSpeed: player.verticalSpeed,
+          deltaYaw,
+          deltaPitch,
+          strafeInput: peekInput.moveX,
+          isRescuing,
+        });
+
+        const currentYaw = camera.rotation.y;
+        camera.position.set(
+          baseCamX + motion.bobX * Math.cos(currentYaw),
+          baseCamY + motion.bobY + motion.landingDip,
+          baseCamZ + motion.bobX * (-Math.sin(currentYaw))
+        );
+        camera.rotation.set(camera.rotation.x, camera.rotation.y, motion.roll, 'YXZ');
+
+        // Dynamic sprint FOV kick
+        const isSprinting = peekInput.sprint && (peekInput.moveX !== 0 || peekInput.moveZ !== 0);
+        const targetFov = currentBaseFov + (isSprinting ? 5.0 : 0) + (player.crouched ? -2.0 : 0);
+        camera.fov += (targetFov - camera.fov) * (1 - Math.exp(-8 * (frameMs / 1000)));
+        camera.updateProjectionMatrix();
       }
 
       const staminaVal = Math.round(player.stamina);
       if (staminaVal !== lastStaminaVal) {
         lastStaminaVal = staminaVal;
-        stamina.textContent = `Thể lực ${staminaVal}/${movementRules.maxStamina}`;
+        stamina.textContent = `${staminaVal}/${movementRules.maxStamina}`;
+        const staminaBar = document.getElementById('hud-stamina-bar');
+        if (staminaBar) {
+          staminaBar.style.width = `${Math.min(100, Math.max(0, (staminaVal / movementRules.maxStamina) * 100))}%`;
+        }
       }
 
-      // N04: Interpolate all remote players smoothly at 60 FPS
-      session.updateRemoteInterpolation(frameMs / 1000);
+      // Gentle cloud drift across the sky
+      const cloudsCluster = scene.getObjectByName('clouds-cluster');
+      if (cloudsCluster) {
+        cloudsCluster.position.x += (frameMs / 1000) * 0.4;
+        if (cloudsCluster.position.x > 80) {
+          cloudsCluster.position.x -= 160;
+        }
+      }
 
       // T03: Update Compass, Minimap, and Aim Interaction (throttled to 30Hz)
       updateCompass(camera.rotation.y, player.pos, activeJailId, time);
@@ -1892,6 +2081,7 @@ try {
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    viewmodel.dispose();
     removePreview?.();
     mockDetails.dispose();
     session.dispose();

@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, Color, DoubleSide, Float32BufferAttribute, Group,
+  BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, Group,
   InstancedMesh, Mesh, MeshStandardMaterial, Object3D,
 } from 'three';
 import { villageMap } from './shared-map';
@@ -40,34 +40,34 @@ export function createEnterableHouses() {
     }
     for (const side of [-1, 1]) {
       for (const corner of [-1, 1]) {
-        block('bark', wood, x + side * (w / 2 - .1), 1.65, z + corner * (d / 2 - .1), .18, 3.1, .18);
+        block('bark', wood, x + side * (w / 2 - .1), 1.65, z + corner * (d / 2 - .1), .24, 3.2, .24);
       }
-      block('bark', wood, x, 3.19, z + side * (d / 2 - .08), w, .12, .24);
+      block('bark', wood, x, 3.22, z + side * (d / 2 - .08), w + .1, .16, .32);
       // Closed side shutters add depth without suggesting an open passage.
-      const sideX = x + side * (w / 2 + .012);
-      block('bark', wood, sideX, 1.7, z, .035, 1.1, 1.5);
+      const sideX = x + side * (w / 2 + .018);
+      block('bark', wood, sideX, 1.7, z, .04, 1.1, 1.5);
       for (let slat = -2; slat <= 2; slat++) {
-        block('bark', '#b6a17a', sideX + side * .025, 1.7 + slat * .18, z, .025, .035, 1.35);
+        block('bark', '#b6a17a', sideX + side * .028, 1.7 + slat * .18, z, .03, .035, 1.35);
       }
     }
     for (const side of [-1, 1]) {
       const face = z + side * (d / 2 - .12);
-      // Open door frames, with no leaf across the opening.
+      // Solid proud door frames - envelopes doorway seam cleanly to prevent z-fighting
       for (const jamb of [-1, 1]) {
-        block('bark', wood, x + jamb * .84, 1.2, face, .08, 2.4, .27);
+        block('bark', wood, x + jamb * .82, 1.2, face, .14, 2.42, .34);
       }
-      block('bark', wood, x, 2.43, face, 1.84, .1, .27);
-      // Foundation is split around both doorways.
+      block('bark', wood, x, 2.44, face, 1.84, .14, .34);
+      // Foundation is proud of wall collider
       for (const sign of [-1, 1]) {
-        block('foundation', '#9c795b', x + sign * (w / 4 + .4), .14, face, (w - 1.6) / 2, .28, .27);
+        block('foundation', '#9c795b', x + sign * (w / 4 + .4), .14, face, (w - 1.6) / 2, .28, .32);
       }
       for (const window of [-1, 1]) {
         const windowX = x + window * (w / 2 - 1.1);
-        block('bark', wood, windowX, 1.66, face + side * .135, 1.12, 1.1, .035);
+        block('bark', wood, windowX, 1.66, face + side * .14, 1.12, 1.1, .06);
         for (let slat = -2; slat <= 2; slat++) {
-          block('bark', '#b4a17b', windowX, 1.66 + slat * .18, face + side * .16, .96, .035, .03);
+          block('bark', '#b4a17b', windowX, 1.66 + slat * .18, face + side * .17, .96, .035, .035);
         }
-        block('bark', wood, windowX, 1.09, face, 1.2, .08, .28);
+        block('bark', wood, windowX, 1.09, face, 1.2, .09, .32);
       }
     }
     // Beams and distinct ceiling patterns remain above standing head height.
@@ -102,7 +102,7 @@ export function createEnterableHouses() {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
     geometry.computeVertexNormals();
-    const material = new MeshStandardMaterial({ color: tile, roughness: .9, side: DoubleSide });
+    const material = new MeshStandardMaterial({ color: tile, roughness: .88 });
     material.name = 'fired_clay';
     const roof = new Mesh(geometry, material);
     roof.name = house.id + '-roof-' + ['gable', 'hip', 'lean'][style];
@@ -113,6 +113,11 @@ export function createEnterableHouses() {
   for (const [name, batch] of parts) {
     const geometry = new BoxGeometry();
     const material = new MeshStandardMaterial({ roughness: 1 });
+    if (name === 'bark' || name === 'foundation') {
+      material.polygonOffset = true;
+      material.polygonOffsetFactor = -1;
+      material.polygonOffsetUnits = -2;
+    }
     material.name = name;
     const mesh = new InstancedMesh(geometry, material, batch.length);
     batch.forEach(({ pose, color }, index) => {
