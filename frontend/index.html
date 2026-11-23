@@ -3,9 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#263d30" />
+    <meta name="theme-color" content="#0e1411" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Cảnh sát bắt cướp — Multiplayer FPS</title>
+    <title>Đồ Cứu — Cảnh Sát Bắt Cướp (Multiplayer FPS)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;0,900;1,700&family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
   </head>
   <body>
     <main id="app">
@@ -31,7 +34,7 @@
           <div class="hud-card"><span class="hud-time" id="hud-timer">05:00</span> · <span id="hud-phase">LOBBY</span></div>
           <div class="hud-card" id="hud-role-card">Vai trò: <span id="hud-role">Chờ trận</span></div>
           <div class="hud-card" id="hud-jail-card">Nhà giam: <span id="hud-jail">J1</span> · Bị giam: <span id="hud-jailed-count">0/4</span></div>
-        <span id="hud-action" role="status"></span>
+          <span id="hud-action" role="status"></span>
           <div class="hud-card hud-stealth" id="hud-stealth-card" hidden>🌿 ĐANG ẨN NẤP (TÀNG HÌNH)</div>
           <div class="hud-card hud-immune" id="hud-immune-card" hidden>🛡️ MIỄN NHIỄM: <span id="hud-immune-sec">3.0</span>s</div>
           <button id="btn-toggle-help" type="button" class="btn-help-pill" title="Xem hướng dẫn (Phím H)">❓ Trợ giúp [H]</button>
@@ -82,7 +85,7 @@
                 <div><code>Shift</code></div><div>Chạy nhanh (Tiêu hao Thể lực)</div>
                 <div><code>Space</code></div><div>Nhảy qua hàng rào</div>
                 <div><code>C</code></div><div>Cúi người / Nấp bụi tàng hình</div>
-                <div><code>Chuột trái / E</code></div><div>Cảnh sát: Bắt cướp (khi trong tầm 2m)</div>
+                <div><code>Chuột trái / E</code></div><div>Cảnh sát: Bắt cướp (khi trong tầm 1.6m)</div>
                 <div><code>Giữ E hoặc F (2s)</code></div><div>Cướp: Giải cứu đồng đội tại nhà giam</div>
                 <div><code>1, 2, 3, 4</code></div><div>Báo hiệu radio nhanh trong đội</div>
                 <div><code>Q / Chuột giữa</code></div><div>Đánh dấu tọa độ chiến thuật (Tactical Ping)</div>
@@ -148,7 +151,7 @@
           </div>
           <p id="tutorial-desc">Dùng phím W, A, S, D để di chuyển, giữ Shift chạy nhanh và bấm Space để nhảy qua hàng rào gỗ.</p>
           <div class="tutorial-progress-bar"><div id="tutorial-progress-fill" class="tutorial-progress-fill" style="width: 33%;"></div></div>
-          <button id="btn-exit-tutorial" type="button" class="btn-tool" style="margin-top: 10px; font-size: 11px; width: 100%;">✕ Thoát chế độ hướng dẫn</button>
+          <button id="btn-exit-tutorial" type="button" class="btn-folk btn-folk-tool" style="margin-top: 10px; font-size: 11px; width: 100%;">✕ Thoát chế độ hướng dẫn</button>
         </div>
       </div>
 
@@ -170,65 +173,124 @@
       <!-- In-game event notification toast -->
       <div id="event-toast" class="event-toast" hidden></div>
 
+      <!-- Distinctive Folk Masthead -->
       <header class="masthead">
-        <a class="wordmark" href="/">Cảnh sát<br /><strong>bắt cướp</strong></a>
-        <span class="scene-label">Máy chủ: Đang kết nối…</span>
+        <div class="brand-crest">
+          <div class="folk-seal" aria-hidden="true">ĐỒ<br />CỨU</div>
+          <div class="brand-text-block">
+            <div class="brand-eyebrow">TRÒ CHƠI DÂN GIAN</div>
+            <a class="wordmark" href="/">CẢNH SÁT <strong>BẮT CƯỚP</strong></a>
+          </div>
+        </div>
+        <div class="server-status-pill">
+          <span class="status-indicator-dot"></span>
+          <span class="scene-label">Máy chủ: Đang kết nối…</span>
+        </div>
       </header>
 
+      <!-- Main Game Panel with Ornamental Triện Brass Corners -->
       <section class="panel" aria-labelledby="scene-title">
-        <h1 id="scene-title">Cảnh sát bắt cướp</h1>
-        <p class="notice">Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp</p>
+        <div class="panel-header-block">
+          <h1 id="scene-title">Cảnh sát bắt cướp</h1>
+          <p class="notice">Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp</p>
+        </div>
         
-        <!-- GPU Software Rendering Warning Banner -->
+        <!-- GPU Software Rendering Warning Drawer (Refined & Integrated) -->
         <div id="gpu-warning-banner" class="gpu-warning-banner" hidden>
-          <div class="gpu-warning-title">⚠️ Cảnh báo hiệu năng: Đang tắt Tăng tốc đồ họa (Hardware Acceleration)</div>
-          <p id="gpu-warning-detail" class="gpu-warning-text"></p>
-          <div class="gpu-warning-help">
-            👉 <strong>Cách xử lý ngay để đạt 60 FPS:</strong> Mở tab mới, gõ <code>edge://settings/system</code> (hoặc <code>chrome://settings/system</code>) ➜ Bật <strong>"Sử dụng tính năng tăng tốc đồ họa khi khả dụng"</strong> ➜ Bấm <strong>Khởi động lại</strong> (Restart) trình duyệt.
+          <div class="gpu-warning-header">
+            <span class="gpu-warning-title">⚠️ Đang tắt Tăng tốc đồ họa (Hardware Acceleration)</span>
+            <button type="button" id="btn-gpu-toggle" class="btn-gpu-toggle" aria-expanded="false">Chi tiết ▼</button>
+          </div>
+          <div id="gpu-warning-body" class="gpu-warning-body" hidden>
+            <p id="gpu-warning-detail" class="gpu-warning-text"></p>
+            <div class="gpu-warning-help">
+              👉 <strong>Cách xử lý ngay để đạt 60 FPS:</strong> Mở tab mới, gõ <code>edge://settings/system</code> (hoặc <code>chrome://settings/system</code>) ➜ Bật <strong>"Sử dụng tính năng tăng tốc đồ họa khi khả dụng"</strong> ➜ Bấm <strong>Khởi động lại</strong> (Restart) trình duyệt.
+            </div>
           </div>
         </div>
 
-        <!-- Tab Menu: Chưa vào phòng -->
+        <!-- Menu View: Tabbed Folk Architecture (Uncluttered, Cohesive & Handcrafted) -->
         <div id="menu-view">
-          <div class="lobby-form">
-            <div class="lobby-input-card">
-              <label for="player-name" class="lobby-label">👤 Biệt danh của bạn:</label>
-              <input id="player-name" type="text" maxlength="20" placeholder="Nhập tên người chơi..." class="lobby-text-input" />
-            </div>
+          <!-- Artisanal Tab Switcher -->
+          <div class="menu-tabs-bar" role="tablist">
+            <button type="button" class="menu-tab-btn active" data-tab="pane-play" id="tab-btn-play">
+              <span class="tab-glyph">🏮</span> Vào Phòng
+            </button>
+            <button type="button" class="menu-tab-btn" data-tab="pane-browser" id="tab-btn-browser">
+              <span class="tab-glyph">🌐</span> Sảnh Chờ Công Khai
+            </button>
+            <button type="button" class="menu-tab-btn" data-tab="pane-guide" id="tab-btn-guide">
+              <span class="tab-glyph">📜</span> Cẩm Nang & Tập
+            </button>
+          </div>
 
-            <div class="lobby-hero-grid">
-              <div class="lobby-card lobby-card-create">
-                <div class="lobby-card-badge">👑 Chủ phòng</div>
-                <div class="lobby-card-title">Tạo phòng mới</div>
-                <p class="lobby-card-desc">Khởi tạo phòng chơi LAN / Trực tuyến và bắt đầu ngay</p>
-                <button id="btn-create-room" type="button" class="btn-ready btn-action-hero">Tạo phòng ngay</button>
+          <!-- Tab Pane 1: Vào Phòng Nhanh (Default Active) -->
+          <div id="pane-play" class="menu-tab-pane active">
+            <div class="lobby-form">
+              <div class="field-group">
+                <label for="player-name" class="field-label">
+                  <span class="field-glyph">👤</span> Biệt danh của bạn:
+                </label>
+                <input id="player-name" type="text" maxlength="20" placeholder="Nhập tên người chơi..." class="folk-input" />
               </div>
 
-              <div class="lobby-card lobby-card-join">
-                <div class="lobby-card-badge">🔗 Vào phòng</div>
-                <div class="lobby-card-title">Tham gia phòng</div>
-                <p class="lobby-card-desc">Nhập mã phòng 6 chữ cái để kết nối</p>
-                <div class="lobby-join-row">
-                  <input id="join-room-code" type="text" maxlength="6" placeholder="MÃ PHÒNG" class="lobby-code-input" />
-                  <button id="btn-join-room" type="button" class="btn-secondary btn-action-join">Vào phòng</button>
+              <div class="action-cards-grid">
+                <!-- Create Room Card -->
+                <div class="action-card card-host">
+                  <div class="card-tag">👑 TẠO PHÒNG MỚI</div>
+                  <div class="card-heading">Chủ phòng LAN / Online</div>
+                  <p class="card-desc">Khởi tạo phòng chơi tức thì, thêm Bot và điều phối trận đấu</p>
+                  <button id="btn-create-room" type="button" class="btn-folk btn-folk-primary">Tạo phòng ngay</button>
+                </div>
+
+                <!-- Join Room Card -->
+                <div class="action-card card-guest">
+                  <div class="card-tag">🔗 VÀO PHÒNG CÓ SẴN</div>
+                  <div class="card-heading">Tham gia bằng mã</div>
+                  <p class="card-desc">Nhập mã phòng 6 ký tự để kết nối với bạn bè</p>
+                  <div class="join-input-group">
+                    <input id="join-room-code" type="text" maxlength="6" placeholder="MÃ PHÒNG" class="folk-input input-code" />
+                    <button id="btn-join-room" type="button" class="btn-folk btn-folk-secondary">Vào phòng</button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="lobby-tools-strip">
-              <button id="btn-mock-mode" type="button" class="btn-tool">⚡ Thử nhanh MOCK01</button>
-              <button id="btn-offline-mode" type="button" class="btn-tool">🎮 Sân tập offline</button>
-              <button id="btn-tutorial" type="button" class="btn-tool btn-tool-tutorial">🎓 Tân thủ (3 bước)</button>
+              <!-- Quick Tools Strip -->
+              <div class="quick-tools-strip">
+                <button id="btn-mock-mode" type="button" class="btn-folk btn-folk-tool">⚡ Thử nhanh MOCK01</button>
+                <button id="btn-offline-mode" type="button" class="btn-folk btn-folk-tool">🎮 Sân tập offline</button>
+              </div>
             </div>
+          </div>
 
-            <!-- Public Room Browser -->
+          <!-- Tab Pane 2: Sảnh Chờ Công Khai -->
+          <div id="pane-browser" class="menu-tab-pane">
             <div class="public-browser-container">
               <div class="browser-header">
-                <span class="browser-title">🌐 Phòng chơi công khai</span>
-                <button id="btn-refresh-rooms" type="button" class="btn-tool btn-tool-refresh">🔄 Làm mới</button>
+                <div class="browser-title-group">
+                  <span class="browser-glyph">🌐</span>
+                  <span class="browser-title">Phòng chơi trực tuyến công khai</span>
+                </div>
+                <button id="btn-refresh-rooms" type="button" class="btn-folk btn-folk-tool">🔄 Làm mới</button>
               </div>
               <div id="public-rooms-list" class="public-rooms-list">
                 <div class="room-empty-note">Đang tải danh sách phòng...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Pane 3: Cẩm Nang & Tập Luyện -->
+          <div id="pane-guide" class="menu-tab-pane">
+            <div class="guide-tab-card">
+              <div class="guide-header">
+                <div class="card-tag">🎓 TẬP LUYỆN VÀ HƯỚNG DẪN</div>
+                <div class="card-heading">Luyện tập thao tác & nắm vững luật</div>
+              </div>
+              <p class="card-desc">Dành cho người chơi mới: trải nghiệm màn vượt chướng ngại vật, lẩn trốn trong rơm và giải cứu đồng đội trong 3 bước ngắn gọn.</p>
+              <button id="btn-tutorial" type="button" class="btn-folk btn-folk-secondary" style="width: 100%; margin-bottom: 12px;">🎓 Bắt đầu hướng dẫn Tân thủ (3 bước)</button>
+              <div class="quick-rules-summary">
+                <div class="rule-chip"><span class="chip-dot dot-police"></span><strong>Cảnh sát:</strong> Bắt trọn 4 cướp tống giam trong 5 phút</div>
+                <div class="rule-chip"><span class="chip-dot dot-robber"></span><strong>Cướp:</strong> Ẩn nấp rơm/bụi, giữ E/F 2s phá ngục cứu bạn</div>
               </div>
             </div>
           </div>
@@ -240,15 +302,17 @@
             <div class="room-code-chip">
               <span class="room-code-label">MÃ PHÒNG:</span>
               <strong class="badge-code" id="display-room-code">------</strong>
-              <button id="btn-copy-code" type="button" class="btn-copy-chip" title="Sao chép mã phòng">📋 Copy</button>
+              <button id="btn-copy-code" type="button" class="btn-copy-chip" title="Sao chép mã phòng">📋 Sao chép</button>
             </div>
             <div class="room-capacity-pill">
+              <span class="pulse-dot"></span>
               <span id="room-capacity-label">Chờ chủ phòng bắt đầu</span>
             </div>
           </div>
 
+          <!-- Match Result & Stats -->
           <section id="match-result" aria-labelledby="result-title" hidden>
-            <div role="status">
+            <div role="status" class="result-status-block">
               <h2 id="result-title" tabindex="-1"></h2>
               <p id="result-reason"></p>
             </div>
@@ -283,26 +347,26 @@
               </table>
             </div>
 
-            <button id="btn-rematch" type="button" class="btn-ready" hidden>Chơi lại</button>
-            <p id="result-wait" hidden>Đang chờ chủ phòng chọn chơi lại.</p>
+            <button id="btn-rematch" type="button" class="btn-folk btn-folk-primary" hidden>Chơi lại</button>
+            <p id="result-wait" class="result-wait-text" hidden>Đang chờ chủ phòng chọn chơi lại...</p>
           </section>
 
-          <!-- Modern 2-Column Responsive Room Layout -->
+          <!-- 2-Column Responsive Room Layout -->
           <div class="room-columns-layout">
             <!-- Left Column: Roster & Host Bots -->
             <div class="room-col-roster">
-              <div class="room-col-header">
-                <span class="room-col-title">👥 Người chơi trong phòng</span>
+              <div class="col-section-header">
+                <span class="col-title">👥 NGƯỜI CHƠI TRONG PHÒNG</span>
               </div>
               <ul class="roster-list" id="roster-list"></ul>
 
               <!-- Host Bot Controls & Auto Roles UI (Only visible to host in LOBBY) -->
               <div id="host-room-controls" class="host-controls-card" hidden>
-                <div class="host-controls-title">⚙️ Quản lý phòng (Chủ phòng):</div>
+                <div class="host-controls-title">⚙️ QUẢN LÝ PHÒNG (CHỦ PHÒNG):</div>
                 <div class="host-btn-row">
-                  <button id="btn-add-bot" type="button" class="btn-tool btn-tool-bot">🤖 + Thêm Bot</button>
-                  <button id="btn-remove-bot" type="button" class="btn-tool btn-tool-remove">➖ Bớt Bot</button>
-                  <button id="btn-auto-roles" type="button" class="btn-tool btn-tool-auto">⚖️ Cân bằng vai</button>
+                  <button id="btn-add-bot" type="button" class="btn-folk btn-folk-tool">🤖 + Thêm Bot</button>
+                  <button id="btn-remove-bot" type="button" class="btn-folk btn-folk-tool">➖ Bớt Bot</button>
+                  <button id="btn-auto-roles" type="button" class="btn-folk btn-folk-tool">⚖️ Cân bằng vai</button>
                 </div>
               </div>
             </div>
@@ -311,7 +375,9 @@
             <div class="room-col-setup">
               <!-- Role Selection UI -->
               <div id="role-picker-container" class="role-selector-card">
-                <div class="role-selector-header">🎯 Nguyện vọng vai trò:</div>
+                <div class="col-section-header">
+                  <span class="col-title">🎯 NGUYỆN VỌNG VAI TRÒ</span>
+                </div>
                 <div class="role-btn-group">
                   <button id="btn-role-auto" type="button" class="btn-role active" data-role="auto">🎲 Tự động</button>
                   <button id="btn-role-police" type="button" class="btn-role btn-role-police" data-role="POLICE">👮 Cảnh sát</button>
@@ -321,7 +387,9 @@
 
               <!-- Folk Costume Customization UI -->
               <div id="costume-picker" class="costume-picker-card">
-                <div class="costume-title">👘 Trang phục truyền thống dân gian:</div>
+                <div class="col-section-header">
+                  <span class="col-title">👘 TRANG PHỤC DÂN GIAN</span>
+                </div>
                 <div class="costume-field">
                   <label for="select-cosmetic-hat" class="costume-label">Mũ / Nón:</label>
                   <select id="select-cosmetic-hat" class="custom-select">
@@ -334,7 +402,7 @@
                 <div class="costume-field">
                   <span class="costume-label">Màu áo bà ba:</span>
                   <div class="shirt-palette">
-                    <button type="button" class="shirt-swatch active" data-color="" title="Mặc định theo vai" style="background: #999;"></button>
+                    <button type="button" class="shirt-swatch active" data-color="" title="Mặc định theo vai" style="background: #889988;"></button>
                     <button type="button" class="shirt-swatch" data-color="#5c3a21" title="Nâu sồng" style="background: #5c3a21;"></button>
                     <button type="button" class="shirt-swatch" data-color="#2e4c6d" title="Chàm lam" style="background: #2e4c6d;"></button>
                     <button type="button" class="shirt-swatch" data-color="#8b3a2b" title="Đỏ gạch" style="background: #8b3a2b;"></button>
@@ -366,32 +434,31 @@
 
           <!-- Room Action Bar (Host Start & Controls) -->
           <div class="room-action-footer">
-            <button id="btn-start-game" type="button" class="btn-start-match" hidden>🚀 BẮT ĐẦU TRẬN ĐẤU</button>
+            <button id="btn-start-game" type="button" class="btn-folk btn-start-match" hidden>⚔️ BẮT ĐẦU TRẬN ĐẤU</button>
             <div class="room-secondary-actions">
-              <button id="btn-toggle-ready" type="button" class="btn-ready">Sẵn sàng</button>
-              <button id="btn-leave-room" type="button" class="btn-danger">Rời phòng</button>
+              <button id="btn-toggle-ready" type="button" class="btn-folk btn-ready">Sẵn sàng</button>
+              <button id="btn-leave-room" type="button" class="btn-folk btn-danger">Rời phòng</button>
             </div>
           </div>
         </div>
 
-        <button id="enter" type="button" style="margin-top: 14px;">Vào sân tập 3D</button>
+        <button id="enter" type="button" class="btn-folk btn-folk-enter" style="margin-top: 14px;">Vào sân tập 3D</button>
         <p id="status" role="status" aria-live="polite">Đang khởi tạo...</p>
 
         <dl class="controls">
-          <div><dt>Chuột</dt><dd>Nhìn quanh</dd></div>
-          <div><dt>Esc</dt><dd>Thả chuột / Menu</dd></div>
-          <div><dt>W A S D</dt><dd>Di chuyển</dd></div>
-          <div><dt>Shift</dt><dd>Chạy nhanh (Tốn thể lực)</dd></div>
+          <div><dt>W A S D</dt><dd>Di chuyển nhân vật</dd></div>
+          <div><dt>Shift</dt><dd>Chạy nhanh (Tiêu hao Thể lực)</dd></div>
           <div><dt>Space</dt><dd>Nhảy vượt rào</dd></div>
-          <div><dt>C</dt><dd>Cúi / Nấp rơm (Tàng hình)</dd></div>
-          <div><dt>Chuột trái</dt><dd>Bắt cướp (Cảnh sát)</dd></div>
-          <div><dt>Giữ F hoặc E</dt><dd>Cứu cướp (2 giây)</dd></div>
+          <div><dt>C</dt><dd>Cúi / Nấp rơm & bụi (Tàng hình)</dd></div>
+          <div><dt>Chuột trái / E</dt><dd>Bắt cướp (Cảnh sát)</dd></div>
+          <div><dt>Giữ E hoặc F (2s)</dt><dd>Cứu cướp tại nhà giam</dd></div>
+          <div><dt>Esc</dt><dd>Thả chuột / Menu sảnh</dd></div>
         </dl>
       </section>
 
       <div class="crosshair" aria-hidden="true" hidden></div>
 
-      <!-- Modern Corner Glassmorphism HUD (True Fullscreen, Zero Bottom Margin) -->
+      <!-- Corner Glassmorphism HUD (True Fullscreen, Zero Bottom Margin) -->
       <div id="hud-corner-bl" class="hud-corner-bl">
         <div id="hud-stamina-container" class="hud-chip hud-stamina-chip">
           <span class="hud-chip-icon">⚡</span>

@@ -510,3 +510,35 @@ Nghiệm thu kỹ thuật:
   - `demo-22-fullscreen-corner-hud.png`: Trải nghiệm tràn viền fullscreen 100% với HUD chip góc nhỏ gọn.
   - `demo-23-house-door-seamless.png`: Khung cửa, tường và móng nhà liền lạc, triệt tiêu hoàn toàn xé hình Z-fighting.
   - `demo-24-lush-environment-clouds.png`: Bầu trời mây cumulus bồng bềnh trôi, hoa cỏ và mặt đất xanh mướt.
+
+### 23/11/2026: Nâng cấp toàn diện UI/UX "Sơn Mài & Khắc Gỗ Dân Gian" (Loại bỏ triệt để AI Slop)
+
+1. **Thiết lập Art Direction thủ công "Sơn Mài & Khắc Gỗ Dân Gian"**:
+   - Tích hợp bộ đôi font chữ hoàn hảo: **Playfair Display** (tiêu đề, thẻ triện) hỗ trợ 100% dấu tiếng Việt và **Be Vietnam Pro** (văn bản, nhãn nút).
+   - Xây dựng bảng màu di sản cung đình & dân gian: Nền Gỗ Trầm & Sơn Mài Ta (`#0e1410`, `#16201a`), Viền Chỉ Đồng Mạ Vàng (`#d8a84e`, `#f6cf7d`), Triện Son Đỏ (`#b83a2c`), Chàm Lam Cảnh Sát (`#235473`), Cam Đất Cướp (`#c87624`) và Thể Lực Ngọc Bích (`#52c41a`).
+   - Bổ sung 4 góc đồng cổ truyền (Triện Corner Brackets) via CSS `::before` và `::after` cho khung panel chính.
+
+2. **Kiến trúc Tab phân tầng sảnh chờ (`menu-tabs-bar`)**:
+   - Chia nhỏ sảnh chờ thành 3 tab trực quan: `[🏮 Vào Phòng]`, `[🌐 Sảnh Chờ Công Khai]`, `[📜 Cẩm Nang & Tập]`.
+   - Panel gọn gàng, vừa vặn trên mọi kích thước màn hình mà không bị cuộn dài vô tận.
+   - Thu gọn cảnh báo GPU thành thanh drawer sơn mài hổ phách có nút "Chi tiết ▼" tinh gọn.
+
+3. **Đồng bộ hóa 100% hệ thống nút bấm & thành phần toàn dự án**:
+   - `.btn-folk-primary`: Nút vàng mạ đồng nẩy ánh hào quang cho hành động chính (Tạo phòng, Bắt đầu trận).
+   - `.btn-folk-secondary`: Thớ gỗ trầm ánh đồng với viền chỉ vàng hairline.
+   - `.btn-folk-tool`: Đồng bộ độ cao, font chữ và bo góc cho toàn bộ nút công cụ phụ (`+ Thêm Bot`, `- Bớt Bot`, `Cân bằng vai`, `Làm mới`).
+   - Đổi kiểu dáng `#help-modal` và `#settings-modal` sang phong cách sơn mài gỗ trầm viền đồng đồng nhất.
+   - Đồng bộ hóa bảng điều khiển góc nhìn/khảo sát DEV (`fieldset`).
+
+4. **Kiểm thử và xác thực**:
+   - Tất cả 152/152 bài test toàn monorepo vượt qua (Shared 58/58, Backend 29/29, Frontend 65/65).
+   - Typecheck và ESLint: 0 lỗi, 0 cảnh báo.
+   - Playwright chụp trọn bộ 6 ảnh minh chứng thực tế (`demo-20`, `demo-20b`, `demo-21`, `demo-22`, `demo-23`, `demo-24`).
+
+5. **Sửa triệt để lỗi tải danh sách phòng công khai (`listRooms` & `/api/rooms`)**:
+   - *Nguyên nhân*: `GameSession` khởi tạo với `autoConnect: false`, chỉ kết nối khi gọi `createRoom` hoặc `joinRoom`. Khi người chơi mở tab sảnh công khai hoặc tải lại trang, socket chưa kết nối khiến `socket.emit('room:list')` bị treo vĩnh viễn trong hàng đợi mà không giải phóng Promise.
+   - *Khắc phục*:
+     - Thêm endpoint REST `GET /api/rooms` trên backend Express để tải tức thì danh sách phòng công khai không phụ thuộc socket handshake.
+     - Cập nhật `listRooms()` trong frontend cơ chế kép: ưu tiên HTTP REST `/api/rooms`, sau đó fallback qua Socket.IO có đảm bảo kết nối (`connectReal()`), lắng nghe song song cả ack callback và sự kiện `ROOM_LIST_RESPONSE`, kèm timeout bảo vệ 3 giây.
+     - Hiển thị badge trạng thái phòng trực quan (`Đang chờ`, `Đang chơi`, `Đầy phòng`) và xử lý nút `Vào phòng` chuyển cảnh mượt mà.
+     - Đã kiểm thử tự động với Playwright: xác nhận tải 0 phòng, tạo phòng mới và tải danh sách có phòng khác (`demo-25-public-rooms-loaded.png`), click vào phòng thành công.

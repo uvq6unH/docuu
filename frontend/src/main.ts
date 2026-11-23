@@ -1324,15 +1324,21 @@ try {
         const item = document.createElement('div');
         item.className = 'public-room-item';
         const info = document.createElement('div');
-        info.innerHTML = `<span class="room-code-tag">${r.roomCode}</span> · <strong>${r.hostName}</strong> (${r.playerCount}/${r.maxPlayers})`;
+        const phaseLabel = r.phase === 'LOBBY' ? 'Đang chờ' : r.phase === 'RESULT' ? 'Kết thúc' : 'Đang chơi';
+        const phaseClass = r.phase === 'LOBBY' ? 'phase-lobby' : 'phase-playing';
+        info.innerHTML = `<span class="room-code-tag">${r.roomCode}</span> · <strong>${r.hostName}</strong> <span class="room-phase-tag ${phaseClass}">${phaseLabel}</span> (${r.playerCount}/${r.maxPlayers})`;
 
         const btnJoin = document.createElement('button');
-        btnJoin.className = 'btn-tool';
+        btnJoin.className = 'btn-folk btn-folk-tool';
+        btnJoin.style.width = 'auto';
         btnJoin.style.fontSize = '11px';
-        btnJoin.style.padding = '3px 8px';
-        btnJoin.textContent = r.phase === 'LOBBY' ? 'Vào phòng' : 'Đang chơi';
-        btnJoin.disabled = r.phase !== 'LOBBY' || r.playerCount >= r.maxPlayers;
+        btnJoin.style.padding = '4px 10px';
+        const isFull = r.playerCount >= r.maxPlayers;
+        btnJoin.textContent = isFull ? 'Đầy phòng' : r.phase === 'LOBBY' ? 'Vào phòng' : 'Đang chơi';
+        btnJoin.disabled = r.phase !== 'LOBBY' || isFull;
         btnJoin.addEventListener('click', () => {
+          btnJoin.disabled = true;
+          btnJoin.textContent = 'Đang vào...';
           joinRoomCodeInput.value = r.roomCode;
           btnJoinRoom.click();
         });
@@ -1349,6 +1355,34 @@ try {
     }
   }
   btnRefreshRooms.addEventListener('click', () => { void refreshPublicRooms(); });
+
+  // Menu Tab Switching (Folk Architecture)
+  const menuTabBtns = document.querySelectorAll<HTMLButtonElement>('.menu-tab-btn');
+  const menuTabPanes = document.querySelectorAll<HTMLElement>('.menu-tab-pane');
+  menuTabBtns.forEach((tabBtn) => {
+    tabBtn.addEventListener('click', () => {
+      const targetPaneId = tabBtn.dataset.tab;
+      menuTabBtns.forEach((btn) => btn.classList.toggle('active', btn === tabBtn));
+      menuTabPanes.forEach((pane) => {
+        pane.classList.toggle('active', pane.id === targetPaneId);
+      });
+      if (targetPaneId === 'pane-browser') {
+        void refreshPublicRooms();
+      }
+    });
+  });
+
+  // Collapsible GPU Info Toggle
+  const btnGpuToggle = document.querySelector<HTMLButtonElement>('#btn-gpu-toggle');
+  const gpuWarningBody = document.querySelector<HTMLElement>('#gpu-warning-body');
+  if (btnGpuToggle && gpuWarningBody) {
+    btnGpuToggle.addEventListener('click', () => {
+      const isExpanded = btnGpuToggle.getAttribute('aria-expanded') === 'true';
+      btnGpuToggle.setAttribute('aria-expanded', String(!isExpanded));
+      btnGpuToggle.textContent = isExpanded ? 'Chi tiết ▼' : 'Thu gọn ▲';
+      gpuWarningBody.hidden = isExpanded;
+    });
+  }
 
   // Interactive 1-Player Tutorial Mode
   btnTutorial.addEventListener('click', () => {

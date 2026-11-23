@@ -95,6 +95,11 @@ app.get('/api/matches/:id', (req: Request, res: Response) => {
   res.status(200).json({ match, stats, events });
 });
 
+app.get('/api/rooms', (_req: Request, res: Response) => {
+  const rooms = roomManager.getPublicRooms();
+  res.status(200).json({ ok: true, data: rooms, rooms });
+});
+
 app.get('/api/rooms/:code', (req: Request, res: Response) => {
   const code = (req.params.code as string).toUpperCase();
   const room = db.getRoom(code);

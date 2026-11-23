@@ -603,12 +603,48 @@ export class GameSession {
   }
 
   public async listRooms(): Promise<PublicRoomSummary[]> {
+    // 1. Try fast non-blocking HTTP REST endpoint first
+    try {
+      const resp = await fetch('/api/rooms', { signal: AbortSignal.timeout(2000) });
+      if (resp.ok) {
+        const body = (await resp.json()) as { data?: PublicRoomSummary[]; rooms?: PublicRoomSummary[] };
+        const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.rooms) ? body.rooms : Array.isArray(body) ? body : null;
+        if (list) return list;
+      }
+    } catch {
+      // Fallback to socket
+    }
+
+    // 2. Ensure real socket is connected
+    this.connectReal();
+
     return new Promise((resolve) => {
+      let resolved = false;
+
+      const finish = (data: PublicRoomSummary[]) => {
+        if (!resolved) {
+          resolved = true;
+          window.clearTimeout(timer);
+          this.socket.off(SERVER_EVENTS.ROOM_LIST_RESPONSE, onListResponse);
+          resolve(data);
+        }
+      };
+
+      const timer = window.setTimeout(() => {
+        finish([]);
+      }, 3000);
+
+      const onListResponse = (summaries: PublicRoomSummary[]) => {
+        finish(summaries || []);
+      };
+
+      this.socket.once(SERVER_EVENTS.ROOM_LIST_RESPONSE, onListResponse);
+
       this.socket.emit(
         CLIENT_EVENTS.ROOM_LIST,
         { requestId: `req-${Date.now()}` },
         (res: AckResponse<PublicRoomSummary[]>) => {
-          resolve(res?.data || []);
+          finish(res?.data || []);
         }
       );
     });

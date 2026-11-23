@@ -718,16 +718,7 @@ export class RoomManager {
       socket.on(
         CLIENT_EVENTS.ROOM_LIST,
         (_payload?: { requestId?: string }, ack?: (res: AckResponse<PublicRoomSummary[]>) => void) => {
-          const summaries: PublicRoomSummary[] = Array.from(this.rooms.values()).map((r) => {
-            const host = r.players.get(r.hostId);
-            return {
-              roomCode: r.roomCode,
-              hostName: host ? host.name : 'Chủ phòng',
-              playerCount: r.players.size,
-              maxPlayers: GAME_RULES.REQUIRED_PLAYERS,
-              phase: r.phase,
-            };
-          });
+          const summaries: PublicRoomSummary[] = this.getPublicRooms();
           if (ack) {
             ack({ ok: true, data: summaries });
           }
@@ -907,6 +898,19 @@ export class RoomManager {
 
         this.socketBindings.delete(socket.id);
       });
+    });
+  }
+
+  public getPublicRooms(): PublicRoomSummary[] {
+    return Array.from(this.rooms.values()).map((r) => {
+      const host = r.players.get(r.hostId);
+      return {
+        roomCode: r.roomCode,
+        hostName: host ? host.name : 'Chủ phòng',
+        playerCount: r.players.size,
+        maxPlayers: GAME_RULES.REQUIRED_PLAYERS,
+        phase: r.phase,
+      };
     });
   }
 

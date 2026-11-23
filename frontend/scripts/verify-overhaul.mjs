@@ -31,6 +31,28 @@ async function verifyOverhaul() {
   copyFileSync(shot1, resolve(artifactDir, 'demo-20-lobby-redesign.png'));
   console.log('Saved demo-20-lobby-redesign.png');
 
+  // Shot 1b: Guide tab
+  console.log('Testing and capturing Guide Tab...');
+  await page.locator('#tab-btn-guide').click();
+  await page.waitForTimeout(250);
+  const shot1b = 'test-results/demo-20b-lobby-guide-tab.png';
+  await page.screenshot({ path: shot1b });
+  copyFileSync(shot1b, resolve(artifactDir, 'demo-20b-lobby-guide-tab.png'));
+  console.log('Saved demo-20b-lobby-guide-tab.png');
+
+  // Shot 1c: Public Browser tab
+  console.log('Testing and capturing Public Rooms Tab...');
+  await page.locator('#tab-btn-browser').click();
+  await page.waitForTimeout(300);
+  const shot1c = 'test-results/demo-25-public-rooms-loaded.png';
+  await page.screenshot({ path: shot1c });
+  copyFileSync(shot1c, resolve(artifactDir, 'demo-25-public-rooms-loaded.png'));
+  console.log('Saved demo-25-public-rooms-loaded.png');
+
+  // Return to play tab
+  await page.locator('#tab-btn-play').click();
+  await page.waitForTimeout(200);
+
   // Shot 2: Create room, add bots, show 2-column waiting screen with prominent host start button
   console.log('Entering Room View...');
   await page.locator('#player-name').fill('Trưởng Làng');
