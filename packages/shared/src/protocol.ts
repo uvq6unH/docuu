@@ -13,7 +13,7 @@ export type HatCosmetic = 'none' | 'non_la' | 'khan_ran' | 'mu_nan';
 
 export interface CosmeticPreferences {
   hat: HatCosmetic;
-  shirtColor?: string;
+  shirtColor?: string | undefined;
 }
 
 export interface PlayerView {
@@ -24,10 +24,10 @@ export interface PlayerView {
   vel: Vec3;
   crouch: boolean;
   grounded: boolean;
-  state?: RobberState; // Robber-only state
-  guard?: boolean; // Police-only flag: true if inside active jail guard zone
+  state?: RobberState | undefined; // Robber-only state
+  guard?: boolean | undefined; // Police-only flag: true if inside active jail guard zone
   connected: boolean;
-  cosmetic?: CosmeticPreferences;
+  cosmetic?: CosmeticPreferences | undefined;
 }
 
 export interface SelfPlayerView extends PlayerView {
@@ -48,9 +48,9 @@ export interface PlayerStats {
 export interface MatchResult {
   winner: 'POLICE' | 'ROBBER' | 'ABORTED';
   reason: string;
-  stats?: Record<string, PlayerStats>;
-  mvpPolice?: string;
-  mvpRobber?: string;
+  stats?: Record<string, PlayerStats> | undefined;
+  mvpPolice?: string | undefined;
+  mvpRobber?: string | undefined;
 }
 
 export interface Snapshot {
@@ -86,10 +86,10 @@ export interface RosterMember {
   ready: boolean;
   role: Role | null;
   connected: boolean;
-  isHost?: boolean;
-  isCaptain?: boolean;
-  isBot?: boolean;
-  cosmetic?: CosmeticPreferences;
+  isHost?: boolean | undefined;
+  isCaptain?: boolean | undefined;
+  isBot?: boolean | undefined;
+  cosmetic?: CosmeticPreferences | undefined;
 }
 
 export interface QuickChatMessage {

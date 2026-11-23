@@ -25,6 +25,7 @@ import type {
   TacticalPing,
   PebbleEvent,
   HatCosmetic,
+  CosmeticPreferences,
 } from '../../packages/shared/src/protocol';
 import type { Vec3 } from '../../packages/shared/src/map';
 import { sound } from './core/audio';
@@ -1338,7 +1339,9 @@ try {
   // Folk Costume Customization Listeners
   selectCosmeticHat.addEventListener('change', () => {
     currentHat = selectCosmeticHat.value as HatCosmetic;
-    void session.setCosmetic({ hat: currentHat, ...(currentShirtColor ? { shirtColor: currentShirtColor } : {}) });
+    const cosmetic: CosmeticPreferences = { hat: currentHat };
+    if (currentShirtColor) cosmetic.shirtColor = currentShirtColor;
+    void session.setCosmetic(cosmetic);
   });
 
   document.querySelectorAll<HTMLButtonElement>('.shirt-swatch').forEach((swatch) => {
@@ -1346,7 +1349,9 @@ try {
       document.querySelectorAll('.shirt-swatch').forEach((s) => s.classList.remove('active'));
       swatch.classList.add('active');
       currentShirtColor = swatch.dataset.color || '';
-      void session.setCosmetic({ hat: currentHat, ...(currentShirtColor ? { shirtColor: currentShirtColor } : {}) });
+      const cosmetic: CosmeticPreferences = { hat: currentHat };
+      if (currentShirtColor) cosmetic.shirtColor = currentShirtColor;
+      void session.setCosmetic(cosmetic);
     });
   });
 
