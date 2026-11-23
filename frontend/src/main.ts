@@ -1338,7 +1338,7 @@ try {
   // Folk Costume Customization Listeners
   selectCosmeticHat.addEventListener('change', () => {
     currentHat = selectCosmeticHat.value as HatCosmetic;
-    void session.setCosmetic({ hat: currentHat, shirtColor: currentShirtColor || undefined });
+    void session.setCosmetic({ hat: currentHat, ...(currentShirtColor ? { shirtColor: currentShirtColor } : {}) });
   });
 
   document.querySelectorAll<HTMLButtonElement>('.shirt-swatch').forEach((swatch) => {
@@ -1346,7 +1346,7 @@ try {
       document.querySelectorAll('.shirt-swatch').forEach((s) => s.classList.remove('active'));
       swatch.classList.add('active');
       currentShirtColor = swatch.dataset.color || '';
-      void session.setCosmetic({ hat: currentHat, shirtColor: currentShirtColor || undefined });
+      void session.setCosmetic({ hat: currentHat, ...(currentShirtColor ? { shirtColor: currentShirtColor } : {}) });
     });
   });
 

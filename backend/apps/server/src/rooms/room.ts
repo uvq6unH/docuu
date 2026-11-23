@@ -383,8 +383,8 @@ export class Room {
       winner,
       reason,
       stats: statsObj,
-      mvpPolice: bestPolice?.id,
-      mvpRobber: bestRobber?.id,
+      ...(bestPolice ? { mvpPolice: bestPolice.id } : {}),
+      ...(bestRobber ? { mvpRobber: bestRobber.id } : {}),
     };
 
     const durationSeconds = this.matchStartedAt > 0

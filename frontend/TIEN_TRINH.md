@@ -423,3 +423,11 @@ Nghiệm thu kỹ thuật:
 - Build toàn bộ monorepo (`packages/shared`, `backend`, `frontend`) hoàn tất thành công 100%.
 
 Bước tiếp theo: Triển khai playtest trải nghiệm thực tế cùng bạn bè qua LAN hoặc môi trường trực tuyến.
+
+### 23/11/2026 — Sửa build FE và backend
+
+Đã sửa hai chỗ gửi trang phục trong main.ts để bỏ thuộc tính shirtColor khi chưa chọn màu. Backend chỉ thêm mvpPolice/mvpRobber vào MatchResult khi tìm được người chơi tương ứng. Cách tạo payload khớp exactOptionalPropertyTypes.
+
+Shared build/typecheck đạt. Backend build/typecheck đạt, 29/29 test đạt từ dist vừa build. FE build gồm typecheck, lint và 59/59 unit test đạt. Vite còn cảnh báo chunk chính 775,55 kB. Chưa chạy Chrome trong lượt sửa build này.
+
+Bước tiếp theo là nghiệm thu các tính năng mới bằng Chrome và một ván sáu người thật trên LAN.
