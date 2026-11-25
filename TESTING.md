@@ -1,8 +1,31 @@
 # Test plan & balance
 
-## Layers
+## Cấu trúc kiểm thử chuẩn (Test Hierarchy)
 
-Unit: shared deterministic movement/LOS/geometry, server FSM with fake clock, rule boundaries. Integration: real Socket.IO 6 clients in test room, fake transport delays/disconnects, snapshots per recipient. E2E: browser desktop 2 tabs via Playwright (use test-only input adapter for pointer lock), then manual 6 device test. No test-only authority bypass in production.
+Dự án áp dụng mô hình phân tầng kiểm thử rõ ràng, độc lập và đồng bộ trên toàn bộ Monorepo:
+
+| Tầng kiểm thử | Vị trí thư mục | Runner / Framework | Lệnh thực thi từ Root |
+| :--- | :--- | :--- | :--- |
+| **Shared Unit** | `packages/shared/tests/` | Node Test Runner (`node --test`) | `npm run test:shared` |
+| **Server Unit & FSM** | `backend/apps/server/tests/` | Node Test Runner (`node --test`) | `npm run test:server` |
+| **Client Unit** | `frontend/tests/unit/` | Vitest (`vitest run`) | `npm run test:client` / `npm run test:unit` |
+| **Client Scene E2E** | `frontend/tests/e2e/` | Playwright (`playwright test`) | `npm run test:e2e` |
+| **Multiplayer Integration** | `frontend/tests/integration/` | Playwright (`playwright.integration.config.ts`) | `npm run test:integration` |
+| **Load & Stress Test** | `backend/apps/server/src/scripts/` | tsx Node Script | `npm run test:load` |
+| **Simulated Playtests** | `backend/apps/server/src/scripts/` | tsx Node Script | `npm run test:playtests` |
+| **Toàn bộ hệ thống** | Tất cả thư mục trên | Tự động tuần tự | `npm run test:all` |
+
+### Chi tiết các tầng
+
+- **Unit Tests**:
+  - `packages/shared/tests/`: Kiểm thử hàm toán học thuần túy, va chạm collider, quy tắc di chuyển 30Hz, stealth núp lùm rơm/bụi cây, logic tính bắt cướp `isRobberCapturable` & `validateCapture`.
+  - `backend/apps/server/tests/`: Kiểm thử máy trạng thái phòng chơi (FSM), bảo mật rate limiter, lưu trữ SQLite DB, thuật toán AI bot tự động tìm đường né vật cản.
+  - `frontend/tests/unit/`: Kiểm thử nạp 9 mô hình GLB, khởi tạo Three.js scene, camera, input state, viewmodel FPS, hệ thống âm thanh Web Audio và la bàn mini-map.
+- **E2E Scene Tests (`tests/e2e/scene.spec.ts`)**:
+  - Kiểm thử render WebGL trên trình duyệt thật (Chromium), thay đổi kích thước canvas, khóa chuột pointer lock, tổ hợp phím WASD, kiểm tra 24 tuyến khảo sát nhà giam.
+- **Multiplayer Integration Tests (`tests/integration/`)**:
+  - `capture.spec.ts`: Mô phỏng 6 người chơi thật kết nối qua Socket.IO, cảnh sát tiếp cận bắt cướp giam vào J1, đồng đội giải cứu, ngắt kết nối WebSocket và khôi phục phiên qua reload.
+  - `mock.spec.ts`: Kiểm thử đồng bộ hóa vị trí tức thời qua snapshot và bắt cướp giam vào J1 trên mock server.
 
 | ID | Scenario | Expected |
 |---|---|---|

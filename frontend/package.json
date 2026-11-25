@@ -14,10 +14,13 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:integration": "playwright test --config playwright.integration.config.ts",
+    "test:backend": "playwright test --config playwright.integration.config.ts",
+    "test:all": "vitest run && playwright test && playwright test --config playwright.integration.config.ts",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1",
-    "test:backend": "playwright test --config playwright.backend.config.ts"
+    "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
     "js-sha256": "0.11.1",

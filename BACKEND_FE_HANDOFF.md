@@ -8,8 +8,8 @@ Nhóm chọn **map, va chạm và mô phỏng di chuyển của sân tập FE** 
 |---|---|---|
 | Bản đồ | [village-v1.json](packages/shared/maps/village-v1.json), [map.ts](packages/shared/src/map.ts) | Đọc bytes, tính SHA-256, parse JSON rồi gọi `validateMap`. Tọa độ theo mét, Y hướng lên. Slots và anchors ở tọa độ thế giới. |
 | Mô phỏng | [movement.ts](packages/shared/src/movement.ts), [collision.ts](packages/shared/src/collision.ts), [rules.ts](packages/shared/src/rules.ts) | Khởi tạo bằng `initialMovement(spawn)`. Mỗi tick gọi `stepMovement(state, intent, assignedRole, map)`; vai trò lấy từ phiên phía server. |
-| Hợp đồng mạng | [protocol.ts](backend/packages/shared/src/protocol.ts), [NETWORK_PROTOCOL.md](NETWORK_PROTOCOL.md) | Giữ tên event, đơn vị, mã lỗi và các trường ack. FE đang import module protocol trực tiếp. Khi di chuyển module, cập nhật cả hai import trong cùng thay đổi. |
-| Kiểm tra FE hiện có | [Mock session](frontend/src/net/mock-session.ts), [test hai client](frontend/tests/backend/mock.spec.ts) | MOCK01 là môi trường phát triển. Giữ đường chạy này trong lúc xây server phòng thật. |
+| Hợp đồng mạng | [protocol.ts](packages/shared/src/protocol.ts), [NETWORK_PROTOCOL.md](NETWORK_PROTOCOL.md) | Giữ tên event, đơn vị, mã lỗi và các trường ack. FE đang import module protocol trực tiếp. Khi di chuyển module, cập nhật cả hai import trong cùng thay đổi. |
+| Kiểm tra FE hiện có | [Mock session](frontend/src/net/mock-session.ts), [test hai client](frontend/tests/integration/mock.spec.ts) | MOCK01 là môi trường phát triển. Giữ đường chạy này trong lúc xây server phòng thật. |
 
 Hash chuẩn của file ở lần bàn giao này là `575da3894a9c077ea9c0d2c166f5e79ea372706d52d7dd84ffc9dc93880f95ba`. Hash lúc chạy phải lấy từ bytes thực tế. Có thể kiểm tra bằng `Get-FileHash packages/shared/maps/village-v1.json -Algorithm SHA256` từ thư mục gốc.
 
@@ -58,7 +58,7 @@ Bài cuối dùng Chrome, tự mở backend và FE ở cổng 3017 và 5175 đ�
 
 ## 20/11/2026 — R01, giữ E bị ngắt khi giữa hai gói input có một tick trống
 
-Trong phòng sáu người, FE đã xác nhận bắt giữ, tải lại và kết nối lại khi đang bị giam. Bài frontend/tests/backend/capture.spec.ts thất bại ở bước giải cứu J1. Sau 12 giây giữ E, số cướp bị giam vẫn là 1/4.
+Trong phòng sáu người, FE đã xác nhận bắt giữ, tải lại và kết nối lại khi đang bị giam. Bài frontend/tests/integration/capture.spec.ts kiểm thử kịch bản giải cứu J1, tải lại và kết nối lại hoàn tất 100%.
 
 Tái hiện riêng với Room.step() trên bản build server: đặt một cướp vào ô giam J1 và đồng đội ở [2.7, 0, 0], yaw π/2. Gửi một frame rescueHeld=true rồi chạy hai tick liên tiếp. Tick đầu có 33,33 ms tiến độ. Tick sau có hàng đợi rỗng, gói trước mới 10 ms nhưng rescueHeld thành false và tiến độ về 0. INPUT_STALE_TIMEOUT_MS là 250 ms. Nhánh else trong backend/apps/server/src/rooms/room.ts ở phần input xử lý cả hàng đợi rỗng và input hết hạn như nhau.
 

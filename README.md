@@ -29,8 +29,14 @@ Script sẽ tự động:
 
 ### Cách 2: Chạy qua dòng lệnh (Root Monorepo)
 ```bash
-# Kiểm tra toàn bộ hệ thống (152 Unit & Simulation Tests)
+# Kiểm tra toàn bộ Unit Tests (152 tests: Shared, Server, Frontend)
 npm test
+
+# Chạy kiểm thử giao diện E2E & WebGL Scene (Playwright)
+npm run test:e2e
+
+# Chạy kiểm thử tích hợp đa người chơi thời gian thực (6 players, Bắt/Cứu/Rematch)
+npm run test:integration
 
 # Build toàn bộ các packages (Shared, Server, Frontend)
 npm run build
@@ -41,7 +47,7 @@ npm run typecheck
 # Kiểm tra chất lượng mã nguồn Frontend
 npm run lint
 
-# Chạy stress test tải 5 phòng & mô phỏng 25 trận cân bằng
+# Chạy toàn bộ kiểm thử (Unit + E2E + Integration + Load + Playtests)
 npm run test:all
 ```
 

@@ -4,6 +4,9 @@
   "private": true,
   "description": "Cảnh Sát Bắt Cướp - Folk Tag 3D (Authoritative Multiplayer Browser FPS)",
   "scripts": {
+    "dev": "npm --prefix backend/apps/server run dev",
+    "dev:server": "npm --prefix backend/apps/server run dev",
+    "dev:client": "npm --prefix frontend run dev",
     "build:shared": "npm --prefix packages/shared run build",
     "build:server": "npm --prefix backend/apps/server run build",
     "build:client": "npm --prefix frontend run build",
@@ -16,9 +19,13 @@
     "test:shared": "npm --prefix packages/shared test",
     "test:server": "npm --prefix backend/apps/server test",
     "test:client": "npm --prefix frontend test",
+    "test:unit": "npm run test",
     "test": "npm run test:shared && npm run test:server && npm run test:client",
+    "test:e2e": "npm --prefix frontend run test:e2e",
+    "test:integration": "npm --prefix frontend run test:integration",
+    "test:backend": "npm --prefix frontend run test:integration",
     "test:load": "npm --prefix backend/apps/server run test:load",
     "test:playtests": "npm --prefix backend/apps/server run test:playtests",
-    "test:all": "npm run test && npm run test:load && npm run test:playtests"
+    "test:all": "npm run test && npm run test:e2e && npm run test:integration && npm run test:load && npm run test:playtests"
   }
 }
