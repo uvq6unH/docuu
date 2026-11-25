@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
@@ -20,15 +21,29 @@ app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const RUNTIME_ADMIN_TOKEN = ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
+if (!ADMIN_TOKEN && process.env.NODE_ENV !== 'test') {
+  console.log(`[Security] No ADMIN_TOKEN set in environment. Generated runtime admin token: ${RUNTIME_ADMIN_TOKEN}`);
+}
+
+function timingSafeCompare(a: string, b: string): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const hashA = crypto.createHash('sha256').update(a).digest();
+  const hashB = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(hashA, hashB);
+}
 
 function verifyAdmin(req: Request, res: Response, next: () => void) {
-  // If in production or ADMIN_TOKEN is explicitly configured, enforce token authentication
-  if (process.env.NODE_ENV === 'production' || ADMIN_TOKEN) {
-    const provided = (req.headers['x-admin-token'] || req.query.admin_token) as string | undefined;
-    if (!provided || provided !== ADMIN_TOKEN) {
-      res.status(401).json({ error: 'Unauthorized: Valid X-Admin-Token required' });
-      return;
-    }
+  const authHeader = req.headers['authorization'];
+  let provided = (req.headers['x-admin-token'] as string | undefined);
+  if (!provided && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+    provided = authHeader.slice(7).trim();
+  }
+
+  const expected = ADMIN_TOKEN || RUNTIME_ADMIN_TOKEN;
+  if (!provided || !timingSafeCompare(provided, expected)) {
+    res.status(401).json({ error: 'Unauthorized: Valid Admin Token required (via X-Admin-Token or Authorization: Bearer)' });
+    return;
   }
   next();
 }
@@ -60,7 +75,7 @@ app.get('/healthz', (_req: Request, res: Response) => {
 });
 
 // Server and Tick Simulation Metrics Endpoint (A04)
-app.get('/api/metrics', (_req: Request, res: Response) => {
+app.get('/api/metrics', verifyAdmin, (_req: Request, res: Response) => {
   const metrics = roomManager.getMetrics();
   res.status(200).json(metrics);
 });
@@ -87,18 +102,18 @@ app.post('/api/rules/reset', verifyAdmin, (_req: Request, res: Response) => {
 });
 
 // Balance Telemetry & Match Statistics Endpoint (T01)
-app.get('/api/stats/balance', (_req: Request, res: Response) => {
+app.get('/api/stats/balance', verifyAdmin, (_req: Request, res: Response) => {
   const stats = db.getBalanceStats();
   res.status(200).json(stats);
 });
 
 // REST Endpoints for match statistics and audit logs
-app.get('/api/matches', (_req: Request, res: Response) => {
+app.get('/api/matches', verifyAdmin, (_req: Request, res: Response) => {
   const matches = db.getRecentMatches(20);
   res.status(200).json({ matches });
 });
 
-app.get('/api/matches/:id', (req: Request, res: Response) => {
+app.get('/api/matches/:id', verifyAdmin, (req: Request, res: Response) => {
   const match = db.getMatch(req.params.id as string);
   if (!match) {
     res.status(404).json({ error: 'Match not found' });
@@ -122,8 +137,13 @@ app.get('/api/rooms/:code', (req: Request, res: Response) => {
     return;
   }
   const rawPlayers = db.getRoomPlayers(code);
-  // Security fix (Issue 2): Never expose secret resume_token over public API
-  const players = rawPlayers.map(({ resume_token, ...safePlayer }) => safePlayer);
+  // Security fix (Issue 2): Explicitly return only public safe fields (id, name, ready, isHost)
+  const players = rawPlayers.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    ready: Boolean(p.ready),
+    isHost: Boolean(p.is_host ?? p.isHost),
+  }));
   res.status(200).json({ room, players });
 });
 
@@ -138,7 +158,9 @@ const io = new SocketIOServer(server, {
 });
 
 // 1. Initialize Mock snapshot server on dedicated /mock namespace
-const isMockEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_MOCK === 'true' || process.argv.includes('--mock');
+const isMockEnabled =
+  process.env.NODE_ENV !== 'production' &&
+  (process.env.ENABLE_MOCK_SERVER === 'true' || process.env.ENABLE_MOCK === 'true' || process.argv.includes('--mock'));
 const isMockOnly = process.argv.includes('--mock') || process.env.MOCK_SERVER === 'true';
 const mockServer = isMockEnabled ? setupMockServer(isMockOnly ? io : (io.of('/mock') as any)) : null;
 

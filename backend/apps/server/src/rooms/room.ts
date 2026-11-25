@@ -75,6 +75,7 @@ export interface PlayerSession {
   distractionTarget?: [number, number] | undefined;
   distractionRemainingMs?: number | undefined;
   simulationStepBudget?: number | undefined;
+  lastPebbleTimestamp?: number | undefined;
 }
 
 export interface RoomMetrics {
@@ -923,13 +924,13 @@ export class Room {
           }
         }
 
-        // Stale & Idle Physics (Issue 6): If no input frame stepped, run 1 idle step so gravity & deceleration simulate naturally
-        if (stepsTaken === 0) {
-          if (isStale) {
-            session.rescueHeld = false;
-            session.inputQueue.length = 0;
-            session.simulationStepBudget = 1;
-          }
+        // Stale & Idle Physics (Issue 6): ONLY run idle step when player is genuinely stale (>600ms/disconnected)
+        // Normal jittering clients buffer frames without extra gravity steps being artificially injected
+        if (stepsTaken === 0 && isStale) {
+          session.rescueHeld = false;
+          session.inputQueue.length = 0;
+          session.simulationStepBudget = 1;
+
           const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
           if (isJailed && session.jailSlotIndex !== undefined && activeJail.slots[session.jailSlotIndex]) {
             session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
@@ -1114,10 +1115,15 @@ export class Room {
             }
           }
 
+          // Dynamic Network Capture Tolerance:
+          // Extends base CAPTURE_MAX_DISTANCE_M and CAPTURE_MAX_ANGLE_DEG with tolerance margin (+0.4m, +10.0 deg default)
+          const distToleranceMargin = Math.max(0, (this.rules.CAPTURE_NETWORK_TOLERANCE_DISTANCE_M ?? 2.0) - 1.6);
+          const angleToleranceMargin = Math.max(0, (this.rules.CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG ?? 65.0) - 55.0);
+
           const networkCaptureRules = {
             ...this.rules,
-            CAPTURE_MAX_DISTANCE_M: this.rules.CAPTURE_NETWORK_TOLERANCE_DISTANCE_M ?? 2.0,
-            CAPTURE_MAX_ANGLE_DEG: this.rules.CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG ?? 65.0,
+            CAPTURE_MAX_DISTANCE_M: this.rules.CAPTURE_MAX_DISTANCE_M + distToleranceMargin,
+            CAPTURE_MAX_ANGLE_DEG: this.rules.CAPTURE_MAX_ANGLE_DEG + angleToleranceMargin,
           };
 
           const captureResult = validateCapture(
@@ -1237,9 +1243,10 @@ export class Room {
             state: robber.state,
           };
 
+          const rescueToleranceMargin = 0.25;
           const networkRescueRules = {
             ...this.rules,
-            RESCUE_RADIUS_M: Math.max(this.rules.RESCUE_RADIUS_M, 1.75),
+            RESCUE_RADIUS_M: this.rules.RESCUE_RADIUS_M + rescueToleranceMargin,
           };
 
           const eligibility = checkRescueEligibility(

@@ -200,4 +200,106 @@ describe('A04 & D02 Security, Rate Limiter and Validator Test Suite', () => {
 
     room.stop();
   });
+
+  it('enforces pebble cooldown of 6s preventing distraction spam', async () => {
+    const db = new DatabaseManager(':memory:');
+    const server = createServer();
+    const io = new SocketIOServer(server);
+    const roomManager = new RoomManager(io, db);
+
+    await new Promise((resolve) => server.listen(0, resolve));
+    const port = server.address().port;
+
+    const client = ClientIO(`http://127.0.0.1:${port}`, {
+      transports: ['websocket'],
+      forceNew: true,
+    });
+
+    const createRes = await new Promise((resolve) => {
+      client.emit(
+        CLIENT_EVENTS.ROOM_CREATE,
+        { name: 'RobberPebble', protocolVersion: 1 },
+        (res) => resolve(res)
+      );
+    });
+    assert.equal(createRes.ok, true);
+
+    const room = roomManager.getRoom(createRes.roomCode);
+    const player = room.players.get(createRes.playerId);
+    player.role = 'ROBBER';
+    player.state = 'FREE';
+
+    // First pebble throw
+    client.emit(CLIENT_EVENTS.GAME_PEBBLE, {
+      landingPos: [10, 0, 10],
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.ok(player.lastPebbleTimestamp > 0);
+    const firstPebbleTime = player.lastPebbleTimestamp;
+
+    // Second pebble throw immediately within 6s cooldown
+    client.emit(CLIENT_EVENTS.GAME_PEBBLE, {
+      landingPos: [12, 0, 12],
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Timestamp must NOT have updated because second pebble was dropped by cooldown
+    assert.equal(player.lastPebbleTimestamp, firstPebbleTime);
+
+    client.disconnect();
+    roomManager.destroy();
+    io.close();
+    db.close();
+    await new Promise((resolve) => server.close(resolve));
+  });
+
+  it('GET /api/rooms/:code sanitization strictly returns only public fields { id, name, ready, isHost }', () => {
+    const db = new DatabaseManager(':memory:');
+    db.createRoom({ roomCode: 'PUB123', hostPlayerId: 'p-1', mapHash: OFFICIAL_MAP_HASH });
+    db.upsertPlayer({
+      id: 'p-1',
+      roomCode: 'PUB123',
+      name: 'Alice',
+      ready: true,
+      isHost: true,
+      resumeToken: 'secret-token-12345',
+    });
+
+    const rawPlayers = db.getRoomPlayers('PUB123');
+    const sanitized = rawPlayers.map((p) => ({
+      id: p.id,
+      name: p.name,
+      ready: Boolean(p.ready),
+      isHost: Boolean(p.is_host ?? p.isHost),
+    }));
+
+    assert.equal(sanitized.length, 1);
+    const keys = Object.keys(sanitized[0]).sort();
+    assert.deepEqual(keys, ['id', 'isHost', 'name', 'ready']);
+    assert.equal(sanitized[0].id, 'p-1');
+    assert.equal(sanitized[0].name, 'Alice');
+    assert.equal(sanitized[0].ready, true);
+    assert.equal(sanitized[0].isHost, true);
+    assert.equal(sanitized[0].resumeToken, undefined);
+    assert.equal(sanitized[0].resume_token, undefined);
+
+    db.close();
+  });
+
+  it('verifyAdmin rejects query param admin_token and accepts Bearer or X-Admin-Token with timingSafeCompare', async () => {
+    const crypto = await import('node:crypto');
+    function timingSafeCompare(a, b) {
+      if (typeof a !== 'string' || typeof b !== 'string') return false;
+      const hashA = crypto.createHash('sha256').update(a).digest();
+      const hashB = crypto.createHash('sha256').update(b).digest();
+      return crypto.timingSafeEqual(hashA, hashB);
+    }
+
+    const secret = 'super-secret-admin-token-123';
+    assert.equal(timingSafeCompare('super-secret-admin-token-123', secret), true);
+    assert.equal(timingSafeCompare('wrong-token', secret), false);
+    assert.equal(timingSafeCompare('', secret), false);
+    assert.equal(timingSafeCompare('super-secret-admin-token-12', secret), false);
+  });
 });

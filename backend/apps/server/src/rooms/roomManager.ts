@@ -828,6 +828,15 @@ export class RoomManager {
           if (!room) return;
           const player = room.players.get(binding.playerId);
           if (!player || player.role !== 'ROBBER' || player.state === 'JAILED') return;
+
+          // Pebble Cooldown: 6 seconds per robber to prevent spamming AI distraction
+          const now = Date.now();
+          const PEBBLE_COOLDOWN_MS = 6000;
+          if (player.lastPebbleTimestamp && now - player.lastPebbleTimestamp < PEBBLE_COOLDOWN_MS) {
+            return;
+          }
+          player.lastPebbleTimestamp = now;
+
           if (!Array.isArray(payload?.landingPos) || payload.landingPos.length < 3) return;
 
           const lx = Number(payload.landingPos[0]);
