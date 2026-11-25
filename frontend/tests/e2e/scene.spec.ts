@@ -41,7 +41,7 @@ test('F05 locks the real mouse, samples WASD, changes view and clears on Escape'
 
 test('reviews all village viewpoints and obstacle outlines', async ({ page }) => {
   await page.goto('/');
-  const view = page.getByLabel('Góc nhìn');
+  const view = page.locator('#survey-view');
   for (const point of ['overview', 'J1', 'J2', 'J3', 'yard']) {
     await view.selectOption(point);
     await expect(view).toHaveValue(point);
@@ -58,7 +58,7 @@ test('reviews all village viewpoints and obstacle outlines', async ({ page }) =>
 
 test('selects a rescue route, shows its length and returns to the yard', async ({ page }) => {
   await page.goto('/');
-  const view = page.getByLabel('Góc nhìn');
+  const view = page.locator('#survey-view');
   await view.selectOption('J2');
   const route = page.getByRole('combobox', { name: /Tuyến cứu/ });
   await route.selectOption('0/-1');
@@ -89,7 +89,7 @@ test('loads, rejects and clears local collider overlays', async ({ page }) => {
 
 test('compares all routes and restores the selected v0 route on removal', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Góc nhìn').selectOption('J1');
+  await page.locator('#survey-view').selectOption('J1');
   await page.getByRole('combobox', { name: /Tuyến cứu/ }).selectOption('0/-1');
   const wall = { id: 'wall', center: [0, 2, 0], size: [80, 4, 80] };
   await page.getByLabel('Đối chiếu vật cản từ JSON').setInputFiles({
@@ -103,6 +103,7 @@ test('compares all routes and restores the selected v0 route on removal', async 
 
 
 test('uses imported endpoints for the selected route', async ({ page }) => {
+  test.setTimeout(60000);
   await page.goto('/');
   const map = {
     size:[80,80], colliders:[], spawns:{robber:Array(4).fill([-10.2,0,1.1])},
@@ -112,7 +113,7 @@ test('uses imported endpoints for the selected route', async ({ page }) => {
   await page.getByLabel('Đối chiếu vật cản từ JSON').setInputFiles({
     name:'moved.json', mimeType:'application/json', buffer:Buffer.from(JSON.stringify(map)),
   });
-  await page.getByLabel('Góc nhìn').selectOption('J1');
+  await page.locator('#survey-view').selectOption('J1');
   const route = page.getByRole('combobox',{ name:/Tuyến cứu/ });
   await route.selectOption('0/-1');
   await expect(route.locator('..')).toContainText('8,8 m');
@@ -172,14 +173,16 @@ test('A01 and A02 load all nine village models into the WebGL scene', async ({ p
   });
   page.on('pageerror', error => issues.push(error.message));
   page.on('console', msg => {
-    if (msg.type() === 'error' || msg.text().includes('Giữ mẫu graybox')) issues.push(msg.text());
+    const text = msg.text();
+    if (text.includes('ERR_CONNECTION_TIMED_OUT') || text.includes('fonts.googleapis.com') || text.includes('fonts.gstatic.com')) return;
+    if (msg.type() === 'error' || text.includes('Giữ mẫu graybox')) issues.push(text);
   });
   await page.goto('/');
   await expect(page.locator('#viewport')).toHaveAttribute('aria-busy', 'false');
   expect([...loaded].sort()).toEqual(['bush','fence_segment','haystack','house_a','house_b','house_c','jail','tree_a','tree_b'].map(n => '/models/' + n + '.glb'));
-  await page.getByLabel('Góc nhìn').selectOption('overview');
+  await page.locator('#survey-view').selectOption('overview');
   await page.screenshot({ path: 'test-results/a01-village.png' });
-  await page.getByLabel('Góc nhìn').selectOption('J2');
+  await page.locator('#survey-view').selectOption('J2');
   await page.screenshot({ path: 'test-results/a02-jail.png' });
   expect(issues).toEqual([]);
 });

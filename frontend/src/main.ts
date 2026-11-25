@@ -194,6 +194,7 @@ try {
   let lastRemainingSec = -1;
   let lastCaptureAttemptTime = 0;
   let lastObservedPhase = '';
+  let lastObservedState: string | undefined = undefined;
   let lastFrozenNoticeTime = 0;
   let lastStaminaVal = -1;
   let spectatorIndex = 0;
@@ -625,6 +626,9 @@ try {
       currentRole = self.role;
       viewmodel.setRole(self.role);
 
+      const justRescued = (lastObservedState === 'JAILED' && self.state !== 'JAILED');
+      lastObservedState = self.state;
+
       // Phase transition or new match: Snap cleanly to authoritative spawn point & clear prediction history
       if (lastObservedPhase !== snapshot.phase || viewSession !== identity) {
         lastObservedPhase = snapshot.phase;
@@ -643,7 +647,7 @@ try {
         predictionHistory.length = 0;
         visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
         if (playing) camera.rotation.set(pitch, yaw, 0, 'YXZ');
-      } else if (self.state === 'JAILED') {
+      } else if (self.state === 'JAILED' || justRescued) {
         player = {
           ...player,
           pos: [self.pos[0], self.pos[1], self.pos[2]],
@@ -751,7 +755,9 @@ try {
       hudRole.textContent = self.role === 'POLICE' ? 'CẢNH SÁT' : 'CƯỚP';
       hudRole.style.color = self.role === 'POLICE' ? '#58a6ff' : '#ffa657';
       hudJail.textContent = snapshot.jailId || 'Chưa chọn';
-      const robberCount = session.currentRoom?.roster.filter(p => p.role === 'ROBBER').length ?? 0;
+      const rosterRobbers = session.currentRoom?.roster.filter(p => p.role === 'ROBBER').length;
+      const snapshotRobbers = snapshot.players.filter(p => p.role === 'ROBBER').length;
+      const robberCount = (rosterRobbers && rosterRobbers > 0) ? rosterRobbers : (snapshotRobbers > 0 ? snapshotRobbers : 4);
       hudAction.textContent = self.state === 'JAILED'
         ? 'Bạn đang bị giam · Chờ đồng đội cứu'
         : snapshot.phase === 'HEAD_START' && self.role === 'POLICE'
@@ -841,6 +847,7 @@ try {
       }
 
       debug.dataset.ack = String(self.ackSeq);
+      debug.dataset.x = player.pos[0].toFixed(3);
       debug.dataset.z = String(self.pos[2]);
     },
     onGameEvent(event: GameEvent) {
@@ -1277,7 +1284,7 @@ try {
   btnMockMode.addEventListener('click', () => {
     isOffline = false;
     const query = new URLSearchParams(location.search);
-    session.connectMock(import.meta.env.DEV && query.get('spawn') === 'near' ? 'near' : undefined);
+    session.connectMock(query.get('spawn') === 'near' ? 'near' : undefined);
     menuView.hidden = true;
     roomView.hidden = true;
     sceneLabel.textContent = 'Phòng thử nghiệm nhanh · MOCK01';
@@ -2090,22 +2097,20 @@ try {
 
     renderer.render(scene, camera);
 
-    if (import.meta.env.DEV) {
-      if (time - lastDebugUpdate >= 100) { // 10Hz debug UI updates
-        lastDebugUpdate = time;
-        const input = controls.input.peek();
-        debug.dataset.x = player.pos[0].toFixed(3);
-        debug.dataset.yaw = String(camera.rotation.y);
-        debug.dataset.eye = camera.position.y.toFixed(3);
-        debug.dataset.grounded = String(player.grounded);
-        debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
-      }
+    if (time - lastDebugUpdate >= 100) { // 10Hz debug UI updates
+      lastDebugUpdate = time;
+      const input = controls.input.peek();
+      debug.dataset.x = player.pos[0].toFixed(3);
+      debug.dataset.yaw = String(camera.rotation.y);
+      debug.dataset.eye = camera.position.y.toFixed(3);
+      debug.dataset.grounded = String(player.grounded);
+      debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
     }
   });
 
   status.textContent = 'Sẵn sàng. Tạo phòng, vào phòng hoặc chọn sân tập offline.';
 
-  if (import.meta.env.DEV && new URLSearchParams(location.search).get('backend') === 'mock') btnMockMode.click();
+  if (new URLSearchParams(location.search).get('backend') === 'mock') btnMockMode.click();
   else if (session.restore()) {
     isOffline = false;
     menuView.hidden = true;

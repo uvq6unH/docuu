@@ -16,6 +16,21 @@ export default defineConfig(({ mode }) => {
         '/api': { target },
       },
     },
+    build: {
+      chunkSizeWarningLimit: 700,
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (id.includes('node_modules/three')) {
+              return 'three';
+            }
+            if (id.includes('node_modules/socket.io-client')) {
+              return 'socketio';
+            }
+          },
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       include: ['tests/unit/**/*.test.ts'],

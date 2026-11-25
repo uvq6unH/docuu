@@ -15,7 +15,9 @@ export function mountPreview(world: ReturnType<typeof villagePreview>, camera: P
   legend.textContent = 'Khảo sát làng village-v1';
   const label = document.createElement('label');
   label.textContent = 'Góc nhìn ';
+  label.htmlFor = 'survey-view';
   const select = document.createElement('select');
+  select.id = 'survey-view';
   select.add(new Option('Từ sân', 'yard'));
   select.add(new Option('Toàn cảnh', 'overview'));
   for (const id of viewpoints.keys()) select.add(new Option('Vị trí ' + id, id));

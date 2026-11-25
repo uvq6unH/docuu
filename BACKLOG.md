@@ -1,7 +1,7 @@
 # Backlog và Tiến độ Dự án (Tiến trình Alpha v0.1)
 
 P0 = chặn MVP; P1 = alpha cần; P2 = tùy thời gian. Estimate giờ làm tập trung (không tính học). A=Đức; B=bạn; AB=cả hai. Mỗi PR đóng issue, ghi test evidence.
-Hiện tại toàn bộ các module P0 và P1 cốt lõi đã hoàn thành và nghiệm thu qua hệ thống Unit Test (124/124 passed), Lint (0 lỗi), và Playwright E2E.
+Hiện tại toàn bộ các module P0 và P1 cốt lõi đã hoàn thành và nghiệm thu qua hệ thống Unit Test (152/152 passed), Lint (0 lỗi), Typecheck (100% passed) và Playtest Balance Telemetry (48% Cảnh sát / 52% Cướp).
 
 | ID | Tuần | Owner | P | Giờ | Task | Phụ thuộc | Acceptance | Trạng thái |
 |---|---:|---|---|---:|---|---|---|:---:|

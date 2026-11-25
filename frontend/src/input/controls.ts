@@ -78,7 +78,8 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
       release();
       return;
     }
-    if (!locked || !CONTROL_KEYS.has(event.code)) return;
+    if (!CONTROL_KEYS.has(event.code)) return;
+    if (!locked) return;
     event.preventDefault();
     if (!event.repeat) {
       input.press(event.code);
@@ -90,7 +91,8 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
 
   window.addEventListener('keyup', (event) => {
     if (!CONTROL_KEYS.has(event.code)) return;
-    if (locked) event.preventDefault();
+    if (!locked) return;
+    event.preventDefault();
     input.release(event.code);
   }, options);
 
@@ -101,9 +103,11 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
     mouseY += event.movementY * scale;
   }, options);
 
-  canvas.addEventListener('mousedown', (event) => {
+  const onMouseDown = (event: MouseEvent) => {
     if (locked && event.button === 0) input.capture();
-  }, options);
+  };
+  canvas.addEventListener('mousedown', onMouseDown, options);
+  window.addEventListener('mousedown', onMouseDown, options);
   window.addEventListener('blur', release, options);
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) release();

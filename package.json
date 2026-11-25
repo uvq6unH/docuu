@@ -1,0 +1,24 @@
+{
+  "name": "folk-tag-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cảnh Sát Bắt Cướp - Folk Tag 3D (Authoritative Multiplayer Browser FPS)",
+  "scripts": {
+    "build:shared": "npm --prefix packages/shared run build",
+    "build:server": "npm --prefix backend/apps/server run build",
+    "build:client": "npm --prefix frontend run build",
+    "build": "npm run build:shared && npm run build:server && npm run build:client",
+    "typecheck:shared": "npm --prefix packages/shared run typecheck",
+    "typecheck:server": "npm --prefix backend/apps/server run typecheck",
+    "typecheck:client": "npm --prefix frontend run typecheck",
+    "typecheck": "npm run typecheck:shared && npm run typecheck:server && npm run typecheck:client",
+    "lint": "npm --prefix frontend run lint",
+    "test:shared": "npm --prefix packages/shared test",
+    "test:server": "npm --prefix backend/apps/server test",
+    "test:client": "npm --prefix frontend test",
+    "test": "npm run test:shared && npm run test:server && npm run test:client",
+    "test:load": "npm --prefix backend/apps/server run test:load",
+    "test:playtests": "npm --prefix backend/apps/server run test:playtests",
+    "test:all": "npm run test && npm run test:load && npm run test:playtests"
+  }
+}

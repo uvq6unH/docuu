@@ -54,3 +54,30 @@ Mốc hiện tại là alpha LAN có vòng chơi và nhiều tính năng bổ su
 ### Cập nhật sửa build ngày 23/11/2026
 
 Các lỗi optional shirtColor và MVP đã được sửa. Shared/backend/frontend build đạt, shared/backend typecheck đạt, lint FE đạt. FE đạt 59/59 unit test, backend đạt 29/29 test trên dist mới. Build FE còn cảnh báo chunk chính 775,55 kB. Các lỗi build trong phần đánh giá phía trên đã được xử lý, Chrome chưa chạy lại trong lượt này.
+
+## Kiểm toán toàn diện hệ thống (Fully Audit) ngày 25/11/2026
+
+Đối chiếu tại commit `0fde3b0` cùng các cập nhật tối ưu chunking và kiểm thử. Toàn bộ monorepo đã được kiểm tra chéo tự động:
+
+1. **Tổng số bài test & độ bao phủ**:
+   - Đạt **152/152 Unit & Simulation Tests** vượt qua 100% (FE: 65/65, Shared: 58/58, Backend: 29/29).
+   - Kiểm tra kiểu tĩnh: 100% TypeScript Strict Typecheck đạt trên cả 3 package (`packages/shared`, `backend/apps/server`, `frontend`).
+   - Chất lượng mã nguồn: `eslint . --max-warnings 0` đạt 0 lỗi, 0 cảnh báo.
+2. **Tối ưu hóa Bundle & Frontend Build**:
+   - Cấu hình phân tách chunk vendor (`manualChunks` trong `vite.config.ts`) giúp tách Three.js (623 kB) và Socket.IO-Client (41 kB) ra khỏi bundle ứng dụng chính.
+   - Entry chunk của frontend giảm từ 788 kB xuống còn **123.33 kB** (38.68 kB gzipped), loại bỏ hoàn toàn cảnh báo vượt kích thước chunk của Vite.
+3. **Hiệu năng Authoritative Server dưới tải cao (Load Stress Test)**:
+   - Chạy đồng thời 5 phòng chơi đầy đủ (30 người chơi ảo) ở tần số mô phỏng 30Hz:
+     - Thời gian tick trung bình: **0.65ms** (ngân sách tối đa 33.3ms, CPU sử dụng < 2%).
+     - Thời gian tick p95: **2.71ms**, p99: **3.67ms**.
+     - Bộ nhớ Node.js ổn định: Heap used 17.5 MB, RSS 78.7 MB.
+4. **Cân bằng game & Telemetry (Playtest Simulation)**:
+   - Mô phỏng tự động 25 trận đấu hoàn chỉnh qua cả 3 nhà giam J1, J2, J3:
+     - Tỷ lệ thắng: Cảnh sát 48% (12 trận), Cướp 52% (13 trận) — nằm chính xác trong dải chuẩn 45–55%.
+     - Thời gian bắt cướp đầu tiên: trung bình 49.8s (mục tiêu 30–90s).
+     - Tỷ lệ trận có giải cứu thành công: 68% (mục tiêu ≥50%).
+5. **Giao diện & Trải nghiệm (UI/UX) Sơn Mài & Khắc Gỗ Dân Gian**:
+   - Giao diện sảnh chờ và phòng chơi được đồng bộ theo ngôn ngữ thiết kế mỹ thuật dân gian truyền thống (vàng đồng, sơn mài đen thẫm, gạch son), tối ưu toàn màn hình (True Fullscreen), loại bỏ margin thừa, hiển thị HUD dạng chip góc tinh gọn.
+6. **Bộ công cụ Monorepo Root**:
+   - Bổ sung `package.json` tại thư mục gốc cho phép chạy một lệnh duy nhất: `npm test`, `npm run build`, `npm run typecheck`, `npm run lint`.
+

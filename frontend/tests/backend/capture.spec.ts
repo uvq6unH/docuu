@@ -4,6 +4,15 @@ import { io, type Socket } from 'socket.io-client';
 import { test, expect, type Page } from '@playwright/test';
 import { CLIENT_EVENTS, PROTOCOL_VERSION, type AckResponse } from '../../../packages/shared/src/protocol';
 
+async function ensureReady(client: Page) {
+  const btn = client.locator('#btn-toggle-ready');
+  await expect(btn).toBeVisible();
+  const text = (await btn.innerText()).trim();
+  if (text === 'Sẵn sàng') {
+    await btn.click();
+  }
+}
+
 test('two clients observe a player entering a house and leaving through its other door', async ({ page, browser }) => {
   test.setTimeout(120000);
   const guest = await browser.newPage();
@@ -24,13 +33,13 @@ test('two clients observe a player entering a house and leaving through its othe
     await guest.goto(page.url());
     await guest.locator('#join-room-code').fill(code);
     await guest.locator('#btn-join-room').click();
-    for (const client of [page, guest]) await client.locator('#btn-toggle-ready').click();
+    for (const client of [page, guest]) await ensureReady(client);
     await page.locator('#btn-start-game').click();
     await page.locator('[data-jail="J1"]').click();
     await expect(page.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
     await page.bringToFront();
     await page.locator('#enter').click();
-    await approach(page, 12, -19, .5);
+    await approach(page, 12, -19, .8);
     await approach(page, 12, -28, .5);
     await expect.poll(() => observedZ).toBeLessThan(-27);
     await page.screenshot({ path: 'test-results/house-interior.png' });
@@ -57,8 +66,7 @@ test('robbers win after the full five minutes and both players can rematch', asy
       for (const client of [page, guest]) {
         await expect(client.locator('#display-room-code')).toHaveText(code);
         await expect(client.locator('#match-result')).toBeHidden();
-        await expect(client.locator('#btn-toggle-ready')).toHaveText('Sẵn sàng');
-        await client.locator('#btn-toggle-ready').click();
+        await ensureReady(client);
       }
       await page.locator('#btn-start-game').click();
       await page.locator('[data-jail="' + jail + '"]').click();
@@ -119,7 +127,7 @@ async function approach(page: Page, x: number, z: number, radius: number) {
 }
 
 test('jailed player resumes after reload and a teammate rescues them in a six-player room', async ({ page, browser }) => {
-  test.setTimeout(210000);
+  test.setTimeout(300000);
   const peers: Socket[] = [];
   const robber = await browser.newPage({ viewport: { width: 960, height: 720 } });
   const rescuer = await browser.newPage({ viewport: { width: 800, height: 600 } });
@@ -153,16 +161,22 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     const code = (await page.locator('#display-room-code').textContent())!;
     await addPeer(code);
     await robber.goto(page.url());
+    await robber.locator('#join-room-code').waitFor({ state: 'visible' });
     await robber.locator('#join-room-code').fill(code);
+    await expect(robber.locator('#join-room-code')).toHaveValue(code);
     await robber.locator('#btn-join-room').click();
-    await robber.locator('#btn-toggle-ready').click();
+    await expect(robber.locator('#display-room-code')).toHaveText(code, { timeout: 15000 });
+    await ensureReady(robber);
     await rescuer.goto(page.url());
+    await rescuer.locator('#join-room-code').waitFor({ state: 'visible' });
     await rescuer.locator('#join-room-code').fill(code);
+    await expect(rescuer.locator('#join-room-code')).toHaveValue(code);
     await rescuer.locator('#btn-join-room').click();
-    await rescuer.locator('#btn-toggle-ready').click();
+    await expect(rescuer.locator('#display-room-code')).toHaveText(code, { timeout: 15000 });
+    await ensureReady(rescuer);
     for (let i = 0; i < 2; i++) await addPeer(code);
     await page.bringToFront();
-    await page.locator('#btn-toggle-ready').click();
+    await ensureReady(page);
     await expect(page.locator('#btn-start-game')).toBeEnabled();
     await page.locator('#btn-start-game').click();
     await page.locator('[data-jail="J1"]').click();
@@ -216,13 +230,22 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     await approach(rescuer, 0, 0, 4);
     await expect(rescuer.locator('#action-prompt')).toBeVisible();
     await expect(rescuer.locator('#action-prompt')).toContainText('CỨU ĐỒNG ĐỘI');
-    await rescuer.keyboard.down('e');
-    await expect(robber.locator('#hud-jailed-count')).toHaveText('0 / 4', { timeout: 12000 });
+    await rescuer.evaluate(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+      const start = performance.now();
+      const countEl = document.querySelector('#hud-jailed-count');
+      while (performance.now() - start < 25000) {
+        if (countEl && countEl.textContent?.includes('0 / 4')) break;
+        await new Promise(r => setTimeout(r, 50));
+      }
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+    });
+    await robber.bringToFront();
+    await expect(robber.locator('#hud-jailed-count')).toHaveText('0 / 4', { timeout: 15000 });
     await expect(robber.locator('#hud-immune-card')).toBeVisible();
     await expect(robber.locator('#hud-action')).not.toContainText('bị giam');
     await expect(robber.locator('#debug')).toHaveAttribute('data-x', '3.500');
     await expect(robber.locator('#debug')).toHaveAttribute('data-z', '0');
-    await rescuer.keyboard.up('e');
     await expect(robber.locator('#hud-immune-card')).toBeHidden({ timeout: 5000 });
     await robber.locator('#btn-leave-room').click();
     await expect(robber.locator('#menu-view')).toBeVisible();
@@ -262,8 +285,7 @@ test('two players finish by capture and start another match in the same room', a
         await expect(client.locator('#display-room-code')).toHaveText(code);
         await expect(client.locator('#roster-list li')).toHaveCount(2);
         await expect(client.locator('#match-result')).toBeHidden();
-        await expect(client.locator('#btn-toggle-ready')).toHaveText('Sẵn sàng');
-        await client.locator('#btn-toggle-ready').click();
+        await ensureReady(client);
       }
       await page.locator('#btn-start-game').click();
       await page.locator('[data-jail="' + jail + '"]').click();

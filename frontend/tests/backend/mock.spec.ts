@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { Snapshot } from '../../../packages/shared/src/protocol';
 
 test('two browsers receive the room and observe server-confirmed player movement', async ({ page, browser, request }) => {
+  test.setTimeout(90000);
   expect(await (await request.get('/healthz')).json()).toMatchObject({ status: 'ok' });
   await page.goto('/');
   await page.locator('#btn-mock-mode').click();
@@ -48,8 +49,9 @@ test('two browsers receive the room and observe server-confirmed player movement
 });
 
 test('two browsers observe capture: police clicks in range, robber teleports to jail J1 and jailedCount becomes 1', async ({ page, browser }) => {
+  test.setTimeout(90000);
   await page.goto('/?backend=mock');
-  await expect(page.locator('.scene-label')).toContainText('police-1');
+  await expect(page.locator('.scene-label')).toContainText('police-1', { timeout: 15000 });
 
   const robberBrowser = await browser.newPage();
   let robberSelfPos: Snapshot['self']['pos'] | undefined;

@@ -1,0 +1,37 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/apps/server/Dockerfile
+    container_name: folk-tag-backend
+    restart: unless-stopped
+    environment:
+      - PORT=3001
+      - CLIENT_ORIGIN=*
+      - NODE_ENV=production
+    volumes:
+      - folk-tag-data:/app/backend/apps/server/data
+    networks:
+      - folk-tag-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: folk-tag-web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - folk-tag-net
+
+volumes:
+  folk-tag-data:
+    name: folk-tag-data
+
+networks:
+  folk-tag-net:
+    name: folk-tag-net
+    driver: bridge

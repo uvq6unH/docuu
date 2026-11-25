@@ -27,24 +27,22 @@ Script sẽ tự động:
 3. Khởi động Frontend Vite (`http://0.0.0.0:5173`).
 4. Tự động mở trình duyệt web và in sẵn đường link để gửi cho bạn bè trong cùng mạng Wi-Fi.
 
-### Cách 2: Chạy thủ công qua dòng lệnh
+### Cách 2: Chạy qua dòng lệnh (Root Monorepo)
 ```bash
-# Cài đặt dependencies cho toàn bộ monorepo
-npm install
-npm --prefix frontend install
-npm --prefix backend/apps/server install
+# Kiểm tra toàn bộ hệ thống (152 Unit & Simulation Tests)
+npm test
 
-# Chạy kiểm thử toàn bộ hệ thống (124 tests)
-npm --prefix backend/apps/server test
-npm --prefix packages/shared test
-npm --prefix frontend test
-npm --prefix frontend run lint
+# Build toàn bộ các packages (Shared, Server, Frontend)
+npm run build
 
-# Khởi động Backend
-npm --prefix backend/apps/server start
+# Kiểm tra kiểu TypeScript toàn dự án
+npm run typecheck
 
-# Khởi động Frontend (terminal khác)
-npm --prefix frontend run dev:lan
+# Kiểm tra chất lượng mã nguồn Frontend
+npm run lint
+
+# Chạy stress test tải 5 phòng & mô phỏng 25 trận cân bằng
+npm run test:all
 ```
 
 ## Tài liệu chi tiết
@@ -61,7 +59,8 @@ npm --prefix frontend run dev:lan
 
 ## Kết quả nghiệm thu kỹ thuật
 
-- **Kiểm thử tự động**: 124/124 bài test vượt qua (FE: 52/52, Shared: 48/48, Backend: 24/24).
-- **Chất lượng mã nguồn**: 0 lỗi lint (`eslint . --max-warnings 0`).
-- **Tối ưu đồ họa**: 41–73 draw calls, ~47K tam giác, shadow map throttled 30Hz, Page Visibility API tự động giảm tải xuống 0% CPU khi chuyển tab.
-- **Authoritative Server**: Chu kỳ tick mô phỏng 0.05ms trung bình (p99 < 0.2ms), khả năng đáp ứng nhiều phòng chơi song song.
+- **Kiểm thử tự động**: 152/152 bài test vượt qua (FE: 65/65, Shared: 58/58, Backend: 29/29).
+- **Chất lượng mã nguồn**: 0 lỗi lint (`eslint . --max-warnings 0`), 100% TypeScript strict typecheck passed trên cả 3 package.
+- **Tối ưu bundle & đồ họa**: Main chunk client giảm từ 788 kB xuống **123 kB** (Three.js tách riêng vendor chunk cacheable 623 kB), 41–73 draw calls, ~47K tam giác, shadow map throttled 30Hz, Page Visibility API tự động giảm tải xuống 0% CPU khi chuyển tab.
+- **Authoritative Server**: Chu kỳ tick mô phỏng 0.65ms trung bình (p95 = 2.71ms trên tải 5 phòng 30 người chơi cùng lúc, ngân sách 33.3ms), bộ nhớ heap chỉ 17.5 MB.
+- **Cân bằng game (Telemetry)**: 25 trận mô phỏng tự động đạt tỷ lệ thắng 48% Cảnh sát / 52% Cướp (mục tiêu 45–55%), 68% trận có giải cứu (mục tiêu ≥50%).

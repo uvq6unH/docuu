@@ -15,6 +15,7 @@ import {
   MovementIntent,
   MovementRole,
   validateCapture,
+  isRobberCapturable,
   CaptureActor,
   CaptureTarget,
   GameEvent,
@@ -74,15 +75,18 @@ export class MockServer {
       const spawnPos: Vec3 = [...(bot ? bot.pos : defaultSpawnPos)];
 
       if (isNearSpawn && role === 'ROBBER') {
+        const policeSession = Array.from(this.clients.values()).find((c) => c.role === 'POLICE');
         const policeBot = this.bots.find((b) => b.id === 'police-1');
+        const basePos = policeSession ? policeSession.movementState.pos : (policeBot ? policeBot.pos : officialVillageMap.spawns.police[0]!);
+        const baseYaw = policeBot ? policeBot.yaw : 0;
         if (policeBot) {
           policeBot.patrolSpeed = 0;
-          const fx = -Math.sin(policeBot.yaw);
-          const fz = -Math.cos(policeBot.yaw);
-          spawnPos[0] = policeBot.pos[0] + fx * 1.2;
-          spawnPos[1] = policeBot.pos[1];
-          spawnPos[2] = policeBot.pos[2] + fz * 1.2;
         }
+        const fx = -Math.sin(baseYaw);
+        const fz = -Math.cos(baseYaw);
+        spawnPos[0] = basePos[0] + fx * 1.2;
+        spawnPos[1] = basePos[1];
+        spawnPos[2] = basePos[2] + fz * 1.2;
       }
 
       if (bot && isNearSpawn && role === 'ROBBER') {
@@ -160,13 +164,16 @@ export class MockServer {
             const activeJail = officialVillageMap.jails.find((j) => j.id === 'J1')!;
             const robbers: CaptureTarget[] = this.bots
               .filter((b) => b.role === 'ROBBER')
-              .map((b) => ({
-                id: b.id,
-                role: 'ROBBER' as const,
-                pos: b.pos,
-                crouch: b.crouch,
-                state: b.state || 'FREE',
-              }));
+              .map((b) => {
+                const client = Array.from(this.clients.values()).find((c) => c.playerId === b.id);
+                return {
+                  id: b.id,
+                  role: 'ROBBER' as const,
+                  pos: client ? client.movementState.pos : b.pos,
+                  crouch: client ? client.movementState.crouched : b.crouch,
+                  state: b.state || 'FREE',
+                };
+              });
 
             const occupiedSlots = new Set<number>();
             for (const b of this.bots) {
@@ -175,12 +182,19 @@ export class MockServer {
               }
             }
 
+            const networkCaptureRules = {
+              ...GAME_RULES,
+              CAPTURE_MAX_DISTANCE_M: Math.max(GAME_RULES.CAPTURE_MAX_DISTANCE_M, 2.0),
+              CAPTURE_MAX_ANGLE_DEG: Math.max(GAME_RULES.CAPTURE_MAX_ANGLE_DEG, 65),
+            };
+
             const captureResult = validateCapture(
               policeActor,
               robbers,
               officialVillageMap.colliders,
               activeJail,
-              occupiedSlots
+              occupiedSlots,
+              networkCaptureRules
             );
 
             if (

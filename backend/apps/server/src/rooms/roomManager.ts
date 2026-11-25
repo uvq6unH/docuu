@@ -851,7 +851,7 @@ export class RoomManager {
         const room = this.rooms.get(binding.roomCode);
         if (room) {
           const player = room.players.get(binding.playerId);
-          if (player) {
+          if (player && player.socket === socket) {
             player.socket = null;
             player.inputQueue = [];
             player.rescueHeld = false;
