@@ -1,5 +1,5 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, randomInt } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import {
   PROTOCOL_VERSION,
@@ -88,7 +88,7 @@ export class RoomManager {
     do {
       code = '';
       for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
+        code += chars.charAt(randomInt(chars.length));
       }
     } while (this.rooms.has(code));
     return code;
@@ -820,7 +820,7 @@ export class RoomManager {
       // 18. game:pebble (Robber distraction pebble throw)
       socket.on(
         CLIENT_EVENTS.GAME_PEBBLE,
-        (payload: { fromPos: Vec3; landingPos: Vec3 }) => {
+        (payload: { fromPos?: Vec3; landingPos: Vec3 }) => {
           if (!this.rateLimiter.checkAction(socket.id)) return;
           const binding = this.socketBindings.get(socket.id);
           if (!binding) return;
@@ -828,16 +828,36 @@ export class RoomManager {
           if (!room) return;
           const player = room.players.get(binding.playerId);
           if (!player || player.role !== 'ROBBER' || player.state === 'JAILED') return;
-          if (!Array.isArray(payload?.fromPos) || !Array.isArray(payload?.landingPos)) return;
+          if (!Array.isArray(payload?.landingPos) || payload.landingPos.length < 3) return;
 
-          const pebble: PebbleEvent = {
-            senderId: player.id,
-            fromPos: [payload.fromPos[0], payload.fromPos[1], payload.fromPos[2]],
-            landingPos: [payload.landingPos[0], payload.landingPos[1], payload.landingPos[2]],
-          };
+          const lx = Number(payload.landingPos[0]);
+          const ly = Number(payload.landingPos[1]);
+          const lz = Number(payload.landingPos[2]);
+          if (!Number.isFinite(lx) || !Number.isFinite(ly) || !Number.isFinite(lz)) return;
 
-          this.io.to(room.roomCode).emit(SERVER_EVENTS.GAME_PEBBLE_EVENT, pebble);
-          room.handlePebble(pebble.landingPos);
+          // Cap throwing distance to max 16m from server's authoritative player position
+          const playerPos = player.movementState.pos;
+          const throwDist = Math.hypot(lx - playerPos[0], lz - playerPos[2]);
+          if (throwDist > 16.0) return;
+
+          const landingPos: Vec3 = [lx, Math.max(0, ly), lz];
+          const serverFromPos: Vec3 = [...playerPos];
+
+          // Distribute pebble event securely:
+          // - Robbers (allies) receive fromPos & senderId
+          // - Police only receive landingPos (sound of impact) so hidden robbers are never leaked
+          for (const p of room.players.values()) {
+            if (!p.socket) continue;
+            const isPolice = p.role === 'POLICE';
+            const eventPayload: PebbleEvent = {
+              senderId: isPolice ? undefined : player.id,
+              fromPos: isPolice ? undefined : serverFromPos,
+              landingPos,
+            };
+            p.socket.emit(SERVER_EVENTS.GAME_PEBBLE_EVENT, eventPayload);
+          }
+
+          room.handlePebble(landingPos);
         }
       );
 

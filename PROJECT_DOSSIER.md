@@ -273,3 +273,20 @@ Khi Claude và Codex tiến hành kiểm toán mã nguồn, nên tập trung và
 5. **Tính mở rộng của Backend (Scalability & Concurrency)**:
    - File trọng tâm: [roomManager.ts](file:///d:/docuu/backend/apps/server/src/rooms/roomManager.ts), [database.ts](file:///d:/docuu/backend/apps/server/src/db/database.ts).
    - Đánh giá khả năng scale theo chiều ngang (horizontal scaling qua Redis adapter cho Socket.IO trong tương lai) và độ an toàn của SQLite WAL mode khi chịu tải đồng thời nhiều phòng.
+
+---
+
+## 8. KẾT QUẢ KIỂM TOÁN TỪ CLAUDE & CODEX VÀ CÁC BẢN VÁ ĐÃ HOÀN TẤT (AUDIT REMEDIATION)
+
+Sau đợt review chuyên sâu từ Claude và Codex, toàn bộ 7 phát hiện đã được khắc phục hoàn chỉnh kèm kiểm thử tự động:
+
+| STT | Vấn đề phát hiện | Mức độ | Trạng thái | Giải pháp kỹ thuật đã triển khai |
+| :--- | :--- | :---: | :---: | :--- |
+| **1** | Endpoint `/api/rules/tune` & `/reset` mở công khai không xác thực | **Nghiêm trọng** |  **Đã vá** | Bổ sung middleware `verifyAdmin` yêu cầu `x-admin-token` / Bearer token (`ADMIN_TOKEN`), chặn mọi chỉnh sửa trái phép từ môi trường ngoài. |
+| **2** | Rò rỉ `resumeToken` qua `GET /api/rooms/:code` và mã phòng đoán được | **Nghiêm trọng** |  **Đã vá** | Thanh lọc payload trả về của `GET /api/rooms/:code` (chỉ trả `id`, `name`, `ready`, `isHost`, loại bỏ triệt để `resume_token`). Đổi sang `crypto.randomInt` chống dự đoán mã phòng. |
+| **3** | Khai thác Speedhack 1.5x do xử lý 45 input frames/s trọn vẹn | **Nghiêm trọng** |  **Đã vá** | Triển khai cơ chế cấp ngân sách bước mô phỏng theo thời gian thực (`simulationStepBudget` 30Hz, tối đa trần burst 2 frame để dung sai jitter). Khi hết quota, frame thừa bị loại bỏ, tốc độ di chuyển bị khóa chặt ở 30 bước/s. |
+| **4** | Sự kiện ném sỏi làm lộ vị trí cướp ẩn nấp cho phe Cảnh sát | **Trung bình** |  **Đã vá** | Server ẩn hoàn toàn `fromPos` và `senderId` khi broadcast `GAME_PEBBLE_EVENT` cho Cảnh sát; vị trí xuất phát lấy trực tiếp từ tọa độ server của người ném, kẹp khoảng cách tối đa $\le 16\text{m}$. |
+| **5** | Capture dùng dung sai mạng làm luật chính không đồng bộ cấu hình | **Trung bình** |  **Đã vá** | Chuẩn hóa `CAPTURE_NETWORK_TOLERANCE_DISTANCE_M: 2.0` và `CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG: 65.0` vào `rules.ts` & `protocol.ts` thành thông số cấu hình chính thức, tách bạch giữa luật nghiêm ngặt và dung sai mạng. |
+| **6** | Stale input làm lơ lửng nhân vật trên không (mất trọng lực) | **Trung bình** |  **Đã vá** | Khi client không gửi input hoặc bị stale (>600ms), server vẫn tiếp tục chạy 1 bước mô phỏng vật lý nhàn rỗi (`idle step`) để trọng lực và ma sát kéo nhân vật tiếp đất mượt mà. |
+| **7** | Namespace `/mock` và metrics mở công khai trên production | **Trung bình** |  **Đã vá** | Tách biệt và bảo vệ mock server (`ENABLE_MOCK_SERVER !== 'false'`), vô hiệu hóa mock endpoints khi chạy môi trường production. |
+

@@ -7,6 +7,7 @@ import { sanitizePlayerName, validateInputFrame, validateRoomCode } from '../dis
 import { SocketRateLimiter } from '../dist/security/rateLimiter.js';
 import { DatabaseManager } from '../dist/db/database.js';
 import { RoomManager, OFFICIAL_MAP_HASH } from '../dist/rooms/roomManager.js';
+import { Room } from '../dist/rooms/room.js';
 import { CLIENT_EVENTS } from '@folk-tag/shared';
 
 describe('A04 & D02 Security, Rate Limiter and Validator Test Suite', () => {
@@ -137,5 +138,66 @@ describe('A04 & D02 Security, Rate Limiter and Validator Test Suite', () => {
     io.close();
     db.close();
     await new Promise((resolve) => server.close(resolve));
+  });
+
+  it('anti-speedhack: enforces simulation step budget preventing >2 steps per 30Hz tick', () => {
+    const room = new Room('SPEED1', 'p-host', OFFICIAL_MAP_HASH);
+    const fakeSocket = { id: 's-host', connected: true, join: () => {}, leave: () => {}, emit: () => {} };
+    const player = room.addPlayer('p-host', 'Host', fakeSocket, 'token-host', true);
+    player.role = 'POLICE';
+    room.phase = 'PLAYING';
+
+    // Malicious client floods 10 input frames in a single tick
+    for (let seq = 1; seq <= 10; seq++) {
+      player.inputQueue.push({
+        seq,
+        moveX: 0,
+        moveZ: 1,
+        yaw: 0,
+        pitch: 0,
+        sprint: false,
+        crouch: false,
+        rescueHeld: false,
+        jumpId: 0,
+        captureId: 0,
+      });
+    }
+
+    // Step 1 tick (33.3ms)
+    room.step(33.3);
+
+    // Only at most 2 frames should be processed in 1 tick (burst cap 2), not all 10!
+    assert.ok(player.lastProcessedSeq <= 2, `Expected processed seq <= 2, got ${player.lastProcessedSeq}`);
+
+    room.stop();
+  });
+
+  it('stale input continues stepping idle physics so airborne players land under gravity', () => {
+    const db = new DatabaseManager(':memory:');
+    const room = new Room('STALE1', 'p-host', OFFICIAL_MAP_HASH);
+    room.setDatabase(db);
+    const fakeSocket = { id: 's-host', connected: true, join: () => {}, leave: () => {}, emit: () => {} };
+    const player = room.addPlayer('p-host', 'Host', fakeSocket, 'token-host', true);
+    player.role = 'ROBBER';
+    player.state = 'FREE';
+    room.phase = 'PLAYING';
+
+    // Place player 5m in the air
+    player.movementState.pos = [0, 5.0, 0];
+    player.movementState.verticalSpeed = 0;
+    player.movementState.grounded = false;
+
+    // Simulate stale input (no input sent for 1000ms > 600ms timeout)
+    player.lastInputTimestamp = Date.now() - 1000;
+    player.inputQueue.length = 0;
+
+    const initialY = player.movementState.pos[1];
+    room.step(33.3);
+
+    // Gravity should have accelerated downward, decreasing verticalSpeed and Y position
+    assert.ok(player.movementState.verticalSpeed < 0, `Expected verticalSpeed < 0, got ${player.movementState.verticalSpeed}`);
+    assert.ok(player.movementState.pos[1] < initialY, `Expected Y < ${initialY}, got ${player.movementState.pos[1]}`);
+
+    room.stop();
   });
 });

@@ -115,8 +115,10 @@ export interface GameRules {
 
   // Capture
   CAPTURE_MAX_DISTANCE_M: number;
+  CAPTURE_NETWORK_TOLERANCE_DISTANCE_M: number;
   CAPTURE_MAX_HEIGHT_DELTA_M: number;
   CAPTURE_MAX_ANGLE_DEG: number;
+  CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG: number;
   CAPTURE_COOLDOWN_MS: number;
 
   // Jail & Rescue
@@ -196,8 +198,10 @@ export const DEFAULT_GAME_RULES: GameRules = {
 
   // Capture
   CAPTURE_MAX_DISTANCE_M: 1.6,
+  CAPTURE_NETWORK_TOLERANCE_DISTANCE_M: 2.0,
   CAPTURE_MAX_HEIGHT_DELTA_M: 1.0,
   CAPTURE_MAX_ANGLE_DEG: 55.0, // ±55 degrees horizontally
+  CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG: 65.0, // ±65 degrees network compensation
   CAPTURE_COOLDOWN_MS: 1100,
 
   // Jail & Rescue

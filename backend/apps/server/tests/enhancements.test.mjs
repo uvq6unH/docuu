@@ -130,7 +130,9 @@ describe('Enhancements & Social/Tactical Systems Test Suite', () => {
       landingPos: [10, 0, 10],
     });
     const pebbleData = await pebbleReceivedPromise;
-    assert.equal(pebbleData.senderId, p2.id);
+    // Security verification (Issue 4): Police must NOT see robber senderId or fromPos
+    assert.equal(pebbleData.senderId, undefined);
+    assert.equal(pebbleData.fromPos, undefined);
     assert.equal(pebbleData.landingPos[0], 10);
 
     // 7. Test authoritative MVP computation

@@ -109,8 +109,8 @@ export interface TacticalPing {
 }
 
 export interface PebbleEvent {
-  senderId: string;
-  fromPos: Vec3;
+  senderId?: string | undefined;
+  fromPos?: Vec3 | undefined;
   landingPos: Vec3;
 }
 

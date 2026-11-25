@@ -184,8 +184,8 @@ export class MockServer {
 
             const networkCaptureRules = {
               ...GAME_RULES,
-              CAPTURE_MAX_DISTANCE_M: Math.max(GAME_RULES.CAPTURE_MAX_DISTANCE_M, 2.0),
-              CAPTURE_MAX_ANGLE_DEG: Math.max(GAME_RULES.CAPTURE_MAX_ANGLE_DEG, 65),
+              CAPTURE_MAX_DISTANCE_M: GAME_RULES.CAPTURE_NETWORK_TOLERANCE_DISTANCE_M ?? 2.0,
+              CAPTURE_MAX_ANGLE_DEG: GAME_RULES.CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG ?? 65.0,
             };
 
             const captureResult = validateCapture(

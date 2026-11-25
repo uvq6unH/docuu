@@ -74,6 +74,7 @@ export interface PlayerSession {
   cosmetic?: CosmeticPreferences | undefined;
   distractionTarget?: [number, number] | undefined;
   distractionRemainingMs?: number | undefined;
+  simulationStepBudget?: number | undefined;
 }
 
 export interface RoomMetrics {
@@ -176,6 +177,7 @@ export class Room {
       rescueNeedsRelease: false,
       hideCrouchMs: 0,
       lastYaw: 0,
+      simulationStepBudget: 2,
     };
     this.players.set(id, session);
     socket.join(this.roomCode);
@@ -256,6 +258,7 @@ export class Room {
       rescueNeedsRelease: false,
       hideCrouchMs: 0,
       lastYaw: 0,
+      simulationStepBudget: 2,
     };
 
     this.players.set(botId, session);
@@ -596,6 +599,7 @@ export class Room {
       session.lastCaptureId = 0;
       session.lastCaptureAttemptTick = 0;
       session.movementState = initialMovement([0, 0, 0]);
+      session.simulationStepBudget = 2;
     }
 
     if (this.db) {
@@ -845,21 +849,19 @@ export class Room {
         const isStale =
           session.socket === null || now - session.lastInputTimestamp > this.rules.INPUT_STALE_TIMEOUT_MS;
 
-        let intent: MovementIntent = {
-          moveX: 0,
-          moveZ: 0,
-          yaw: session.lastYaw,
-          jumpPressed: false,
-          sprint: false,
-          crouch: false,
-        };
+        // Anti-Speedhack (Issue 3): Replenish 1 simulation step per 30Hz tick, max burst 2 to absorb network jitter
+        session.simulationStepBudget = Math.min(2, (session.simulationStepBudget ?? 0) + 1);
 
+        let stepsTaken = 0;
         if (!isStale && session.inputQueue.length > 0) {
-          const framesToProcess = session.inputQueue.splice(0, this.rules.MAX_CATCHUP_STEPS);
+          const maxStepsAllowed = Math.min(session.inputQueue.length, session.simulationStepBudget);
+          const framesToProcess = session.inputQueue.splice(0, maxStepsAllowed);
+
           for (const frame of framesToProcess) {
             if (frame.seq <= session.lastProcessedSeq) continue;
             session.lastProcessedSeq = frame.seq;
             session.lastYaw = frame.yaw;
+            stepsTaken++;
 
             const jumpPressed = Boolean(frame.jumpId && frame.jumpId > session.lastJumpId);
             if (frame.jumpId) session.lastJumpId = frame.jumpId;
@@ -912,11 +914,43 @@ export class Room {
               );
             }
           }
-        } else if (isStale) {
-          // A fresh held input remains valid between packets. Only a release
-          // frame clears the latch after a completed rescue.
-          session.rescueHeld = false;
-          session.inputQueue.length = 0;
+
+          session.simulationStepBudget = Math.max(0, session.simulationStepBudget - stepsTaken);
+
+          // Prevent malicious input flood / memory exhaustion
+          if (session.inputQueue.length > 5) {
+            session.inputQueue.splice(0, session.inputQueue.length - 5);
+          }
+        }
+
+        // Stale & Idle Physics (Issue 6): If no input frame stepped, run 1 idle step so gravity & deceleration simulate naturally
+        if (stepsTaken === 0) {
+          if (isStale) {
+            session.rescueHeld = false;
+            session.inputQueue.length = 0;
+            session.simulationStepBudget = 1;
+          }
+          const isJailed = session.role === 'ROBBER' && session.state === 'JAILED';
+          if (isJailed && session.jailSlotIndex !== undefined && activeJail.slots[session.jailSlotIndex]) {
+            session.movementState.pos = [...activeJail.slots[session.jailSlotIndex]!];
+            session.movementState.verticalSpeed = 0;
+          } else if (!isJailed) {
+            const idleIntent: MovementIntent = {
+              moveX: 0,
+              moveZ: 0,
+              yaw: session.lastYaw,
+              jumpPressed: false,
+              sprint: false,
+              crouch: session.movementState.crouched,
+            };
+            session.movementState = stepMovement(
+              session.movementState,
+              idleIntent,
+              session.role as MovementRole,
+              officialVillageMap,
+              this.movementRules
+            );
+          }
         }
       }
 
@@ -1082,8 +1116,8 @@ export class Room {
 
           const networkCaptureRules = {
             ...this.rules,
-            CAPTURE_MAX_DISTANCE_M: Math.max(this.rules.CAPTURE_MAX_DISTANCE_M, 2.0),
-            CAPTURE_MAX_ANGLE_DEG: Math.max(this.rules.CAPTURE_MAX_ANGLE_DEG, 65),
+            CAPTURE_MAX_DISTANCE_M: this.rules.CAPTURE_NETWORK_TOLERANCE_DISTANCE_M ?? 2.0,
+            CAPTURE_MAX_ANGLE_DEG: this.rules.CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG ?? 65.0,
           };
 
           const captureResult = validateCapture(

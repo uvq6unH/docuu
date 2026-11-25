@@ -19,6 +19,20 @@ const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+
+function verifyAdmin(req: Request, res: Response, next: () => void) {
+  // If in production or ADMIN_TOKEN is explicitly configured, enforce token authentication
+  if (process.env.NODE_ENV === 'production' || ADMIN_TOKEN) {
+    const provided = (req.headers['x-admin-token'] || req.query.admin_token) as string | undefined;
+    if (!provided || provided !== ADMIN_TOKEN) {
+      res.status(401).json({ error: 'Unauthorized: Valid X-Admin-Token required' });
+      return;
+    }
+  }
+  next();
+}
+
 // Deep HTTP health probe endpoint
 app.get('/healthz', (_req: Request, res: Response) => {
   try {
@@ -57,7 +71,7 @@ app.get('/api/rules', (_req: Request, res: Response) => {
   res.status(200).json(rulesData);
 });
 
-app.post('/api/rules/tune', (req: Request, res: Response) => {
+app.post('/api/rules/tune', verifyAdmin, (req: Request, res: Response) => {
   const overrides = req.body?.rules || req.body;
   if (!overrides || typeof overrides !== 'object') {
     res.status(400).json({ error: 'Invalid rules object provided' });
@@ -67,7 +81,7 @@ app.post('/api/rules/tune', (req: Request, res: Response) => {
   res.status(200).json({ ok: true, rules: updatedRules });
 });
 
-app.post('/api/rules/reset', (_req: Request, res: Response) => {
+app.post('/api/rules/reset', verifyAdmin, (_req: Request, res: Response) => {
   const resetRules = roomManager.resetRules();
   res.status(200).json({ ok: true, rules: resetRules });
 });
@@ -107,7 +121,9 @@ app.get('/api/rooms/:code', (req: Request, res: Response) => {
     res.status(404).json({ error: 'Room not found' });
     return;
   }
-  const players = db.getRoomPlayers(code);
+  const rawPlayers = db.getRoomPlayers(code);
+  // Security fix (Issue 2): Never expose secret resume_token over public API
+  const players = rawPlayers.map(({ resume_token, ...safePlayer }) => safePlayer);
   res.status(200).json({ room, players });
 });
 
@@ -121,9 +137,10 @@ const io = new SocketIOServer(server, {
   },
 });
 
-// 1. Initialize Mock snapshot server on dedicated /mock namespace (or root if --mock CLI flag is passed)
+// 1. Initialize Mock snapshot server on dedicated /mock namespace
+const isMockEnabled = process.env.NODE_ENV !== 'production' || process.env.ENABLE_MOCK === 'true' || process.argv.includes('--mock');
 const isMockOnly = process.argv.includes('--mock') || process.env.MOCK_SERVER === 'true';
-const mockServer = setupMockServer(isMockOnly ? io : (io.of('/mock') as any));
+const mockServer = isMockEnabled ? setupMockServer(isMockOnly ? io : (io.of('/mock') as any)) : null;
 
 // 2. Initialize Real Room Manager on default root namespace (/) for real multiplayer lobby & authoritative simulation
 const roomManager = new RoomManager(io, db);
@@ -158,7 +175,7 @@ server.listen(PORT, '0.0.0.0', () => {
 
 function gracefulShutdown(signal: string) {
   console.log(`[Server] ${signal} received. Shutting down gracefully...`);
-  mockServer.stop();
+  if (mockServer) mockServer.stop();
   roomManager.destroy();
   db.close();
   server.close(() => {
