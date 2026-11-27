@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -254,52 +255,364 @@ describe('A04 & D02 Security, Rate Limiter and Validator Test Suite', () => {
     await new Promise((resolve) => server.close(resolve));
   });
 
-  it('GET /api/rooms/:code sanitization strictly returns only public fields { id, name, ready, isHost }', () => {
-    const db = new DatabaseManager(':memory:');
-    db.createRoom({ roomCode: 'PUB123', hostPlayerId: 'p-1', mapHash: OFFICIAL_MAP_HASH });
-    db.upsertPlayer({
-      id: 'p-1',
-      roomCode: 'PUB123',
-      name: 'Alice',
-      ready: true,
-      isHost: true,
-      resumeToken: 'secret-token-12345',
-    });
+  it('real HTTP test: verifyAdmin rejects query param admin_token and requires valid header token', async () => {
+    const { app, RUNTIME_ADMIN_TOKEN, roomManager } = await import('../dist/index.js');
+    const testServer = createServer(app);
+    await new Promise((resolve) => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
 
-    const rawPlayers = db.getRoomPlayers('PUB123');
-    const sanitized = rawPlayers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      ready: Boolean(p.ready),
-      isHost: Boolean(p.is_host ?? p.isHost),
-    }));
+    try {
+      // 1. Without any token -> 401
+      const resNoToken = await fetch(`${baseUrl}/api/metrics`);
+      assert.equal(resNoToken.status, 401);
+      const bodyNoToken = await resNoToken.json();
+      assert.ok(bodyNoToken.error);
 
-    assert.equal(sanitized.length, 1);
-    const keys = Object.keys(sanitized[0]).sort();
-    assert.deepEqual(keys, ['id', 'isHost', 'name', 'ready']);
-    assert.equal(sanitized[0].id, 'p-1');
-    assert.equal(sanitized[0].name, 'Alice');
-    assert.equal(sanitized[0].ready, true);
-    assert.equal(sanitized[0].isHost, true);
-    assert.equal(sanitized[0].resumeToken, undefined);
-    assert.equal(sanitized[0].resume_token, undefined);
+      // 2. With query param admin_token -> 401 (proves query param is strictly rejected by router)
+      const resQueryToken = await fetch(`${baseUrl}/api/metrics?admin_token=${RUNTIME_ADMIN_TOKEN}`);
+      assert.equal(resQueryToken.status, 401);
 
-    db.close();
+      // 3. With wrong token -> 401
+      const resWrongToken = await fetch(`${baseUrl}/api/metrics`, {
+        headers: { 'x-admin-token': 'wrong-secret' },
+      });
+      assert.equal(resWrongToken.status, 401);
+
+      // 4. With valid X-Admin-Token -> 200
+      const resXHeader = await fetch(`${baseUrl}/api/metrics`, {
+        headers: { 'x-admin-token': RUNTIME_ADMIN_TOKEN },
+      });
+      assert.equal(resXHeader.status, 200);
+      const metrics = await resXHeader.json();
+      assert.ok(metrics.rooms);
+
+      // 5. With valid Authorization: Bearer token -> 200
+      const resBearer = await fetch(`${baseUrl}/api/metrics`, {
+        headers: { 'authorization': `Bearer ${RUNTIME_ADMIN_TOKEN}` },
+      });
+      assert.equal(resBearer.status, 200);
+
+      // 6. Test /api/rules/tune input validation:
+      // 6a. Unknown key -> 400
+      const resUnknown = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ UNKNOWN_MAGIC_KEY: 999 }),
+      });
+      assert.equal(resUnknown.status, 400);
+
+      // 6b. Non-finite or string value -> 400
+      const resNaN = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ CAPTURE_MAX_DISTANCE_M: 'invalid-string' }),
+      });
+      assert.equal(resNaN.status, 400);
+
+      // 6c. Zero or negative speed -> 400
+      const resNegative = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_WALK_SPEED: -5 }),
+      });
+      assert.equal(resNegative.status, 400);
+
+      // 6d. Immutable protocol rule -> 400
+      const resImmutable = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ SIMULATION_TICK_RATE_HZ: 60 }),
+      });
+      assert.equal(resImmutable.status, 400);
+
+      // 6e. Inconsistent cross-field: crouch height >= standing height -> 400
+      const resCrouchHeight = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ CAPSULE_HEIGHT_CROUCHING: 2.5 }),
+      });
+      assert.equal(resCrouchHeight.status, 400);
+
+      // 6f. Inconsistent cross-field: walk speed >= sprint speed -> 400
+      const resWalkSpeed = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_WALK_SPEED: 8.0 }),
+      });
+      assert.equal(resWalkSpeed.status, 400);
+
+      // 6g. Inconsistent cross-field: police + robber != required -> 400
+      const resTeamCount = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ REQUIRED_PLAYERS: 10 }),
+      });
+      assert.equal(resTeamCount.status, 400);
+
+      // 6h. Valid tune -> 200
+      const resValid = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ CAPTURE_NETWORK_TOLERANCE_MARGIN_M: 0.6 }),
+      });
+      assert.equal(resValid.status, 200);
+      const tuneJson = await resValid.json();
+      assert.equal(tuneJson.rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_M, 0.6);
+
+      // 6i. Cross-field validation against active running rules (not just defaults):
+      // First, tune walk to 6.0 and sprint to 7.0 (valid: 6.0 < 7.0)
+      const resTuneWalk = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_WALK_SPEED: 6.0, POLICE_SPRINT_SPEED: 7.0 }),
+      });
+      assert.equal(resTuneWalk.status, 200);
+
+      // Now tune sprint alone to 5.5 -> must fail (400) because running walk speed is 6.0 (6.0 >= 5.5)
+      const resTuneSprintFail = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_SPRINT_SPEED: 5.5 }),
+      });
+      assert.equal(resTuneSprintFail.status, 400);
+
+      // Tune 3 police + 3 robber (sum 6) -> 200
+      const resTuneRatio = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_COUNT: 3, ROBBER_COUNT: 3 }),
+      });
+      assert.equal(resTuneRatio.status, 200);
+
+      // Tuning ROBBER_COUNT: 3 alone must succeed (200) because running POLICE_COUNT is 3 (3 + 3 = 6)
+      const resTuneRobberAlone = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ ROBBER_COUNT: 3 }),
+      });
+      assert.equal(resTuneRobberAlone.status, 200);
+
+      // 6j. Structural rule immutability in active rooms vs hot-applied balance rules
+      const activeRoom = new Room('ACTIVE', 'p-host-01', OFFICIAL_MAP_HASH, roomManager.getRules().rules);
+      roomManager.rooms.set('ACTIVE', activeRoom);
+      const initialVersion = activeRoom.rulesVersion;
+      assert.equal(activeRoom.rules.REQUIRED_PLAYERS, 6);
+      assert.equal(activeRoom.rules.POLICE_COUNT, 3);
+      assert.equal(activeRoom.rules.ROBBER_COUNT, 3);
+      assert.equal(activeRoom.rules.POLICE_WALK_SPEED, 6.0);
+      assert.equal(activeRoom.rules.CAPSULE_RADIUS, 0.35);
+
+      // Tune balance rule: POLICE_WALK_SPEED to 5.8
+      const resTuneBalance = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ POLICE_WALK_SPEED: 5.8 }),
+      });
+      assert.equal(resTuneBalance.status, 200);
+      assert.equal(activeRoom.rules.POLICE_WALK_SPEED, 5.8);
+      assert.ok(activeRoom.rulesVersion > initialVersion);
+      const versionAfterBalance = activeRoom.rulesVersion;
+
+      // Tune structural / non-whitelist rules: REQUIRED_PLAYERS to 4 and CAPSULE_RADIUS to 0.45
+      const resTuneStructural = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({
+          REQUIRED_PLAYERS: 4,
+          POLICE_COUNT: 2,
+          ROBBER_COUNT: 2,
+          CAPSULE_RADIUS: 0.45,
+        }),
+      });
+      assert.equal(resTuneStructural.status, 200);
+      const structuralJson = await resTuneStructural.json();
+      assert.equal(structuralJson.rules.REQUIRED_PLAYERS, 4);
+      assert.equal(structuralJson.rules.CAPSULE_RADIUS, 0.45);
+      // Active room must NOT have its structural rules or physical capsule dimensions overwritten!
+      assert.equal(activeRoom.rules.REQUIRED_PLAYERS, 6);
+      assert.equal(activeRoom.rules.POLICE_COUNT, 3);
+      assert.equal(activeRoom.rules.ROBBER_COUNT, 3);
+      assert.equal(activeRoom.rules.CAPSULE_RADIUS, 0.35);
+      // rulesVersion in active room must NOT increase because no whitelist key changed in that room!
+      assert.equal(activeRoom.rulesVersion, versionAfterBalance);
+
+      // 6k. Server snapshot broadcast frequency adapts dynamically to SNAPSHOT_BROADCAST_RATE_HZ
+      let snapshotCount = 0;
+      activeRoom.sendSnapshotToPlayer = () => { snapshotCount++; };
+      activeRoom.addPlayer('p-tester', 'Tester', { connected: true, emit: () => {}, join: () => {} }, 'token', true);
+      activeRoom.players.get('p-tester').role = 'POLICE';
+      activeRoom.phase = 'PLAYING';
+
+      // Default rate: 15Hz (broadcastIntervalTicks = round(30 / 15) = 2)
+      // Tick 1: 1 % 2 !== 0 -> no snapshot
+      activeRoom.step();
+      assert.equal(snapshotCount, 0);
+      // Tick 2: 2 % 2 === 0 -> snapshot broadcasted!
+      activeRoom.step();
+      assert.equal(snapshotCount, 1);
+
+      // Hot-apply 30Hz: broadcastIntervalTicks = round(30 / 30) = 1 (broadcast every tick)
+      activeRoom.updateRules({ ...activeRoom.rules, SNAPSHOT_BROADCAST_RATE_HZ: 30, SNAPSHOT_BROADCAST_INTERVAL_MS: 33.33 });
+      // Tick 3: 3 % 1 === 0 -> broadcasted!
+      activeRoom.step();
+      assert.equal(snapshotCount, 2);
+      // Tick 4: 4 % 1 === 0 -> broadcasted!
+      activeRoom.step();
+      assert.equal(snapshotCount, 3);
+
+      // Hot-apply 10Hz: broadcastIntervalTicks = round(30 / 10) = 3 (broadcast every 3 ticks)
+      activeRoom.updateRules({ ...activeRoom.rules, SNAPSHOT_BROADCAST_RATE_HZ: 10, SNAPSHOT_BROADCAST_INTERVAL_MS: 100 });
+      // Tick 5: 5 % 3 !== 0 -> no snapshot
+      activeRoom.step();
+      assert.equal(snapshotCount, 3);
+      // Tick 6: 6 % 3 === 0 -> broadcasted!
+      activeRoom.step();
+      assert.equal(snapshotCount, 4);
+
+      // Hot-apply 20Hz (non-divisible of 30): quantized to 2 ticks (66.67ms)
+      activeRoom.updateRules({ ...activeRoom.rules, SNAPSHOT_BROADCAST_RATE_HZ: 20 });
+      // Tick 7: 7 % 2 !== 0 -> no snapshot
+      activeRoom.step();
+      assert.equal(snapshotCount, 4);
+      // Tick 8: 8 % 2 === 0 -> broadcasted!
+      activeRoom.step();
+      assert.equal(snapshotCount, 5);
+
+      // Test HTTP tuning quantization for SNAPSHOT_BROADCAST_RATE_HZ = 20
+      const resTune20 = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ SNAPSHOT_BROADCAST_RATE_HZ: 20 }),
+      });
+      assert.equal(resTune20.status, 200);
+      const tune20Json = await resTune20.json();
+      assert.equal(tune20Json.rules.SNAPSHOT_BROADCAST_RATE_HZ, 15);
+      // Quantized to 2 ticks: (2 / 30) * 1000 = 66.666...ms
+      assert.ok(Math.abs(tune20Json.rules.SNAPSHOT_BROADCAST_INTERVAL_MS - (2 / 30) * 1000) < 0.01);
+
+      // Conflicting snapshot settings (30Hz and 200ms) -> must reject with 400
+      const resConflict = await fetch(`${baseUrl}/api/rules/tune`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-token': RUNTIME_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ SNAPSHOT_BROADCAST_RATE_HZ: 30, SNAPSHOT_BROADCAST_INTERVAL_MS: 200 }),
+      });
+      assert.equal(resConflict.status, 400);
+
+      // Clean up test room
+      activeRoom.stop();
+      roomManager.rooms.delete('ACTIVE');
+
+      // Reset rules back to default
+      const resReset = await fetch(`${baseUrl}/api/rules/reset`, {
+        method: 'POST',
+        headers: { 'x-admin-token': RUNTIME_ADMIN_TOKEN },
+      });
+      assert.equal(resReset.status, 200);
+      const resetJson = await resReset.json();
+      assert.equal(resetJson.rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_M, 0.4);
+    } finally {
+      // Ensure rules are always cleanly reset
+      await fetch(`${baseUrl}/api/rules/reset`, {
+        method: 'POST',
+        headers: { 'x-admin-token': RUNTIME_ADMIN_TOKEN },
+      }).catch(() => {});
+      await new Promise((resolve) => testServer.close(resolve));
+    }
   });
 
-  it('verifyAdmin rejects query param admin_token and accepts Bearer or X-Admin-Token with timingSafeCompare', async () => {
-    const crypto = await import('node:crypto');
-    function timingSafeCompare(a, b) {
-      if (typeof a !== 'string' || typeof b !== 'string') return false;
-      const hashA = crypto.createHash('sha256').update(a).digest();
-      const hashB = crypto.createHash('sha256').update(b).digest();
-      return crypto.timingSafeEqual(hashA, hashB);
-    }
+  it('real HTTP test: GET /api/rooms/:code strictly returns only public fields { id, name, ready, isHost }', async () => {
+    const { app, db, roomManager } = await import('../dist/index.js');
+    const testServer = createServer(app);
+    await new Promise((resolve) => testServer.listen(0, resolve));
+    const port = testServer.address().port;
+    const baseUrl = `http://127.0.0.1:${port}`;
 
-    const secret = 'super-secret-admin-token-123';
-    assert.equal(timingSafeCompare('super-secret-admin-token-123', secret), true);
-    assert.equal(timingSafeCompare('wrong-token', secret), false);
-    assert.equal(timingSafeCompare('', secret), false);
-    assert.equal(timingSafeCompare('super-secret-admin-token-12', secret), false);
+    const uniqueCode = 'PB' + Math.floor(1000 + Math.random() * 8999);
+    const playerId = 'p-' + uniqueCode;
+
+    db.createRoom({ roomCode: uniqueCode, hostPlayerId: playerId, mapHash: OFFICIAL_MAP_HASH });
+    db.upsertPlayer({
+      id: playerId,
+      roomCode: uniqueCode,
+      name: 'SuperSecretPlayer',
+      ready: true,
+      isHost: true,
+      resumeToken: 'do-not-leak-this-token',
+    });
+
+    try {
+      const res = await fetch(`${baseUrl}/api/rooms/${uniqueCode}`);
+      assert.equal(res.status, 200);
+      const json = await res.json();
+      assert.ok(json.room);
+      assert.equal(json.room.room_code, uniqueCode);
+      assert.ok(Array.isArray(json.players));
+      assert.equal(json.players.length, 1);
+
+      const player = json.players[0];
+      const keys = Object.keys(player).sort();
+      assert.deepEqual(keys, ['id', 'isHost', 'name', 'ready']);
+      assert.equal(player.id, playerId);
+      assert.equal(player.name, 'SuperSecretPlayer');
+      assert.equal(player.ready, true);
+      assert.equal(player.isHost, true);
+      assert.equal(player.resumeToken, undefined);
+      assert.equal(player.resume_token, undefined);
+    } finally {
+      db.removePlayer(playerId);
+      db.closeRoom(uniqueCode);
+      await new Promise((resolve) => testServer.close(resolve));
+      roomManager?.destroy();
+      db?.close();
+    }
   });
 });

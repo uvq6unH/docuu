@@ -57,6 +57,11 @@ export interface GameRules {
   SIMULATION_TIMESTEP_MS: number;
   SNAPSHOT_BROADCAST_RATE_HZ: number;
   SNAPSHOT_BROADCAST_INTERVAL_MS: number;
+  /**
+   * Client-side accumulator clamping limit (maxCatchUpTicks = 5, equivalent to 166ms)
+   * used by the client simulation loop when tab loses focus or frames hitch, preventing lag spirals.
+   * On the authoritative server, catch-up is governed strictly by real-time simulationStepBudget (max burst = 2).
+   */
   MAX_CATCHUP_STEPS: number;
   INPUT_STALE_TIMEOUT_MS: number;
   REQUEST_DEDUPLICATION_TTL_MS: number;
@@ -115,14 +120,15 @@ export interface GameRules {
 
   // Capture
   CAPTURE_MAX_DISTANCE_M: number;
-  CAPTURE_NETWORK_TOLERANCE_DISTANCE_M: number;
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_M: number;
   CAPTURE_MAX_HEIGHT_DELTA_M: number;
   CAPTURE_MAX_ANGLE_DEG: number;
-  CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG: number;
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG: number;
   CAPTURE_COOLDOWN_MS: number;
 
   // Jail & Rescue
   RESCUE_RADIUS_M: number;
+  RESCUE_NETWORK_TOLERANCE_MARGIN_M: number;
   RESCUE_REQUIRED_HOLD_MS: number;
   RESCUE_IMMUNITY_DURATION_MS: number;
   GUARD_ZONE_RADIUS_M: number;
@@ -198,14 +204,15 @@ export const DEFAULT_GAME_RULES: GameRules = {
 
   // Capture
   CAPTURE_MAX_DISTANCE_M: 1.6,
-  CAPTURE_NETWORK_TOLERANCE_DISTANCE_M: 2.0,
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_M: 0.4,
   CAPTURE_MAX_HEIGHT_DELTA_M: 1.0,
   CAPTURE_MAX_ANGLE_DEG: 55.0, // ±55 degrees horizontally
-  CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG: 65.0, // ±65 degrees network compensation
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG: 10.0,
   CAPTURE_COOLDOWN_MS: 1100,
 
   // Jail & Rescue
   RESCUE_RADIUS_M: 1.25,
+  RESCUE_NETWORK_TOLERANCE_MARGIN_M: 0.5,
   RESCUE_REQUIRED_HOLD_MS: 2000, // Exactly 2 seconds
   RESCUE_IMMUNITY_DURATION_MS: 3000, // Exactly 3 seconds
   GUARD_ZONE_RADIUS_M: 5.0,
@@ -218,11 +225,279 @@ export const DEFAULT_GAME_RULES: GameRules = {
 
 export const GAME_RULES: GameRules = DEFAULT_GAME_RULES;
 
+/**
+ * Whitelist of gameplay balance knobs that are safe to hot-apply to running rooms
+ * during live admin tuning. Structural and match-lifecycle keys (e.g. REQUIRED_PLAYERS,
+ * POLICE_COUNT, ROBBER_COUNT, PHASE_DURATION_*, MAP_*, MAX_GUARDS_ALLOWED) remain locked
+ * per room at creation time to prevent breaking active match invariants.
+ */
+export const HOT_APPLY_BALANCE_RULE_KEYS: ReadonlySet<keyof GameRules> = new Set<keyof GameRules>([
+  // Movement & Stamina: Police
+  'POLICE_WALK_SPEED',
+  'POLICE_SPRINT_SPEED',
+  'POLICE_CROUCH_SPEED',
+  'POLICE_STAMINA_MAX',
+  'POLICE_STAMINA_DRAIN_PER_SEC',
+  'POLICE_STAMINA_REGEN_PER_SEC',
+
+  // Movement & Stamina: Robber
+  'ROBBER_WALK_SPEED',
+  'ROBBER_SPRINT_SPEED',
+  'ROBBER_CROUCH_SPEED',
+  'ROBBER_STAMINA_MAX',
+  'ROBBER_STAMINA_DRAIN_PER_SEC',
+  'ROBBER_STAMINA_REGEN_PER_SEC',
+
+  // Shared Stamina Rules
+  'STAMINA_REGEN_DELAY_MS',
+  'STAMINA_SPRINT_RESTART_THRESHOLD',
+
+  // Capture
+  'CAPTURE_MAX_DISTANCE_M',
+  'CAPTURE_NETWORK_TOLERANCE_MARGIN_M',
+  'CAPTURE_MAX_HEIGHT_DELTA_M',
+  'CAPTURE_MAX_ANGLE_DEG',
+  'CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG',
+  'CAPTURE_COOLDOWN_MS',
+
+  // Jail & Rescue
+  'RESCUE_RADIUS_M',
+  'RESCUE_NETWORK_TOLERANCE_MARGIN_M',
+  'RESCUE_REQUIRED_HOLD_MS',
+  'RESCUE_IMMUNITY_DURATION_MS',
+  'GUARD_ZONE_RADIUS_M',
+
+  // Stealth / Hide
+  'HIDE_CROUCH_TRIGGER_MS',
+  'HIDDEN_VISIBILITY_PROXIMITY_M',
+
+  // Physics Forces & Jumping (dynamic movement forces, safe to hot-apply)
+  'GRAVITY',
+  'JUMP_VELOCITY',
+  'JUMPABLE_FENCE_HEIGHT',
+
+  // Network / Snapshot
+  'SNAPSHOT_BROADCAST_RATE_HZ',
+  'SNAPSHOT_BROADCAST_INTERVAL_MS',
+  'INPUT_STALE_TIMEOUT_MS',
+]);
+
 export function createGameRules(overrides?: Partial<GameRules>): GameRules {
   return {
     ...DEFAULT_GAME_RULES,
     ...overrides,
   };
+}
+
+const IMMUTABLE_PROTOCOL_RULES = new Set([
+  'SIMULATION_TICK_RATE_HZ',
+  'SIMULATION_TIMESTEP_SEC',
+  'SIMULATION_TIMESTEP_MS',
+]);
+
+const RULE_BOUNDS: Record<string, { min: number; max: number; integer?: boolean }> = {
+  // Broadcast
+  SNAPSHOT_BROADCAST_RATE_HZ: { min: 1, max: 30, integer: true },
+  SNAPSHOT_BROADCAST_INTERVAL_MS: { min: 33, max: 1000 },
+  MAX_CATCHUP_STEPS: { min: 1, max: 10, integer: true },
+  INPUT_STALE_TIMEOUT_MS: { min: 200, max: 5_000 },
+  REQUEST_DEDUPLICATION_TTL_MS: { min: 10_000, max: 300_000 },
+  IDLE_LOBBY_TIMEOUT_MS: { min: 60_000, max: 3_600_000 },
+  DISCONNECT_GRACE_TIMEOUT_MS: { min: 5_000, max: 120_000 },
+
+  // Phases
+  PHASE_DURATION_JAIL_SELECTION_MS: { min: 5_000, max: 120_000 },
+  PHASE_DURATION_HEAD_START_MS: { min: 0, max: 60_000 },
+  PHASE_DURATION_PLAYING_MS: { min: 30_000, max: 1_800_000 },
+  PHASE_DURATION_RESULT_MS: { min: 5_000, max: 60_000 },
+
+  // Team
+  REQUIRED_PLAYERS: { min: 2, max: 32, integer: true },
+  POLICE_COUNT: { min: 1, max: 16, integer: true },
+  ROBBER_COUNT: { min: 1, max: 16, integer: true },
+
+  // Map Bounds
+  MAP_SIZE: { min: 20.0, max: 500.0 },
+  MAP_MIN_COORD: { min: -500.0, max: 0.0 },
+  MAP_MAX_COORD: { min: 0.0, max: 500.0 },
+  MAP_GROUND_Y: { min: -100.0, max: 100.0 },
+
+  // Physical Capsule
+  CAPSULE_RADIUS: { min: 0.1, max: 2.0 },
+  CAPSULE_HEIGHT_STANDING: { min: 0.8, max: 3.0 },
+  CAPSULE_HEIGHT_CROUCHING: { min: 0.4, max: 2.0 },
+  CAMERA_HEIGHT_STANDING: { min: 0.6, max: 3.0 },
+  CAMERA_HEIGHT_CROUCHING: { min: 0.3, max: 2.0 },
+  COLLISION_MAX_SUBSTEP_M: { min: 0.05, max: 1.0 },
+
+  // Physics
+  GRAVITY: { min: 1.0, max: 50.0 },
+  JUMP_VELOCITY: { min: 1.0, max: 20.0 },
+  JUMPABLE_FENCE_HEIGHT: { min: 0.1, max: 2.0 },
+
+  // Movement & Stamina: Police
+  POLICE_WALK_SPEED: { min: 0.5, max: 30.0 },
+  POLICE_SPRINT_SPEED: { min: 0.5, max: 30.0 },
+  POLICE_CROUCH_SPEED: { min: 0.5, max: 30.0 },
+  POLICE_STAMINA_MAX: { min: 10.0, max: 500.0 },
+  POLICE_STAMINA_DRAIN_PER_SEC: { min: 1.0, max: 100.0 },
+  POLICE_STAMINA_REGEN_PER_SEC: { min: 1.0, max: 100.0 },
+
+  // Movement & Stamina: Robber
+  ROBBER_WALK_SPEED: { min: 0.5, max: 30.0 },
+  ROBBER_SPRINT_SPEED: { min: 0.5, max: 30.0 },
+  ROBBER_CROUCH_SPEED: { min: 0.5, max: 30.0 },
+  ROBBER_STAMINA_MAX: { min: 10.0, max: 500.0 },
+  ROBBER_STAMINA_DRAIN_PER_SEC: { min: 1.0, max: 100.0 },
+  ROBBER_STAMINA_REGEN_PER_SEC: { min: 1.0, max: 100.0 },
+
+  // Shared Stamina
+  STAMINA_REGEN_DELAY_MS: { min: 100, max: 10_000 },
+  STAMINA_SPRINT_RESTART_THRESHOLD: { min: 5.0, max: 100.0 },
+
+  // Capture
+  CAPTURE_MAX_DISTANCE_M: { min: 0.5, max: 10.0 },
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_M: { min: 0.0, max: 5.0 },
+  CAPTURE_MAX_HEIGHT_DELTA_M: { min: 0.2, max: 5.0 },
+  CAPTURE_MAX_ANGLE_DEG: { min: 10.0, max: 180.0 },
+  CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG: { min: 0.0, max: 90.0 },
+  CAPTURE_COOLDOWN_MS: { min: 200, max: 10_000 },
+
+  // Jail & Rescue
+  RESCUE_RADIUS_M: { min: 0.5, max: 10.0 },
+  RESCUE_NETWORK_TOLERANCE_MARGIN_M: { min: 0.0, max: 5.0 },
+  RESCUE_REQUIRED_HOLD_MS: { min: 500, max: 10_000 },
+  RESCUE_IMMUNITY_DURATION_MS: { min: 500, max: 10_000 },
+  GUARD_ZONE_RADIUS_M: { min: 1.0, max: 20.0 },
+  MAX_GUARDS_ALLOWED: { min: 1, max: 5, integer: true },
+
+  // Stealth
+  HIDE_CROUCH_TRIGGER_MS: { min: 50, max: 2_000 },
+  HIDDEN_VISIBILITY_PROXIMITY_M: { min: 0.5, max: 10.0 },
+};
+
+export function validateGameRulesOverrides(
+  overrides: unknown,
+  baseRules: GameRules = DEFAULT_GAME_RULES
+): {
+  valid: boolean;
+  error?: string;
+  cleanOverrides?: Partial<GameRules>;
+} {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
+    return { valid: false, error: 'Rule overrides must be a non-null object' };
+  }
+
+  const entries = Object.entries(overrides as Record<string, unknown>);
+  if (entries.length === 0) {
+    return { valid: false, error: 'Empty rule overrides provided' };
+  }
+
+  const clean: Partial<GameRules> = {};
+
+  for (const [key, val] of entries) {
+    if (IMMUTABLE_PROTOCOL_RULES.has(key)) {
+      return { valid: false, error: `Rule "${key}" is fixed by protocol and cannot be tuned at runtime` };
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_GAME_RULES, key)) {
+      return { valid: false, error: `Invalid or unknown rule key: "${key}"` };
+    }
+
+    if (typeof val !== 'number' || !Number.isFinite(val)) {
+      return { valid: false, error: `Rule "${key}" must be a finite number` };
+    }
+
+    const bounds = RULE_BOUNDS[key];
+    if (bounds) {
+      if (bounds.integer && !Number.isInteger(val)) {
+        return { valid: false, error: `Rule "${key}" must be an integer` };
+      }
+      if (val < bounds.min || val > bounds.max) {
+        return { valid: false, error: `Rule "${key}" must be between ${bounds.min} and ${bounds.max}` };
+      }
+    } else {
+      if (val <= 0) {
+        return { valid: false, error: `Rule "${key}" must be greater than 0` };
+      }
+    }
+
+    (clean as any)[key] = val;
+  }
+
+  // Cross-field consistency checks evaluated against the active baseRules:
+  const standingH = clean.CAPSULE_HEIGHT_STANDING ?? baseRules.CAPSULE_HEIGHT_STANDING;
+  const crouchH = clean.CAPSULE_HEIGHT_CROUCHING ?? baseRules.CAPSULE_HEIGHT_CROUCHING;
+  if (crouchH >= standingH) {
+    return { valid: false, error: `CAPSULE_HEIGHT_CROUCHING (${crouchH}) must be strictly less than CAPSULE_HEIGHT_STANDING (${standingH})` };
+  }
+
+  const standingEye = clean.CAMERA_HEIGHT_STANDING ?? baseRules.CAMERA_HEIGHT_STANDING;
+  const crouchEye = clean.CAMERA_HEIGHT_CROUCHING ?? baseRules.CAMERA_HEIGHT_CROUCHING;
+  if (crouchEye >= standingEye) {
+    return { valid: false, error: `CAMERA_HEIGHT_CROUCHING (${crouchEye}) must be strictly less than CAMERA_HEIGHT_STANDING (${standingEye})` };
+  }
+
+  const polWalk = clean.POLICE_WALK_SPEED ?? baseRules.POLICE_WALK_SPEED;
+  const polSprint = clean.POLICE_SPRINT_SPEED ?? baseRules.POLICE_SPRINT_SPEED;
+  if (polWalk >= polSprint) {
+    return { valid: false, error: `POLICE_WALK_SPEED (${polWalk}) must be strictly less than POLICE_SPRINT_SPEED (${polSprint})` };
+  }
+
+  const robWalk = clean.ROBBER_WALK_SPEED ?? baseRules.ROBBER_WALK_SPEED;
+  const robSprint = clean.ROBBER_SPRINT_SPEED ?? baseRules.ROBBER_SPRINT_SPEED;
+  if (robWalk >= robSprint) {
+    return { valid: false, error: `ROBBER_WALK_SPEED (${robWalk}) must be strictly less than ROBBER_SPRINT_SPEED (${robSprint})` };
+  }
+
+  const reqPlayers = clean.REQUIRED_PLAYERS ?? baseRules.REQUIRED_PLAYERS;
+  const polCount = clean.POLICE_COUNT ?? baseRules.POLICE_COUNT;
+  const robCount = clean.ROBBER_COUNT ?? baseRules.ROBBER_COUNT;
+  if (polCount + robCount !== reqPlayers) {
+    return { valid: false, error: `POLICE_COUNT (${polCount}) + ROBBER_COUNT (${robCount}) must equal REQUIRED_PLAYERS (${reqPlayers})` };
+  }
+
+  const minCoord = clean.MAP_MIN_COORD ?? baseRules.MAP_MIN_COORD;
+  const maxCoord = clean.MAP_MAX_COORD ?? baseRules.MAP_MAX_COORD;
+  if (minCoord >= maxCoord) {
+    return { valid: false, error: `MAP_MIN_COORD (${minCoord}) must be strictly less than MAP_MAX_COORD (${maxCoord})` };
+  }
+
+  if (clean.MAP_SIZE !== undefined) {
+    if (Math.abs(clean.MAP_SIZE - (maxCoord - minCoord)) > 0.001) {
+      return { valid: false, error: `MAP_SIZE (${clean.MAP_SIZE}) must equal MAP_MAX_COORD - MAP_MIN_COORD (${maxCoord - minCoord})` };
+    }
+  } else if (clean.MAP_MIN_COORD !== undefined || clean.MAP_MAX_COORD !== undefined) {
+    clean.MAP_SIZE = maxCoord - minCoord;
+  }
+
+  // Sync SNAPSHOT_BROADCAST_INTERVAL_MS and SNAPSHOT_BROADCAST_RATE_HZ if either was tuned,
+  // taking into account discrete simulation tick quantization (SIMULATION_TICK_RATE_HZ = 30Hz)
+  const simTickHz = (clean.SIMULATION_TICK_RATE_HZ ?? baseRules.SIMULATION_TICK_RATE_HZ) || 30;
+  if (clean.SNAPSHOT_BROADCAST_RATE_HZ !== undefined && clean.SNAPSHOT_BROADCAST_INTERVAL_MS !== undefined) {
+    const ticksFromRate = Math.max(1, Math.round(simTickHz / clean.SNAPSHOT_BROADCAST_RATE_HZ));
+    const rawHzFromInterval = Math.max(1, Math.round(1000 / clean.SNAPSHOT_BROADCAST_INTERVAL_MS));
+    const ticksFromInterval = Math.max(1, Math.round(simTickHz / rawHzFromInterval));
+    if (ticksFromRate !== ticksFromInterval) {
+      return {
+        valid: false,
+        error: `Conflicting snapshot broadcast settings: SNAPSHOT_BROADCAST_RATE_HZ (${clean.SNAPSHOT_BROADCAST_RATE_HZ}Hz -> ${Math.round(simTickHz / ticksFromRate)}Hz effective) conflicts with SNAPSHOT_BROADCAST_INTERVAL_MS (${clean.SNAPSHOT_BROADCAST_INTERVAL_MS}ms -> ${Math.round(simTickHz / ticksFromInterval)}Hz effective)`,
+      };
+    }
+    clean.SNAPSHOT_BROADCAST_RATE_HZ = Math.round(simTickHz / ticksFromRate);
+    clean.SNAPSHOT_BROADCAST_INTERVAL_MS = (ticksFromRate / simTickHz) * 1000;
+  } else if (clean.SNAPSHOT_BROADCAST_INTERVAL_MS !== undefined && clean.SNAPSHOT_BROADCAST_RATE_HZ === undefined) {
+    const rawHz = Math.max(1, Math.round(1000 / clean.SNAPSHOT_BROADCAST_INTERVAL_MS));
+    const ticks = Math.max(1, Math.round(simTickHz / rawHz));
+    clean.SNAPSHOT_BROADCAST_RATE_HZ = Math.round(simTickHz / ticks);
+    clean.SNAPSHOT_BROADCAST_INTERVAL_MS = (ticks / simTickHz) * 1000;
+  } else if (clean.SNAPSHOT_BROADCAST_RATE_HZ !== undefined && clean.SNAPSHOT_BROADCAST_INTERVAL_MS === undefined) {
+    const ticks = Math.max(1, Math.round(simTickHz / clean.SNAPSHOT_BROADCAST_RATE_HZ));
+    clean.SNAPSHOT_BROADCAST_RATE_HZ = Math.round(simTickHz / ticks);
+    clean.SNAPSHOT_BROADCAST_INTERVAL_MS = (ticks / simTickHz) * 1000;
+  }
+
+  return { valid: true, cleanOverrides: clean };
 }
 
 export function movementRulesFromGameRules(gameRules: GameRules): MovementRules {

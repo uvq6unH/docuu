@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vitest/config';
+import { loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'DEV_');

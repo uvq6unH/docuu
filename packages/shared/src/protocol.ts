@@ -1,3 +1,5 @@
+import type { GameRules } from './rules.ts';
+
 export const PROTOCOL_VERSION = 1;
 
 export type Vec3 = [x: number, y: number, z: number];
@@ -37,6 +39,8 @@ export interface SelfPlayerView extends PlayerView {
   ackCaptureId: number;
   immuneRemainingMs: number;
   rescueProgressMs: number;
+  exhausted?: boolean;
+  regenDelayTicks?: number;
 }
 
 export interface PlayerStats {
@@ -130,6 +134,8 @@ export interface RoomState {
   mapHash: string;
   protocolVersion: number;
   captainId?: string;
+  rules?: GameRules;
+  rulesVersion?: number;
 }
 
 export type ErrorCode =

@@ -2,10 +2,11 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Server as SocketIOServer } from 'socket.io';
-import { PROTOCOL_VERSION } from '@folk-tag/shared';
+import { PROTOCOL_VERSION, validateGameRulesOverrides } from '@folk-tag/shared';
 import { setupMockServer } from './mock/mockServer.js';
 import { RoomManager } from './rooms/roomManager.js';
 import { initDatabase } from './db/index.js';
@@ -20,10 +21,18 @@ const app = express();
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 
+const isProduction = process.env.NODE_ENV === 'production';
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-const RUNTIME_ADMIN_TOKEN = ADMIN_TOKEN || crypto.randomBytes(24).toString('hex');
-if (!ADMIN_TOKEN && process.env.NODE_ENV !== 'test') {
-  console.log(`[Security] No ADMIN_TOKEN set in environment. Generated runtime admin token: ${RUNTIME_ADMIN_TOKEN}`);
+let RUNTIME_ADMIN_TOKEN = ADMIN_TOKEN;
+
+if (!ADMIN_TOKEN) {
+  RUNTIME_ADMIN_TOKEN = crypto.randomBytes(24).toString('hex');
+  if (isProduction) {
+    // In production, keep internal random token but do not leak to stdout logs
+    console.warn('[Security] WARN: ADMIN_TOKEN is not set in production. Admin endpoints will reject unauthenticated requests.');
+  } else if (process.env.NODE_ENV !== 'test') {
+    console.log(`[Security] No ADMIN_TOKEN set in development. Generated runtime admin token: ${RUNTIME_ADMIN_TOKEN}`);
+  }
 }
 
 function timingSafeCompare(a: string, b: string): boolean {
@@ -88,11 +97,13 @@ app.get('/api/rules', (_req: Request, res: Response) => {
 
 app.post('/api/rules/tune', verifyAdmin, (req: Request, res: Response) => {
   const overrides = req.body?.rules || req.body;
-  if (!overrides || typeof overrides !== 'object') {
-    res.status(400).json({ error: 'Invalid rules object provided' });
+  const currentRules = roomManager.getRules().rules;
+  const validation = validateGameRulesOverrides(overrides, currentRules);
+  if (!validation.valid || !validation.cleanOverrides) {
+    res.status(400).json({ ok: false, error: validation.error || 'Invalid rules object provided' });
     return;
   }
-  const updatedRules = roomManager.tuneRules(overrides);
+  const updatedRules = roomManager.tuneRules(validation.cleanOverrides);
   res.status(200).json({ ok: true, rules: updatedRules });
 });
 
@@ -158,11 +169,13 @@ const io = new SocketIOServer(server, {
 });
 
 // 1. Initialize Mock snapshot server on dedicated /mock namespace
-const isMockEnabled =
-  process.env.NODE_ENV !== 'production' &&
-  (process.env.ENABLE_MOCK_SERVER === 'true' || process.env.ENABLE_MOCK === 'true' || process.argv.includes('--mock'));
+// In production: strictly disabled unless explicitly enabled via flag / env
+// In development / test: enabled by default unless explicitly disabled with ENABLE_MOCK_SERVER=false
+const isMockEnabled = isProduction
+  ? (process.env.ENABLE_MOCK_SERVER === 'true' || process.env.ENABLE_MOCK === 'true' || process.argv.includes('--mock'))
+  : (process.env.ENABLE_MOCK_SERVER !== 'false' && process.env.ENABLE_MOCK !== 'false');
 const isMockOnly = process.argv.includes('--mock') || process.env.MOCK_SERVER === 'true';
-const mockServer = isMockEnabled ? setupMockServer(isMockOnly ? io : (io.of('/mock') as any)) : null;
+const mockServer = isMockEnabled && process.env.NODE_ENV !== 'test' ? setupMockServer(isMockOnly ? io : (io.of('/mock') as any)) : null;
 
 // 2. Initialize Real Room Manager on default root namespace (/) for real multiplayer lobby & authoritative simulation
 const roomManager = new RoomManager(io, db);
@@ -185,15 +198,21 @@ if (distPath) {
   console.log(`[Server] Serving frontend static assets from: ${distPath}`);
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Server] Server listening on http://0.0.0.0:${PORT} (all LAN interfaces)`);
-  console.log(`[Server] Health check available at http://localhost:${PORT}/healthz`);
-  console.log(`[Server] Metrics available at http://localhost:${PORT}/api/metrics`);
-  console.log(`[Server] CORS configured for origin: ${CLIENT_ORIGIN}`);
-  if (process.send) {
-    process.send('ready');
-  }
-});
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[Server] Server listening on http://0.0.0.0:${PORT} (all LAN interfaces)`);
+    console.log(`[Server] Health check available at http://localhost:${PORT}/healthz`);
+    console.log(`[Server] Metrics available at http://localhost:${PORT}/api/metrics`);
+    console.log(`[Server] CORS configured for origin: ${CLIENT_ORIGIN}`);
+    if (process.send) {
+      process.send('ready');
+    }
+  });
+} else {
+  console.warn('[Server] WARN: Skipping server.listen() because NODE_ENV=test. If running server directly, ensure NODE_ENV is unset or set to development/production.');
+}
+
+export { app, server, verifyAdmin, timingSafeCompare, db, roomManager, RUNTIME_ADMIN_TOKEN };
 
 function gracefulShutdown(signal: string) {
   console.log(`[Server] ${signal} received. Shutting down gracefully...`);

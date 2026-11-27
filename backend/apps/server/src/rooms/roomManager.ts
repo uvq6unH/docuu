@@ -7,6 +7,7 @@ import {
   GameRules,
   createGameRules,
   RULES_VERSION,
+  validateGameRulesOverrides,
   CLIENT_EVENTS,
   SERVER_EVENTS,
   AckResponse,
@@ -173,7 +174,7 @@ export class RoomManager {
             const playerId = `p-${randomBytes(4).toString('hex')}`;
             const resumeToken = randomBytes(16).toString('hex');
 
-            const room = new Room(roomCode, playerId, OFFICIAL_MAP_HASH, this.activeRules);
+            const room = new Room(roomCode, playerId, OFFICIAL_MAP_HASH, this.activeRules, this.rulesVersion);
             if (this.db) {
               room.setDatabase(this.db);
               this.db.createRoom({
@@ -246,7 +247,7 @@ export class RoomManager {
               return { ok: false, code: 'MATCH_IN_PROGRESS', message: 'Match already in progress' };
             }
 
-            if (room.players.size >= GAME_RULES.REQUIRED_PLAYERS) {
+            if (room.players.size >= room.rules.REQUIRED_PLAYERS) {
               return { ok: false, code: 'ROOM_FULL', message: 'Room already reached 6 players' };
             }
 
@@ -593,7 +594,7 @@ export class RoomManager {
               return { ok: false, code: 'INVALID_PHASE', message: 'Bots can only be added in lobby' };
             }
 
-            if (room.players.size >= GAME_RULES.REQUIRED_PLAYERS) {
+            if (room.players.size >= room.rules.REQUIRED_PLAYERS) {
               return { ok: false, code: 'ROOM_FULL', message: 'Room is full (max 6 players)' };
             }
 
@@ -829,14 +830,6 @@ export class RoomManager {
           const player = room.players.get(binding.playerId);
           if (!player || player.role !== 'ROBBER' || player.state === 'JAILED') return;
 
-          // Pebble Cooldown: 6 seconds per robber to prevent spamming AI distraction
-          const now = Date.now();
-          const PEBBLE_COOLDOWN_MS = 6000;
-          if (player.lastPebbleTimestamp && now - player.lastPebbleTimestamp < PEBBLE_COOLDOWN_MS) {
-            return;
-          }
-          player.lastPebbleTimestamp = now;
-
           if (!Array.isArray(payload?.landingPos) || payload.landingPos.length < 3) return;
 
           const lx = Number(payload.landingPos[0]);
@@ -848,6 +841,15 @@ export class RoomManager {
           const playerPos = player.movementState.pos;
           const throwDist = Math.hypot(lx - playerPos[0], lz - playerPos[2]);
           if (throwDist > 16.0) return;
+
+          // Pebble Cooldown: 6 seconds per robber to prevent spamming AI distraction
+          // Verified ONLY after valid payload and range check so invalid throws do not burn cooldown
+          const now = Date.now();
+          const PEBBLE_COOLDOWN_MS = 6000;
+          if (player.lastPebbleTimestamp && now - player.lastPebbleTimestamp < PEBBLE_COOLDOWN_MS) {
+            return;
+          }
+          player.lastPebbleTimestamp = now;
 
           const landingPos: Vec3 = [lx, Math.max(0, ly), lz];
           const serverFromPos: Vec3 = [...playerPos];
@@ -937,7 +939,7 @@ export class RoomManager {
         roomCode: r.roomCode,
         hostName: host ? host.name : 'Chủ phòng',
         playerCount: r.players.size,
-        maxPlayers: GAME_RULES.REQUIRED_PLAYERS,
+        maxPlayers: r.rules.REQUIRED_PLAYERS,
         phase: r.phase,
       };
     });
@@ -985,8 +987,10 @@ export class RoomManager {
     };
   }
 
+  private rulesVersion: number = RULES_VERSION;
+
   public getRules(): { rulesVersion: number; rules: GameRules } {
-    return { rulesVersion: RULES_VERSION, rules: this.activeRules };
+    return { rulesVersion: this.rulesVersion, rules: this.activeRules };
   }
 
   public setRules(rules: GameRules): void {
@@ -994,12 +998,30 @@ export class RoomManager {
   }
 
   public tuneRules(overrides: Partial<GameRules>): GameRules {
-    this.activeRules = createGameRules({ ...this.activeRules, ...overrides });
+    const validation = validateGameRulesOverrides(overrides, this.activeRules);
+    if (!validation.valid || !validation.cleanOverrides) {
+      throw new Error(validation.error || 'Invalid rule overrides provided');
+    }
+    this.activeRules = createGameRules({ ...this.activeRules, ...validation.cleanOverrides });
+    this.rulesVersion++;
+    for (const room of this.rooms.values()) {
+      const changed = room.updateRules(this.activeRules, this.rulesVersion);
+      if (changed) {
+        this.broadcastRoomState(room);
+      }
+    }
     return this.activeRules;
   }
 
   public resetRules(): GameRules {
     this.activeRules = GAME_RULES;
+    this.rulesVersion++;
+    for (const room of this.rooms.values()) {
+      const changed = room.updateRules(this.activeRules, this.rulesVersion);
+      if (changed) {
+        this.broadcastRoomState(room);
+      }
+    }
     return this.activeRules;
   }
 

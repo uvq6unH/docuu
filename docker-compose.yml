@@ -9,6 +9,7 @@ services:
       - PORT=3001
       - CLIENT_ORIGIN=*
       - NODE_ENV=production
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     volumes:
       - folk-tag-data:/app/backend/apps/server/data
     networks:

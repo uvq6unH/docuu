@@ -185,5 +185,7 @@ export function toSelfPlayerView(
     ackCaptureId,
     immuneRemainingMs: 0,
     rescueProgressMs: 0,
+    exhausted: bot.stamina <= 0,
+    regenDelayTicks: 0,
   };
 }

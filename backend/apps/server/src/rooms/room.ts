@@ -2,6 +2,8 @@ import { Socket } from 'socket.io';
 import {
   GAME_RULES,
   GameRules,
+  HOT_APPLY_BALANCE_RULE_KEYS,
+  RULES_VERSION,
   MovementRules,
   movementRulesFromGameRules,
   Snapshot,
@@ -101,6 +103,7 @@ export class Room {
   public mapHash: string;
   public readonly protocolVersion: number = 1;
   public rules: GameRules;
+  public rulesVersion: number = RULES_VERSION;
   private movementRules: MovementRules;
   private matchStartedAt: number = 0;
   public players: Map<string, PlayerSession> = new Map();
@@ -122,15 +125,34 @@ export class Room {
     roomCode: string,
     hostPlayerId: string,
     mapHash: string,
-    rules: GameRules = GAME_RULES
+    rules: GameRules = GAME_RULES,
+    rulesVersion = RULES_VERSION
   ) {
     this.roomCode = roomCode;
     this.hostId = hostPlayerId;
     this.mapHash = mapHash;
     this.rules = rules;
+    this.rulesVersion = rulesVersion;
     this.movementRules = movementRulesFromGameRules(rules);
     this.matchId = `match-${roomCode}-${Date.now()}`;
     this.remainingMs = rules.PHASE_DURATION_PLAYING_MS;
+  }
+
+  public updateRules(rules: GameRules, version = this.rulesVersion + 1): boolean {
+    let changed = false;
+    const updated = { ...this.rules };
+    for (const key of HOT_APPLY_BALANCE_RULE_KEYS) {
+      if (key in rules && (updated as any)[key] !== rules[key]) {
+        (updated as any)[key] = rules[key];
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.rules = updated;
+      this.rulesVersion = version;
+      this.movementRules = movementRulesFromGameRules(this.rules);
+    }
+    return changed;
   }
 
   public setDatabase(db: DatabaseManager): void {
@@ -733,6 +755,8 @@ export class Room {
       roster,
       mapHash: this.mapHash,
       protocolVersion: this.protocolVersion,
+      rules: this.rules,
+      rulesVersion: this.rulesVersion,
     };
     if (this.captainId) {
       roomState.captainId = this.captainId;
@@ -1116,9 +1140,9 @@ export class Room {
           }
 
           // Dynamic Network Capture Tolerance:
-          // Extends base CAPTURE_MAX_DISTANCE_M and CAPTURE_MAX_ANGLE_DEG with tolerance margin (+0.4m, +10.0 deg default)
-          const distToleranceMargin = Math.max(0, (this.rules.CAPTURE_NETWORK_TOLERANCE_DISTANCE_M ?? 2.0) - 1.6);
-          const angleToleranceMargin = Math.max(0, (this.rules.CAPTURE_NETWORK_TOLERANCE_ANGLE_DEG ?? 65.0) - 55.0);
+          // Extends base CAPTURE_MAX_DISTANCE_M and CAPTURE_MAX_ANGLE_DEG with explicit tolerance margin (+0.4m, +10.0 deg default)
+          const distToleranceMargin = this.rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_M ?? 0.4;
+          const angleToleranceMargin = this.rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG ?? 10.0;
 
           const networkCaptureRules = {
             ...this.rules,
@@ -1243,7 +1267,7 @@ export class Room {
             state: robber.state,
           };
 
-          const rescueToleranceMargin = 0.25;
+          const rescueToleranceMargin = this.rules.RESCUE_NETWORK_TOLERANCE_MARGIN_M ?? 0.5;
           const networkRescueRules = {
             ...this.rules,
             RESCUE_RADIUS_M: this.rules.RESCUE_RADIUS_M + rescueToleranceMargin,
@@ -1340,8 +1364,12 @@ export class Room {
       }
     }
 
-    // 6. Broadcast snapshot every other tick (15Hz)
-    if (this.tick % 2 === 0) {
+    // 6. Broadcast snapshot based on configured snapshot broadcast frequency
+    const broadcastIntervalTicks = Math.max(
+      1,
+      Math.round(this.rules.SIMULATION_TICK_RATE_HZ / (this.rules.SNAPSHOT_BROADCAST_RATE_HZ || 15))
+    );
+    if (this.tick % broadcastIntervalTicks === 0) {
       this.broadcastSnapshots();
     }
 
@@ -1416,6 +1444,8 @@ export class Room {
       ackCaptureId: session.lastCaptureId,
       immuneRemainingMs: session.immuneRemainingMs,
       rescueProgressMs: session.rescueProgressMs,
+      exhausted: session.movementState.exhausted,
+      regenDelayTicks: session.movementState.regenDelayTicks,
     };
     if (session.cosmetic) {
       selfView.cosmetic = session.cosmetic;

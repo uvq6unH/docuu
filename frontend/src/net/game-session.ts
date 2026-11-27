@@ -19,6 +19,13 @@ import {
 import type { InputState } from '../input/state';
 import { readMapDigest } from './room-details';
 import { CharacterAvatar, createCharacterModel } from '../player/character-avatar';
+import {
+  DEFAULT_GAME_RULES,
+  type GameRules,
+  type MovementRules,
+  movementRules,
+  movementRulesFromGameRules,
+} from '../../../packages/shared/src/rules';
 
 export interface GameSessionCallbacks {
   onStatus: (message: string, isError?: boolean) => void;
@@ -53,6 +60,7 @@ export interface RemotePlayerEntity {
   targetScaleY: number;
   state?: string | undefined;
   crouch: boolean;
+  visible: boolean;
 }
 
 export class GameSession {
@@ -71,6 +79,16 @@ export class GameSession {
   public currentRoom: RoomState | null = null;
   public playerId: string | null = null;
   public isMock = false;
+  public activeRules: GameRules = DEFAULT_GAME_RULES;
+  public activeMovementRules: MovementRules = movementRules;
+
+  public getRules(): GameRules {
+    return this.activeRules;
+  }
+
+  public getMovementRules(): MovementRules {
+    return this.activeMovementRules;
+  }
 
   constructor(scene: Scene, private callbacks: GameSessionCallbacks) {
     this.group = new Group();
@@ -123,6 +141,19 @@ export class GameSession {
     this.socket.on(SERVER_EVENTS.ROOM_STATE, (room: RoomState) => {
       if (!room || room.protocolVersion !== PROTOCOL_VERSION || (room.roomCode === 'MOCK01') !== this.isMock) return;
       if (this.currentRoom?.roomCode !== room.roomCode || room.phase === 'LOBBY') this.resetMarkers();
+
+      const prevRulesVersion = this.currentRoom?.rulesVersion ?? 0;
+      const newRulesVersion = room.rulesVersion ?? 1;
+
+      if (room.rules && (newRulesVersion !== prevRulesVersion || !this.currentRoom?.rules)) {
+        this.activeRules = room.rules;
+        this.activeMovementRules = movementRulesFromGameRules(room.rules);
+        const newInterpDuration = this.getSnapshotInterpDuration();
+        for (const entity of this.entities.values()) {
+          entity.interpDuration = newInterpDuration;
+        }
+      }
+
       this.currentRoom = room;
       this.roomReady = true;
       this.callbacks.onRoom(room);
@@ -158,7 +189,7 @@ export class GameSession {
           (!p.connected && !p.id.startsWith('bot-')) ||
           !['POLICE', 'ROBBER'].includes(p.role) ||
           !p.pos?.every(Number.isFinite) ||
-          (p.role !== snapshot.self.role && p.state === 'HIDDEN' && Math.hypot(p.pos[0] - snapshot.self.pos[0], p.pos[2] - snapshot.self.pos[2]) > 2)
+          (p.role !== snapshot.self.role && p.state === 'HIDDEN' && Math.hypot(p.pos[0] - snapshot.self.pos[0], p.pos[2] - snapshot.self.pos[2]) > this.activeRules.HIDDEN_VISIBILITY_PROXIMITY_M)
         ) {
           continue;
         }
@@ -190,13 +221,15 @@ export class GameSession {
             fromYaw: p.yaw || 0,
             toYaw: p.yaw || 0,
             interpElapsed: 0,
-            interpDuration: 0.0667,
+            interpDuration: this.getSnapshotInterpDuration(),
             targetScaleY: scaleY,
             state: p.state,
             crouch: Boolean(p.crouch),
+            visible: true,
           };
           this.entities.set(p.id, entity);
         } else {
+          entity.visible = true;
           if (entity.role !== p.role) {
             entity.role = p.role;
             entity.avatar.setRole(p.role);
@@ -217,18 +250,32 @@ export class GameSession {
           entity.fromYaw = entity.currentYaw;
           entity.toYaw = p.yaw || 0;
           entity.interpElapsed = 0;
+          entity.interpDuration = this.getSnapshotInterpDuration();
           entity.targetScaleY = scaleY;
           entity.state = p.state;
           entity.crouch = Boolean(p.crouch);
         }
       }
 
-      // Remove entities no longer visible
+      // Update entity visibility without re-instantiating meshes to prevent GC churn and pop-in
       for (const [id, entity] of this.entities) {
         if (!visible.has(id)) {
-          entity.avatar.dispose();
-          this.group.remove(entity.avatar.root);
-          this.entities.delete(id);
+          const inRoster = this.currentRoom?.roster.some((m) => m.id === id);
+          if (inRoster) {
+            // Player is still in match (e.g. hidden robber out of sight): hide model without disposing
+            entity.visible = false;
+            entity.avatar.root.visible = false;
+            entity.mesh.visible = false;
+          } else {
+            // Player left the room completely: dispose and remove
+            entity.avatar.dispose();
+            this.group.remove(entity.avatar.root);
+            this.entities.delete(id);
+          }
+        } else {
+          entity.visible = true;
+          entity.avatar.root.visible = true;
+          entity.mesh.visible = true;
         }
       }
 
@@ -266,6 +313,7 @@ export class GameSession {
     if (this.entities.size === 0) return;
 
     for (const entity of this.entities.values()) {
+      if (!entity.avatar.root.visible) continue;
       entity.previousPos.copy(entity.currentPos);
 
       entity.interpElapsed += dtSeconds;
@@ -304,8 +352,26 @@ export class GameSession {
     }
   }
 
-  public getRemoteEntities(): ReadonlyMap<string, RemotePlayerEntity> {
-    return this.entities;
+  public getSnapshotInterpDuration(): number {
+    const tickHz = this.activeRules?.SIMULATION_TICK_RATE_HZ || 30;
+    const broadcastHz = this.activeRules?.SNAPSHOT_BROADCAST_RATE_HZ || 15;
+    const ticks = Math.max(1, Math.round(tickHz / broadcastHz));
+    return ticks / tickHz;
+  }
+
+  public getRemoteEntities(onlyVisible = false): ReadonlyMap<string, RemotePlayerEntity> {
+    if (!onlyVisible) return this.entities;
+    const visibleEntities = new Map<string, RemotePlayerEntity>();
+    for (const [id, entity] of this.entities) {
+      if (entity.visible && entity.avatar.root.visible) {
+        visibleEntities.set(id, entity);
+      }
+    }
+    return visibleEntities;
+  }
+
+  public getVisibleRemoteEntities(): ReadonlyMap<string, RemotePlayerEntity> {
+    return this.getRemoteEntities(true);
   }
 
   private resetMarkers(): void {
@@ -657,13 +723,15 @@ export class GameSession {
     this.socket.disconnect();
     this.currentRoom = null;
     this.roomReady = false;
+    this.activeRules = DEFAULT_GAME_RULES;
+    this.activeMovementRules = movementRules;
     this.resetMarkers();
     this.callbacks.onRoom(null);
   }
 
   public send(input: ReturnType<InputState['consume']>, yaw: number, pitch: number): number {
-    if (this.currentRoom?.phase === 'RESULT') return this.seq;
-    if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return this.seq;
+    if (this.currentRoom?.phase === 'RESULT') return 0;
+    if (this.resuming || !this.socket.connected || !this.roomReady || this.lastTick < 0) return 0;
     if (input.jumpPressed) this.jumpId++;
     if (input.capturePressed) this.captureId++;
     const { moveX, moveZ, sprint, crouch, rescueHeld } = input;

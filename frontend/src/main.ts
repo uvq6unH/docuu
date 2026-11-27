@@ -195,6 +195,7 @@ try {
   let lastCaptureAttemptTime = 0;
   let lastObservedPhase = '';
   let lastObservedState: string | undefined = undefined;
+  let lastObservedRulesVersion = 0;
   let lastFrozenNoticeTime = 0;
   let lastStaminaVal = -1;
   let spectatorIndex = 0;
@@ -428,6 +429,7 @@ try {
 
     // Remote Players
     for (const remote of session.getRemoteEntities().values()) {
+      if (!remote.visible || !remote.avatar.root.visible) continue;
       if (remote.role !== currentRole && remote.state === 'HIDDEN') continue;
       const rx = toX(remote.currentPos.x);
       const ry = toY(remote.currentPos.z);
@@ -483,21 +485,27 @@ try {
     lastAimCheckTime = now;
 
     let action: 'capture' | 'rescue' | null = null;
+    const rules = session.getRules();
     if (snapshot?.phase === 'PLAYING') {
       if (currentRole === 'POLICE') {
         const forwardX = -Math.sin(yaw);
         const forwardZ = -Math.cos(yaw);
+        const maxDist = rules.CAPTURE_MAX_DISTANCE_M + rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_M;
+        const maxHeightDelta = rules.CAPTURE_MAX_HEIGHT_DELTA_M;
+        const maxAngleDeg = rules.CAPTURE_MAX_ANGLE_DEG + rules.CAPTURE_NETWORK_TOLERANCE_MARGIN_DEG;
+
         for (const remote of session.getRemoteEntities().values()) {
+          if (!remote.visible || !remote.avatar.root.visible) continue;
           if (remote.role !== 'ROBBER' || remote.state === 'JAILED' || remote.state === 'IMMUNE') continue;
           const dx = remote.currentPos.x - player.pos[0];
           const dz = remote.currentPos.z - player.pos[2];
           const dist = Math.hypot(dx, dz);
           const dy = Math.abs(remote.currentPos.y - player.pos[1]);
 
-          if (dist <= 2.2 && dy <= 1.2) {
+          if (dist <= maxDist && dy <= maxHeightDelta) {
             const dot = (forwardX * dx + forwardZ * dz) / dist;
             const angleDeg = (Math.acos(Math.max(-1, Math.min(1, dot))) * 180) / Math.PI;
-            if (angleDeg <= 65) {
+            if (angleDeg <= maxAngleDeg) {
               action = 'capture';
               break;
             }
@@ -508,9 +516,10 @@ try {
         if (jail) {
           const forwardX = -Math.sin(yaw);
           const forwardZ = -Math.cos(yaw);
+          const rescueRadius = rules.RESCUE_RADIUS_M + rules.RESCUE_NETWORK_TOLERANCE_MARGIN_M;
           for (const anchor of jail.rescueAnchors) {
             const dist = Math.hypot(anchor[0] - player.pos[0], anchor[2] - player.pos[2]);
-            if (dist <= 1.8) {
+            if (dist <= rescueRadius) {
               const toJailX = jail.center[0] - player.pos[0];
               const toJailZ = jail.center[2] - player.pos[2];
               if (forwardX * toJailX + forwardZ * toJailZ >= 0) {
@@ -526,7 +535,9 @@ try {
       lastAimAction = action;
       actionPrompt.hidden = action === null;
       if (action) {
-        actionPrompt.textContent = action === 'capture' ? '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!' : '🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (2s)';
+        actionPrompt.textContent = action === 'capture'
+          ? '⚡ [CHUỘT TRÁI / E] BẮT CƯỚP!'
+          : `🔓 [GIỮ E / F] CỨU ĐỒNG ĐỘI (${Math.round(rules.RESCUE_REQUIRED_HOLD_MS / 1000)}s)`;
         actionPrompt.className = 'action-prompt prompt-' + action;
       }
       const color = action === 'capture' ? '#ff4d4d' : '#52b788';
@@ -545,12 +556,26 @@ try {
     onInterrupted() {
       latestSnapshot = null;
       controls.input.clear();
+      predictionHistory.length = 0;
+      visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
       if (document.pointerLockElement) document.exitPointerLock();
       hudOverlay.hidden = true;
     },
     onRoom(room) {
-      if (!room || room.phase === 'LOBBY') latestSnapshot = null;
-      if (room) isOffline = false;
+      if (!room || room.phase === 'LOBBY') {
+        latestSnapshot = null;
+        predictionHistory.length = 0;
+        visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+      }
+      if (room) {
+        isOffline = false;
+        if (room.rulesVersion !== undefined) {
+          if (lastObservedRulesVersion > 0 && room.rulesVersion !== lastObservedRulesVersion) {
+            showToast(`⚙️ Luật phòng đã được cập nhật (v${room.rulesVersion})`);
+          }
+          lastObservedRulesVersion = room.rulesVersion;
+        }
+      }
       updateRoomUI(room);
     },
     onSnapshot(snapshot) {
@@ -678,6 +703,9 @@ try {
             player.pos = [self.pos[0], self.pos[1], self.pos[2]];
             player.verticalSpeed = self.vel ? self.vel[1] : 0;
             player.grounded = self.grounded;
+            player.stamina = self.stamina;
+            player.exhausted = Boolean(self.exhausted);
+            player.regenDelayTicks = self.regenDelayTicks ?? 0;
             previous = { ...player, pos: [...player.pos] };
             predictionHistory.length = 0;
             visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
@@ -690,15 +718,17 @@ try {
               crouched: Boolean(self.crouch),
               sprinting: false,
               stamina: self.stamina,
-              exhausted: false,
-              regenDelayTicks: 0,
+              exhausted: Boolean(self.exhausted),
+              regenDelayTicks: self.regenDelayTicks ?? 0,
             };
+            const currentMovRules = session.getMovementRules();
             for (const pending of predictionHistory) {
               replayed = stepMovement(
                 replayed,
                 { ...pending.input, yaw: pending.yaw },
                 currentRole || 'ROBBER',
-                villageMap
+                villageMap,
+                currentMovRules
               );
               pending.predictedPos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
               pending.verticalSpeed = replayed.verticalSpeed;
@@ -706,12 +736,12 @@ try {
             }
 
             // Smooth Visual Error Absorption (Unreal/Source style)
-            // Absorb positional delta into visualErrorOffset so the camera glides without any pop or hitch!
+            // Absorb positional delta into visualErrorOffset up to 2.0m so the camera glides without any pop or hitch!
             const deltaX = player.pos[0] - replayed.pos[0];
             const deltaY = player.pos[1] - replayed.pos[1];
             const deltaZ = player.pos[2] - replayed.pos[2];
 
-            if (Math.hypot(deltaX, deltaZ) < 1.2 && Math.abs(deltaY) < 1.0) {
+            if (Math.hypot(deltaX, deltaZ) <= 2.0 && Math.abs(deltaY) <= 1.5) {
               visualErrorOffset.x += deltaX;
               visualErrorOffset.y += deltaY;
               visualErrorOffset.z += deltaZ;
@@ -720,22 +750,174 @@ try {
             player.pos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
             player.verticalSpeed = replayed.verticalSpeed;
             player.grounded = replayed.grounded;
+            player.stamina = replayed.stamina;
+            player.exhausted = replayed.exhausted;
+            player.regenDelayTicks = replayed.regenDelayTicks;
             previous.pos[0] -= deltaX;
             previous.pos[1] -= deltaY;
             previous.pos[2] -= deltaZ;
           }
           // If error <= 0.04m: Prediction matches server authoritative physics exactly.
-          // Zero jitter, zero pull-back!
-        } else if (predictionHistory.length === 0) {
+          // Zero jitter, zero pull-back! If all frames acked, sync stamina to authoritative server state.
+          if (predictionHistory.length === 0) {
+            player.stamina = self.stamina;
+            player.exhausted = Boolean(self.exhausted);
+            player.regenDelayTicks = self.regenDelayTicks ?? 0;
+          }
+        } else {
+          // ackIndex < 0: self.ackSeq was not found in predictionHistory
           const errDist = Math.hypot(self.pos[0] - player.pos[0], self.pos[2] - player.pos[2]);
-          if (errDist > 1.5) {
-            player.pos = [self.pos[0], self.pos[1], self.pos[2]];
-            player.verticalSpeed = 0;
-            previous = { ...player, pos: [...player.pos] };
-            visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+          const errHeight = Math.abs(self.pos[1] - player.pos[1]);
+
+          if (predictionHistory.length > 0) {
+            const oldestSeq = predictionHistory[0]!.seq;
+            const newestSeq = predictionHistory[predictionHistory.length - 1]!.seq;
+            if (self.ackSeq < oldestSeq) {
+              // Server is acknowledging frames older than our buffer; rebase if drifting > 1.0m
+              if (errDist > 1.0 || errHeight > 1.0) {
+                player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+                player.verticalSpeed = self.vel ? self.vel[1] : 0;
+                player.grounded = self.grounded;
+                player.stamina = self.stamina;
+                player.exhausted = Boolean(self.exhausted);
+                player.regenDelayTicks = self.regenDelayTicks ?? 0;
+                previous = { ...player, pos: [...player.pos] };
+                predictionHistory.length = 0;
+                visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+              }
+            } else if (self.ackSeq > newestSeq) {
+              // Server ack is ahead of local history (e.g. after resume/reconnect); rebase
+              predictionHistory.length = 0;
+              if (errDist > 0.04 || errHeight > 0.04) {
+                player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+                player.verticalSpeed = self.vel ? self.vel[1] : 0;
+                player.grounded = self.grounded;
+                player.stamina = self.stamina;
+                player.exhausted = Boolean(self.exhausted);
+                player.regenDelayTicks = self.regenDelayTicks ?? 0;
+                previous = { ...player, pos: [...player.pos] };
+                visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+              }
+            } else {
+              // oldestSeq <= self.ackSeq <= newestSeq, but self.ackSeq has no exact match (gap in sequence)
+              // Discard acknowledged frames older than or equal to self.ackSeq
+              const discardIdx = predictionHistory.findIndex((f) => f.seq > self.ackSeq);
+              if (discardIdx > 0) {
+                predictionHistory.splice(0, discardIdx);
+              } else if (discardIdx === -1) {
+                predictionHistory.length = 0;
+              }
+
+              if (predictionHistory.length === 0) {
+                // All pending frames were acknowledged up to self.ackSeq
+                const deltaX = player.pos[0] - self.pos[0];
+                const deltaY = player.pos[1] - self.pos[1];
+                const deltaZ = player.pos[2] - self.pos[2];
+                const deltaDist = Math.hypot(deltaX, deltaZ);
+                const deltaHeight = Math.abs(deltaY);
+
+                if (deltaDist > 2.0 || deltaHeight > 1.5) {
+                  player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+                  player.verticalSpeed = self.vel ? self.vel[1] : 0;
+                  player.grounded = self.grounded;
+                  player.stamina = self.stamina;
+                  player.exhausted = Boolean(self.exhausted);
+                  player.regenDelayTicks = self.regenDelayTicks ?? 0;
+                  previous = { ...player, pos: [...player.pos] };
+                  visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+                } else if (deltaDist > 0.04 || deltaHeight > 0.04) {
+                  visualErrorOffset.x += deltaX;
+                  visualErrorOffset.y += deltaY;
+                  visualErrorOffset.z += deltaZ;
+
+                  player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+                  player.verticalSpeed = self.vel ? self.vel[1] : 0;
+                  player.grounded = self.grounded;
+                  player.stamina = self.stamina;
+                  player.exhausted = Boolean(self.exhausted);
+                  player.regenDelayTicks = self.regenDelayTicks ?? 0;
+                  previous.pos[0] -= deltaX;
+                  previous.pos[1] -= deltaY;
+                  previous.pos[2] -= deltaZ;
+                }
+                player.stamina = self.stamina;
+                player.exhausted = Boolean(self.exhausted);
+                player.regenDelayTicks = self.regenDelayTicks ?? 0;
+              } else {
+                // Replay pending unacknowledged frames starting from authoritative server state
+                let replayed: MovementState = {
+                  pos: [self.pos[0], self.pos[1], self.pos[2]],
+                  verticalSpeed: self.vel ? self.vel[1] : 0,
+                  grounded: self.grounded,
+                  crouched: Boolean(self.crouch),
+                  sprinting: false,
+                  stamina: self.stamina,
+                  exhausted: Boolean(self.exhausted),
+                  regenDelayTicks: self.regenDelayTicks ?? 0,
+                };
+                const currentMovRules = session.getMovementRules();
+                for (const pending of predictionHistory) {
+                  replayed = stepMovement(
+                    replayed,
+                    { ...pending.input, yaw: pending.yaw },
+                    currentRole || 'ROBBER',
+                    villageMap,
+                    currentMovRules
+                  );
+                  pending.predictedPos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
+                  pending.verticalSpeed = replayed.verticalSpeed;
+                  pending.grounded = replayed.grounded;
+                }
+
+                // Error delta is measured between client's predicted position and server-authoritative replayed position
+                const deltaX = player.pos[0] - replayed.pos[0];
+                const deltaY = player.pos[1] - replayed.pos[1];
+                const deltaZ = player.pos[2] - replayed.pos[2];
+                const deltaDist = Math.hypot(deltaX, deltaZ);
+                const deltaHeight = Math.abs(deltaY);
+
+                if (deltaDist > 2.0 || deltaHeight > 1.5) {
+                  // Server-client drift > 2.0m: hard snap to replayed position
+                  player.pos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
+                  player.verticalSpeed = replayed.verticalSpeed;
+                  player.grounded = replayed.grounded;
+                  player.stamina = replayed.stamina;
+                  player.exhausted = replayed.exhausted;
+                  player.regenDelayTicks = replayed.regenDelayTicks;
+                  previous = { ...player, pos: [...player.pos] };
+                  visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+                } else if (deltaDist > 0.04 || deltaHeight > 0.04) {
+                  // Moderate drift: absorb error into visual offset and correct physics
+                  visualErrorOffset.x += deltaX;
+                  visualErrorOffset.y += deltaY;
+                  visualErrorOffset.z += deltaZ;
+
+                  player.pos = [replayed.pos[0], replayed.pos[1], replayed.pos[2]];
+                  player.verticalSpeed = replayed.verticalSpeed;
+                  player.grounded = replayed.grounded;
+                  player.stamina = replayed.stamina;
+                  player.exhausted = replayed.exhausted;
+                  player.regenDelayTicks = replayed.regenDelayTicks;
+                  previous.pos[0] -= deltaX;
+                  previous.pos[1] -= deltaY;
+                  previous.pos[2] -= deltaZ;
+                }
+              }
+            }
+          } else {
+            // predictionHistory is empty
+            if (errDist > 0.1 || errHeight > 0.1) {
+              player.pos = [self.pos[0], self.pos[1], self.pos[2]];
+              player.verticalSpeed = self.vel ? self.vel[1] : 0;
+              player.grounded = self.grounded;
+              previous = { ...player, pos: [...player.pos] };
+              visualErrorOffset.x = visualErrorOffset.y = visualErrorOffset.z = 0;
+            }
+            player.stamina = self.stamina;
+            player.exhausted = Boolean(self.exhausted);
+            player.regenDelayTicks = self.regenDelayTicks ?? 0;
           }
         }
-        player.stamina = self.stamina;
         player.crouched = Boolean(self.crouch);
       }
 
@@ -765,7 +947,7 @@ try {
         : snapshot.phase === 'PLAYING' && self.role === 'POLICE'
         ? 'Áp sát và nhấn chuột trái để bắt'
         : self.rescueProgressMs > 0
-        ? 'Đang cứu ' + Math.round(self.rescueProgressMs / 20) + '%'
+        ? 'Đang cứu ' + Math.round((self.rescueProgressMs / session.getRules().RESCUE_REQUIRED_HOLD_MS) * 100) + '%'
         : '';
       hudJailedCount.textContent = `${snapshot.jailedCount} / ${robberCount}`;
 
@@ -781,7 +963,7 @@ try {
       // Smooth Rescue Progress Fill Bar
       if (self.role === 'ROBBER' && self.rescueProgressMs > 0) {
         rescueBarContainer.hidden = false;
-        rescueBarFill.style.width = `${Math.min(100, (self.rescueProgressMs / 2000) * 100)}%`;
+        rescueBarFill.style.width = `${Math.min(100, (self.rescueProgressMs / session.getRules().RESCUE_REQUIRED_HOLD_MS) * 100)}%`;
       } else {
         rescueBarContainer.hidden = true;
       }
@@ -898,6 +1080,15 @@ try {
       showToast(`📍 ${ping.role === 'POLICE' ? 'Cảnh sát' : 'Đồng đội'} đã đánh dấu vị trí!`, 1500);
     },
     onPebble(pebble: PebbleEvent) {
+      if (pebble.senderId && pebble.senderId === latestSnapshot?.self?.id) {
+        // Authoritative server confirmed our throw: commit cooldown timestamp & play impact
+        pebbleInFlight = false;
+        setStoredPebbleTime(Date.now());
+        sound.playPebbleHit();
+        spawnPebbleImpact(pebble.landingPos);
+        showToast('🪨 Đã ném sỏi đánh lạc hướng cảnh sát!', 1600);
+        return;
+      }
       sound.playPebbleThrow();
       window.setTimeout(() => {
         sound.playPebbleHit();
@@ -918,6 +1109,8 @@ try {
       resultShown = '';
     }
     if (!room || room.phase === 'LOBBY' || finished) {
+      pebbleInFlight = false;
+      setStoredPebbleTime(0);
       controls.input.clear();
       hudOverlay.hidden = actionPrompt.hidden = rescueBarContainer.hidden = true;
       hudImmuneCard.hidden = hudStealthCard.hidden = true;
@@ -1674,25 +1867,66 @@ try {
     }
 
     // Distraction Pebble (hotkey F)
-    if (e.code === 'KeyF' && currentRole === 'ROBBER' && latestSnapshot?.self?.state !== 'JAILED') {
+    if (e.code === 'KeyF') {
       e.preventDefault();
-      const fX = -Math.sin(camera.rotation.y);
-      const fZ = -Math.cos(camera.rotation.y);
-      const landingPos: Vec3 = [
-        player.pos[0] + fX * 10,
-        0.05,
-        player.pos[2] + fZ * 10,
-      ];
-      session.sendPebble(player.pos, landingPos);
-      sound.playPebbleThrow();
-      window.setTimeout(() => {
-        sound.playPebbleHit();
-        spawnPebbleImpact(landingPos);
-      }, 350);
-      showToast('🪨 Đã ném sỏi đánh lạc hướng cảnh sát!', 1600);
+      tryThrowPebble();
       return;
     }
   });
+
+  const PEBBLE_STORAGE_KEY = 'folk_tag_last_pebble_time';
+  function getStoredPebbleTime(): number {
+    try {
+      return Number(sessionStorage.getItem(PEBBLE_STORAGE_KEY) || 0);
+    } catch {
+      return 0;
+    }
+  }
+  function setStoredPebbleTime(ts: number): void {
+    try {
+      if (ts > 0) {
+        sessionStorage.setItem(PEBBLE_STORAGE_KEY, String(ts));
+      } else {
+        sessionStorage.removeItem(PEBBLE_STORAGE_KEY);
+      }
+    } catch {
+      // Storage unavailable or disabled
+    }
+  }
+
+  const PEBBLE_COOLDOWN_MS = 6000;
+  let pebbleInFlight = false;
+
+  function tryThrowPebble() {
+    if (currentRole !== 'ROBBER' || latestSnapshot?.self?.state === 'JAILED') return;
+    if (pebbleInFlight) {
+      showToast('⏳ Đang gửi yêu cầu ném sỏi...', 600);
+      return;
+    }
+    const now = Date.now();
+    const lastPebbleThrowTime = getStoredPebbleTime();
+    const elapsed = now - lastPebbleThrowTime;
+    if (elapsed < PEBBLE_COOLDOWN_MS) {
+      const remainingSec = Math.ceil((PEBBLE_COOLDOWN_MS - elapsed) / 1000);
+      showToast(`⏳ Sỏi đang hồi chiêu (${remainingSec}s)...`, 1000);
+      return;
+    }
+
+    pebbleInFlight = true;
+    window.setTimeout(() => {
+      pebbleInFlight = false;
+    }, 2000);
+
+    const fX = -Math.sin(camera.rotation.y);
+    const fZ = -Math.cos(camera.rotation.y);
+    const landingPos: Vec3 = [
+      player.pos[0] + fX * 10,
+      0.05,
+      player.pos[2] + fZ * 10,
+    ];
+    session.sendPebble(player.pos, landingPos);
+    sound.playPebbleThrow();
+  }
 
   // Renderer canvas mouse clicks for Ping (Middle mouse) and Pebble (Right click)
   renderer.domElement.addEventListener('mousedown', (e) => {
@@ -1710,21 +1944,9 @@ try {
       sound.playPingSound();
       spawnTacticalPingRing(pingPos, currentRole || 'ROBBER');
       activeMinimapPings.push({ pos: pingPos, role: currentRole || 'ROBBER', expireTime: performance.now() + 3000 });
-    } else if (e.button === 2 && currentRole === 'ROBBER' && latestSnapshot?.self?.state !== 'JAILED') { // Right click -> Pebble
+    } else if (e.button === 2) { // Right click -> Pebble
       e.preventDefault();
-      const fX = -Math.sin(camera.rotation.y);
-      const fZ = -Math.cos(camera.rotation.y);
-      const landingPos: Vec3 = [
-        player.pos[0] + fX * 10,
-        0.05,
-        player.pos[2] + fZ * 10,
-      ];
-      session.sendPebble(player.pos, landingPos);
-      sound.playPebbleThrow();
-      window.setTimeout(() => {
-        sound.playPebbleHit();
-        spawnPebbleImpact(landingPos);
-      }, 350);
+      tryThrowPebble();
     }
   });
   btnSpectatorMode.addEventListener('click', (e) => {
@@ -1766,7 +1988,7 @@ try {
   if (import.meta.env.DEV) debug.hidden = false;
 
   const tickMs = 1000 / movementRules.tickHz;
-  const eyeHeight = (crouched: boolean) => (crouched ? movementRules.crouchEyeHeight : movementRules.eyeHeight);
+  const eyeHeight = (crouched: boolean) => (crouched ? session.getMovementRules().crouchEyeHeight : session.getMovementRules().eyeHeight);
 
   // Page Visibility API: Stop rendering & reset timers when tab is hidden (drops CPU to 0%)
   let isTabHidden = false;
@@ -1802,7 +2024,7 @@ try {
     if (playing) {
       const frameMs = Math.max(0, time - (lastFrame ?? time - 1000 / 60));
       controls.updateLook();
-      accumulated = Math.min(accumulated + (lastFrame === undefined ? 0 : frameMs), tickMs * movementRules.maxCatchUpTicks);
+      accumulated = Math.min(accumulated + (lastFrame === undefined ? 0 : frameMs), tickMs * session.getMovementRules().maxCatchUpTicks);
       lastFrame = time;
 
       let steps = 0;
@@ -1825,7 +2047,7 @@ try {
 
         const currentYaw = camera.rotation.y;
         if (!isJailed && !isPoliceFrozen) {
-          player = stepMovement(player, { ...input, yaw: currentYaw }, role, villageMap);
+          player = stepMovement(player, { ...input, yaw: currentYaw }, role, villageMap, session.getMovementRules());
         }
 
         if (!isOffline) {
@@ -1852,7 +2074,7 @@ try {
         // Capture action visual & sound feedback on client click
         if (input.capturePressed && currentRole === 'POLICE') {
           const now = performance.now();
-          if (now - lastCaptureAttemptTime >= 1100) {
+          if (now - lastCaptureAttemptTime >= session.getRules().CAPTURE_COOLDOWN_MS) {
             lastCaptureAttemptTime = now;
             sound.playCaptureSwing();
             crosshair.classList.remove('swing');
@@ -2007,10 +2229,10 @@ try {
       const staminaVal = Math.round(player.stamina);
       if (staminaVal !== lastStaminaVal) {
         lastStaminaVal = staminaVal;
-        stamina.textContent = `${staminaVal}/${movementRules.maxStamina}`;
+        stamina.textContent = `${staminaVal}/${session.getMovementRules().maxStamina}`;
         const staminaBar = document.getElementById('hud-stamina-bar');
         if (staminaBar) {
-          staminaBar.style.width = `${Math.min(100, Math.max(0, (staminaVal / movementRules.maxStamina) * 100))}%`;
+          staminaBar.style.width = `${Math.min(100, Math.max(0, (staminaVal / session.getMovementRules().maxStamina) * 100))}%`;
         }
       }
 

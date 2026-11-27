@@ -120,6 +120,20 @@ describe('A03 Character Avatar 3D Models', () => {
     avatar.dispose();
   });
 
+  it('toggles avatar visibility cleanly on root Group without altering internal accessory settings', () => {
+    const robber = createCharacterModel('ROBBER');
+    expect(robber.root.visible).toBe(true);
+
+    // When entity goes out of sight / hides, root.visible is toggled to false
+    robber.root.visible = false;
+    expect(robber.root.visible).toBe(false);
+
+    // When re-entering sight, root.visible is toggled to true without model re-creation
+    robber.root.visible = true;
+    expect(robber.root.visible).toBe(true);
+    robber.dispose();
+  });
+
   it.each(['avatar_police', 'avatar_robber', 'avatar'])(
     '%s.glb meets the glTF binary specification and triangle budget',
     (modelName) => {

@@ -8,10 +8,11 @@ export function initDatabase(dbPath?: string): DatabaseManager {
   if (defaultDb) return defaultDb;
 
   const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+  const isTest = process.env.NODE_ENV === 'test';
   const targetPath =
     dbPath ||
     process.env.DATABASE_PATH ||
-    resolve(packageRoot, 'data', 'folk_tag.db');
+    (isTest ? ':memory:' : resolve(packageRoot, 'data', 'folk_tag.db'));
 
   defaultDb = new DatabaseManager(targetPath);
   console.log(`[Database] SQLite initialized at: ${targetPath}`);
