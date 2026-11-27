@@ -1,0 +1,62 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, Typecheck, Lint & Full Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix packages/shared ci
+          npm --prefix backend/apps/server ci
+          npm --prefix frontend ci
+
+      - name: Build monorepo packages
+        run: npm run build
+
+      - name: TypeScript strict typecheck
+        run: npm run typecheck
+
+      - name: ESLint check (0 warnings, 0 errors)
+        run: npm run lint
+
+      - name: Shared package unit tests
+        run: npm run test:shared
+
+      - name: Server authoritative & security tests
+        run: npm run test:server
+
+      - name: Client unit tests (Vitest)
+        run: npm run test:client
+
+      - name: Playwright integration tests (Mock)
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:integration -- tests/integration/mock.spec.ts
+
+      - name: Server stress & load simulation
+        run: npm run test:load
+
+      - name: Playtest balance telemetry verification
+        run: npm run test:playtests
