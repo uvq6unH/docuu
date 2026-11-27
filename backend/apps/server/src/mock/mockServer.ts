@@ -20,6 +20,7 @@ import {
   CaptureTarget,
   GameEvent,
   Vec3,
+  initialDoors, syncDoorColliders, nearestDoor, advanceDoors, VILLAGE_INTERACTION, AckResponse,
 } from '@folk-tag/shared';
 import {
   INITIAL_MOCK_BOTS,
@@ -30,7 +31,7 @@ import {
 } from './mockData.js';
 
 // Load and validate the official map JSON from packages/shared
-const mapPath = new URL('../../../../../packages/shared/maps/village-v1.json', import.meta.url);
+const mapPath = new URL('../../../../../packages/shared/maps/vietnam-village.json', import.meta.url);
 const rawMapData = JSON.parse(readFileSync(mapPath, 'utf-8'));
 export const officialVillageMap: VillageMap = validateMap(rawMapData);
 
@@ -44,9 +45,13 @@ interface ConnectedClientSession {
   lastCaptureId: number;
   lastCaptureAttemptTime: number;
   lastInputTime: number;
+  lastDoorTime?: number;
+  lastDoorRequestId?: string;
 }
 
 export class MockServer {
+  private world = structuredClone(officialVillageMap);
+  private doors = initialDoors(this.world);
   private io: SocketIOServer | Namespace;
   private bots: MockBotState[];
   private clients: Map<string, ConnectedClientSession> = new Map();
@@ -57,6 +62,7 @@ export class MockServer {
 
   constructor(io: SocketIOServer | Namespace) {
     this.io = io;
+    syncDoorColliders(this.world, this.doors);
     // Clone initial mock bot identities
     this.bots = JSON.parse(JSON.stringify(INITIAL_MOCK_BOTS));
     this.registerSocketHandlers();
@@ -71,13 +77,13 @@ export class MockServer {
       const role: MovementRole = assignedId.startsWith('police') ? 'POLICE' : 'ROBBER';
       const bot = this.bots.find((b) => b.id === assignedId);
       const isNearSpawn = socket.handshake.query.spawn === 'near';
-      const defaultSpawnPos = role === 'POLICE' ? officialVillageMap.spawns.police[0]! : officialVillageMap.spawns.robber[0]!;
+      const defaultSpawnPos = role === 'POLICE' ? this.world.spawns.police[0]! : this.world.spawns.robber[0]!;
       const spawnPos: Vec3 = [...(bot ? bot.pos : defaultSpawnPos)];
 
       if (isNearSpawn && role === 'ROBBER') {
         const policeSession = Array.from(this.clients.values()).find((c) => c.role === 'POLICE');
         const policeBot = this.bots.find((b) => b.id === 'police-1');
-        const basePos = policeSession ? policeSession.movementState.pos : (policeBot ? policeBot.pos : officialVillageMap.spawns.police[0]!);
+        const basePos = policeSession ? policeSession.movementState.pos : (policeBot ? policeBot.pos : this.world.spawns.police[0]!);
         const baseYaw = policeBot ? policeBot.yaw : 0;
         if (policeBot) {
           policeBot.patrolSpeed = 0;
@@ -128,6 +134,21 @@ export class MockServer {
       };
       socket.emit(SERVER_EVENTS.ROOM_STATE, initialRoomState);
 
+      socket.on(CLIENT_EVENTS.DOOR_INTERACT, (payload: { requestId?: string }, ack?: (response: AckResponse) => void) => {
+        if (payload?.requestId && payload.requestId === session.lastDoorRequestId) { ack?.({ ok: true }); return; }
+        const actor = this.bots.find(bot => bot.id === session.playerId);
+        const door = nearestDoor(session.movementState.pos, this.world);
+        const state = this.doors.find(state => state.id === door?.id);
+        if (actor?.state === 'JAILED' || !state) { ack?.({ ok: false, code: 'INVALID_PHASE' }); return; }
+        if (Date.now() - (session.lastDoorTime ?? 0) < VILLAGE_INTERACTION.doorDurationMs) {
+          ack?.({ ok: false, code: 'RATE_LIMIT' }); return;
+        }
+        if (payload?.requestId) session.lastDoorRequestId = payload.requestId;
+        session.lastDoorTime = Date.now();
+        state.target = state.target > 0 ? 0 : VILLAGE_INTERACTION.doorAngle;
+        ack?.({ ok: true });
+      });
+
       // Handle client input frames using authoritative FE stepMovement
       socket.on(CLIENT_EVENTS.GAME_INPUT, (input: InputFrame) => {
         if (!input || typeof input.seq !== 'number') return;
@@ -161,7 +182,7 @@ export class MockServer {
               crouch: session.movementState.crouched,
             };
 
-            const activeJail = officialVillageMap.jails.find((j) => j.id === 'J1')!;
+            const activeJail = this.world.jails.find((j) => j.id === 'J1')!;
             const robbers: CaptureTarget[] = this.bots
               .filter((b) => b.role === 'ROBBER')
               .map((b) => {
@@ -194,7 +215,7 @@ export class MockServer {
             const captureResult = validateCapture(
               policeActor,
               robbers,
-              officialVillageMap.colliders,
+              this.world.colliders,
               activeJail,
               occupiedSlots,
               networkCaptureRules
@@ -270,7 +291,7 @@ export class MockServer {
             session.movementState,
             intent,
             session.role,
-            officialVillageMap
+            this.world
           );
         }
 
@@ -325,6 +346,8 @@ export class MockServer {
     const controlledIds = new Set(Array.from(this.clients.values()).map((c) => c.playerId));
     const uncontrolledBots = this.bots.filter((b) => !controlledIds.has(b.id));
     updateMockBots(uncontrolledBots, dt);
+    advanceDoors(this.world, this.doors, dt * 1000, this.bots.map(bot => ({ pos: bot.pos,
+      height: bot.crouch ? GAME_RULES.CAPSULE_HEIGHT_CROUCHING : GAME_RULES.CAPSULE_HEIGHT_STANDING })));
 
     // Broadcast individual per-client snapshots
     for (const [socketId, session] of this.clients.entries()) {
@@ -355,6 +378,7 @@ export class MockServer {
         players: otherBots.map(toPlayerView),
         jailedCount,
         result: null,
+        doors: this.doors.map(door => ({ ...door })),
       };
 
       session.socket.emit(SERVER_EVENTS.GAME_SNAPSHOT, snapshot);

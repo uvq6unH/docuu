@@ -14,7 +14,7 @@ test('two browsers receive the room and observe server-confirmed player movement
   await expect(room.getByRole('listitem')).toHaveCount(6);
   await expect(room.getByRole('listitem').first()).toContainText('POLICE-1 · Cảnh sát · Chủ phòng · Sẵn sàng');
   await expect(room).toContainText('Server đang dùng hash thử nghiệm');
-  const hash = createHash('sha256').update(readFileSync('../packages/shared/maps/village-v1.json')).digest('hex');
+  const hash = createHash('sha256').update(readFileSync('../packages/shared/maps/vietnam-village.json')).digest('hex');
   await expect(room.locator('code')).toHaveText(hash);
   await room.locator('summary').click();
   const observer = await browser.newPage();

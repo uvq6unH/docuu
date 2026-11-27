@@ -1,0 +1,1678 @@
+{
+  "units": "meters",
+  "coordinateSystem": "Y-up",
+  "terrain": "terrain_80m",
+  "bounds": [
+    -39,
+    39,
+    -39,
+    39
+  ],
+  "placements": [
+    {
+      "asset": "house_tile",
+      "position": [
+        -19,
+        -0.0,
+        16
+      ],
+      "rotationY": 3.141592653589793,
+      "id": "house_0",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_thatch",
+      "position": [
+        0,
+        -0.0,
+        20
+      ],
+      "rotationY": 3.141592653589793,
+      "id": "house_1",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_brick",
+      "position": [
+        19,
+        -0.0,
+        16
+      ],
+      "rotationY": 3.141592653589793,
+      "id": "house_2",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_two_storey",
+      "position": [
+        -22,
+        0.0,
+        -2
+      ],
+      "rotationY": 0,
+      "id": "house_3",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "shop",
+      "position": [
+        20,
+        0.0,
+        -3
+      ],
+      "rotationY": 0,
+      "id": "house_4",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_tile",
+      "position": [
+        -17,
+        -0.0,
+        -20
+      ],
+      "rotationY": 0,
+      "id": "house_5",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_thatch",
+      "position": [
+        4,
+        0.0,
+        -22
+      ],
+      "rotationY": 0,
+      "id": "house_6",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_brick",
+      "position": [
+        22,
+        -0.0,
+        -23
+      ],
+      "rotationY": 0,
+      "id": "house_7",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "house_two_storey",
+      "position": [
+        -7,
+        -0.0,
+        -6
+      ],
+      "rotationY": 0,
+      "id": "house_8",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "shop",
+      "position": [
+        10,
+        0.0,
+        -8
+      ],
+      "rotationY": 0,
+      "id": "house_9",
+      "interior": [
+        {
+          "asset": "table",
+          "position": [
+            0,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "chair",
+          "position": [
+            0.85,
+            0.18,
+            -0.6
+          ]
+        },
+        {
+          "asset": "bed",
+          "position": [
+            -1.45,
+            0.18,
+            -0.65
+          ]
+        },
+        {
+          "asset": "cabinet",
+          "position": [
+            1.45,
+            0.18,
+            -1.1
+          ]
+        }
+      ]
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.2832652101614016,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.15385762652861504,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.2832652101614016,
+        39
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        0.12104699376998125,
+        39
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -36,
+        0.2747762384472129,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -36,
+        0.49546859187933223,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.23552702546515192,
+        36
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.42340874613863744,
+        36
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -33,
+        0.2606977112339641,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -33,
+        0.6747218713985583,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.13921155958947007,
+        33
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.5204250869954303,
+        33
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -30,
+        0.31425918308785605,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -30,
+        0.6275143690014894,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.08177772910878642,
+        30
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        0.36222228226378594,
+        30
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -27,
+        0.4255685093447168,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -27,
+        0.41553486905554815,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.08318715605235956,
+        27
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.04034288300455713,
+        27
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -24,
+        0.5022753662283832,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -24,
+        0.17608026506692473,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.08831289575844306,
+        24
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.2706928381616492,
+        24
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -21,
+        0.43817390440004167,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -21,
+        0.027529023072117464,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.0232131519948946,
+        21
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        -0.42024236209166344,
+        21
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -18,
+        0.2003343963729579,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -18,
+        -0.0030599444025140726,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.13011543910509682,
+        18
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.3663204126392027,
+        18
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -15,
+        -0.1297715721364914,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -15,
+        0.018565168210624955,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.3006344733140242,
+        15
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.1851083657255417,
+        15
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -12,
+        -0.39437350687289896,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -12,
+        0.0003237701163083806,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        -0.36674871201127146,
+        12
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        -0.004862067780697893,
+        12
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -9,
+        -0.4541344558503081,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -9,
+        -0.09344863154546237,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.2428287284922093,
+        9
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.08504646305400262,
+        9
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -6,
+        -0.27613946802660955,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -6,
+        -0.20567715556600202,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.04773657542446311,
+        6
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.08538825512643683,
+        6
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -3,
+        0.04487861814615113,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -3,
+        -0.22493526684965537,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.3687160231338594,
+        3
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        0.06609150537941907,
+        3
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        0,
+        0.3466666222388586,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        0,
+        -0.0717620019402623,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.5456196284688773,
+        0
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.09438037153112264,
+        0
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        3,
+        0.49983988714825167,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        3,
+        0.2300260021524452,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.4727251187244329,
+        -3
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.1701006009699926,
+        -3
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        6,
+        0.4805817758645983,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        6,
+        0.5510440883252059,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.18187222740691225,
+        -6
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        0.21952390710888597,
+        -6
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        9,
+        0.36835325184405876,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        9,
+        0.7290390761489045,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.17384936542352425,
+        -9
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.15402582612268767,
+        -9
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        12,
+        0.27458085018228795,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        12,
+        0.6692781271714953,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.4119249149569315,
+        -12
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.05003827072635794,
+        -12
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        15,
+        0.2563394520879714,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        15,
+        0.4046761924350877,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        -0.4278754663084362,
+        -15
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        -0.3123493587199537,
+        -15
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        18,
+        0.2779645647011104,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        18,
+        0.07457022392563839,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.2490359765193886,
+        -18
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.48524095005349444,
+        -18
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        21,
+        0.24737559722647884,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        21,
+        -0.16326928410144542,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        -0.00291209408425977,
+        -21
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.4463676081708178,
+        -21
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        24,
+        0.09882435523167157,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        24,
+        -0.2273707459297869,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.17354092872270216,
+        -24
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        -0.18546480519739006,
+        -24
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        27,
+        -0.14063024875695185,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        27,
+        -0.1506638890461205,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.21922699858031375,
+        -27
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.1763827255325113,
+        -27
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        30,
+        -0.352609748702893,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        30,
+        -0.03935456278925967,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.1719939000332763,
+        -30
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.4524384531882758,
+        -30
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        33,
+        -0.39981725109996197,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        33,
+        0.014206909064632178,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        -39,
+        0.11951928106642068,
+        -33
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "wall_boundary",
+      "position": [
+        39,
+        0.500732808472381,
+        -33
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        36,
+        -0.22056397158073587,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        36,
+        0.00012838185138343283,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.11991464660604903,
+        -36
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.3077963672795345,
+        -36
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        0.12104699376998125,
+        39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.008360589862805287,
+        -39
+      ],
+      "rotationY": 0
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        -39,
+        0.15385762652861504,
+        -39
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "fence_bamboo",
+      "position": [
+        39,
+        -0.008360589862805287,
+        -39
+      ],
+      "rotationY": 1.5707963267948966
+    },
+    {
+      "asset": "bush",
+      "position": [
+        -9.374849143016341,
+        -0.7698812851214929,
+        20.43450287073415
+      ],
+      "rotationY": 5.6703648244287885
+    },
+    {
+      "asset": "bush",
+      "position": [
+        9.085751594399035,
+        0.5826389976921441,
+        32.62312314215273
+      ],
+      "rotationY": 0.4083478473232473
+    },
+    {
+      "asset": "bamboo_clump",
+      "position": [
+        -23.854022525460906,
+        -0.15676265022043848,
+        -20.686976051846123
+      ],
+      "rotationY": 5.9865126685565215
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        -21.153005908606012,
+        0.07932711363475034,
+        -9.414289529029865
+      ],
+      "rotationY": 5.747872624673483
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        13.134181423060198,
+        0.839975276163356,
+        -34.05229388403019
+      ],
+      "rotationY": 4.168761412182454
+    },
+    {
+      "asset": "bush",
+      "position": [
+        28.085032438455443,
+        -0.21524434818453114,
+        -24.19298831412018
+      ],
+      "rotationY": 5.674252936760996
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        31.598864188393577,
+        -0.46748198092199955,
+        -26.108259256059796
+      ],
+      "rotationY": 4.4638015550699714
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -10.840415539268033,
+        -0.2555439304073277,
+        -29.981178190186498
+      ],
+      "rotationY": 5.706491407415284
+    },
+    {
+      "asset": "tree_banyan",
+      "position": [
+        10.377950400684888,
+        0.7751824121603773,
+        28.63156979389686
+      ],
+      "rotationY": 3.6009754577912756
+    },
+    {
+      "asset": "bamboo_clump",
+      "position": [
+        20.67802700014957,
+        -0.03093133948428341,
+        -9.795463690196364
+      ],
+      "rotationY": 2.9467129570280743
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        -10.985423546519598,
+        -0.040358317263093246,
+        26.709927704275916
+      ],
+      "rotationY": 1.872277640324695
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        24.547287404174497,
+        -0.3587864866427843,
+        6.551799648687506
+      ],
+      "rotationY": 0.496910421447601
+    },
+    {
+      "asset": "bamboo_clump",
+      "position": [
+        -10.84943866380306,
+        0.00406754676091356,
+        27.583950034036747
+      ],
+      "rotationY": 2.037813268089142
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -15.69689729054878,
+        -0.29218602247045145,
+        -7.152772390269995
+      ],
+      "rotationY": 6.0699023088773405
+    },
+    {
+      "asset": "tree_banyan",
+      "position": [
+        -32.93523037137633,
+        0.1628622189941119,
+        -7.884875291605539
+      ],
+      "rotationY": 6.133115791764396
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -22.788824726450475,
+        -0.015045343954037862,
+        19.879999156309335
+      ],
+      "rotationY": 5.343544542085267
+    },
+    {
+      "asset": "bush",
+      "position": [
+        34.39274122539804,
+        0.09177267497511951,
+        4.103903206631806
+      ],
+      "rotationY": 3.7414523513778444
+    },
+    {
+      "asset": "tree_banyan",
+      "position": [
+        19.58325263519245,
+        -0.028357513520032747,
+        7.44562738091
+      ],
+      "rotationY": 0.3622349996597714
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -5.4126893133214615,
+        -0.4109686743748218,
+        22.3451032374022
+      ],
+      "rotationY": 5.9132238942359825
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -16.773451272267927,
+        -0.14601705013826713,
+        6.365947697267252
+      ],
+      "rotationY": 4.208241440847236
+    },
+    {
+      "asset": "tree_banyan",
+      "position": [
+        12.077169600100433,
+        0.20021662760316353,
+        22.554295219525724
+      ],
+      "rotationY": 4.180109359533593
+    },
+    {
+      "asset": "bush",
+      "position": [
+        -10.109408334938841,
+        -0.46662961143089177,
+        -26.990805404398003
+      ],
+      "rotationY": 1.8530800750634895
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        17.77137165482217,
+        -0.049943228164509204,
+        -13.178719013479778
+      ],
+      "rotationY": 0.28707798150816505
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -34.159478303807994,
+        0.5361172002919422,
+        25.44328562382039
+      ],
+      "rotationY": 6.116281877563982
+    },
+    {
+      "asset": "tree_banana",
+      "position": [
+        -9.669927451779238,
+        0.015197404222431168,
+        32.42069163971363
+      ],
+      "rotationY": 6.159992150506263
+    },
+    {
+      "asset": "tree_mango",
+      "position": [
+        -29.383468546409606,
+        0.06964392319934251,
+        -23.203536118344573
+      ],
+      "rotationY": 6.076823050262436
+    },
+    {
+      "asset": "bush",
+      "position": [
+        -5.783483812865583,
+        0.2255218415072619,
+        -32.09605242694353
+      ],
+      "rotationY": 3.1735421322930204
+    },
+    {
+      "asset": "prison",
+      "position": [
+        27,
+        -0.21600155310554098,
+        26
+      ],
+      "rotationY": 3.141592653589793,
+      "id": "prison_0"
+    }
+  ]
+}

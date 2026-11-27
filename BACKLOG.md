@@ -1,5 +1,9 @@
 # Backlog và Tiến độ Dự án (Tiến trình Alpha v0.1)
 
+## Đợt Vietnam Village Kit — 27/11/2026
+
+Đã triển khai đợt tích hợp người dùng yêu cầu: 35 GLB, địa hình và cửa authoritative cùng các thay đổi shared/server cần thiết. Typecheck/lint/build và 165 unit test đạt; 12 e2e đạt; các kịch bản integration (gồm 5 phút/rematch) và load 5 phòng/30 client đã kiểm chứng. Chi tiết từng lượt chạy ở `frontend/docs/TIEN_TRINH.md`, hướng dẫn ở `frontend/docs/VIETNAM_VILLAGE_KIT.md`. Còn nghiệm thu LAN 6 người và điện thoại vật lý; chưa đánh dấu cân bằng map mới. Bảng alpha bên dưới là lịch sử. Không thêm tài khoản/shop/ranking hoặc đổi luật ván chơi.
+
 P0 = chặn MVP; P1 = alpha cần; P2 = tùy thời gian. Estimate giờ làm tập trung (không tính học). A=Đức; B=bạn; AB=cả hai. Mỗi PR đóng issue, ghi test evidence.
 Hiện tại toàn bộ các module P0 và P1 cốt lõi đã hoàn thành và nghiệm thu qua hệ thống Unit Test (152/152 passed), Lint (0 lỗi), Typecheck (100% passed) và Playtest Balance Telemetry (48% Cảnh sát / 52% Cướp).
 

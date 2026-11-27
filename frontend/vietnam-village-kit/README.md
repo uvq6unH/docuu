@@ -1,0 +1,4 @@
+# Vietnamese Village Kit
+Bộ prototype 3D GLB tạo bằng hình học thủ tục, không phải mesh tái dựng chính xác từ ảnh concept. 35 mẫu, đơn vị mét, Y-up, màu vertex, không cần texture ngoài. Import GLB vào Blender, Three.js hoặc engine hỗ trợ glTF. Ảnh reference là mục tiêu mỹ thuật. map.json là bố cục gợi ý, manifest.json mô tả asset và socket cửa; nội thất là tọa độ local của nhà. PROMPT.md hướng dẫn tích hợp.
+
+Các nhà có lỗ cửa và mặt sàn, cửa riêng có bản lề tại gốc; animation, collider, tương tác, UI và đồng bộ game chưa được triển khai vì không có source game. Nhà hai tầng chỉ sử dụng tầng trệt. Địa hình mesh có đường màu đất, cao độ gợn nhẹ và nền gần nhà được san; bố cục chưa có sông thực, ao là prop riêng. Hàng rào là module, cần collider liên tục trong game. Mô hình đơn giản để dễ chỉnh tiếp, chưa kiểm thử trực quan trong engine.

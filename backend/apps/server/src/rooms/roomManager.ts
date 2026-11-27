@@ -31,8 +31,8 @@ import {
 function loadCanonicalMapHash(): string {
   try {
     const candidates = [
-      new URL('../../../../../packages/shared/maps/village-v1.json', import.meta.url),
-      new URL('../../../../packages/shared/maps/village-v1.json', import.meta.url),
+      new URL('../../../../../packages/shared/maps/vietnam-village.json', import.meta.url),
+      new URL('../../../../packages/shared/maps/vietnam-village.json', import.meta.url),
     ];
     for (const url of candidates) {
       if (existsSync(url)) {
@@ -410,6 +410,21 @@ export class RoomManager {
         const room = this.rooms.get(binding.roomCode);
         if (!room) return;
         room.enqueueInput(binding.playerId, input);
+      });
+
+      socket.on(CLIENT_EVENTS.DOOR_INTERACT, (payload: { requestId?: string }, ack?: (res: AckResponse) => void) => {
+        if (!this.rateLimiter.checkAction(socket.id)) {
+          ack?.({ ok: false, code: 'RATE_LIMIT', message: 'Hãy chờ trước khi tương tác lại.' });
+          return;
+        }
+        this.dedupeOrExecute(socket.id, payload?.requestId, ack, () => {
+          const binding = this.socketBindings.get(socket.id);
+          const room = binding && this.rooms.get(binding.roomCode);
+          if (!room || !binding || !room.interactDoor(binding.playerId)) {
+            return { ok: false, code: 'INVALID_PHASE', message: 'Hãy đứng gần cửa để tương tác.' };
+          }
+          return { ok: true };
+        });
       });
 
       // 7. room:leave

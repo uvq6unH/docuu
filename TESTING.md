@@ -1,5 +1,18 @@
 # Test plan & balance
 
+## Vietnam Village Kit — 27/11/2026
+
+Map mặc định đã chuyển sang `packages/shared/maps/vietnam-village.json`. Các fixture v0 trong unit test art cũ vẫn dùng rõ ràng `village-v1.json`; không thay assertion gameplay bằng kết quả giả. Scene/integration dùng map mới thực tế và các đường đi cập nhật.
+
+- `packages/shared/tests/village-kit.test.mjs`: đủ 35 model, grid terrain/height từng vertex, 10 lối vào nhà, cửa đóng/mở/LOS/chống kẹp, spawn với cửa đóng, cầu, dốc lên/xuống, bốn biên khi nhảy, metadata sai và ID cửa trùng.
+- `backend/apps/server/tests/village_doors.test.mjs`: tương tác theo vị trí server, từ chối xa/jailed, tách world mỗi phòng, snapshot/collider động và reset hợp lệ.
+- `frontend/tests/e2e/village-kit.spec.ts`: 35 GLB tải thành công, menu desktop/portrait mobile, đo renderer thật, touch joystick, tap cửa, vào/ra nhà có nội thất, pause/resume.
+- Integration server thật: cửa mở/đóng thấy ở hai client, vị trí vào/ra nhà, ván đủ 5 phút/rematch, bắt/cứu/reload/reconnect với 6 người; không teleport hoặc thêm production test bypass.
+
+Dùng Chrome có sẵn bằng `$env:PLAYWRIGHT_CHANNEL='chrome'` nếu Playwright bundled Chromium chưa cài. Chạy e2e và integration tuần tự vì config integration kế thừa Vite 5174 cùng backend 3017. Không chạy thêm nhiều browser/worker nặng khi đo FPS hoặc chờ action mạng. Việc chụp cửa sổ người chơi khác có thể nhả pointer lock; test phải đưa host về foreground trước khi click bắt.
+
+Kết quả thực tế cuối phiên và giới hạn thiết bị ghi ở `frontend/docs/TIEN_TRINH.md`. Chưa lấy mẫu desktop làm chứng nhận FPS điện thoại hoặc kết luận cân bằng map mới.
+
 ## Cấu trúc kiểm thử chuẩn (Test Hierarchy)
 
 Dự án áp dụng mô hình phân tầng kiểm thử rõ ràng, độc lập và đồng bộ trên toàn bộ Monorepo:

@@ -13,16 +13,18 @@ async function ensureReady(client: Page) {
   }
 }
 
-test('two clients observe a player entering a house and leaving through its other door', async ({ page, browser }) => {
+test('two clients observe a hinged door opening, house entry and exit', async ({ page, browser }) => {
   test.setTimeout(120000);
   const guest = await browser.newPage();
   let observedZ: number | undefined;
+  let observedDoorAngle: number | undefined;
   guest.on('websocket', socket => {
     socket.on('framereceived', ({ payload }) => {
       const packet = payload.toString();
       if (!packet.startsWith('42["game:snapshot",')) return;
       const [, snapshot] = JSON.parse(packet.slice(2));
       observedZ = snapshot.players.find((player: { role: string }) => player.role === 'POLICE')?.pos[2];
+      observedDoorAngle = snapshot.doors?.find((door: { id: string }) => door.id === 'H06_door')?.angle;
     });
   });
   try {
@@ -39,12 +41,22 @@ test('two clients observe a player entering a house and leaving through its othe
     await expect(page.locator('#hud-phase')).toHaveText('PLAYING', { timeout: 60000 });
     await page.bringToFront();
     await page.locator('#enter').click();
-    await approach(page, 12, -19, .8);
-    await approach(page, 12, -28, .5);
-    await expect.poll(() => observedZ).toBeLessThan(-27);
+    await approach(page, -14, -16, .7);
+    await approach(page, -17, -16.5, .15);
+    await expect(page.locator('#door-interaction')).toContainText('Mở');
+    await page.keyboard.press('e');
+    await expect(page.locator('#door-interaction')).toContainText('Đóng');
+    await page.waitForTimeout(450);
+    await expect.poll(() => observedDoorAngle).toBeCloseTo(95 * Math.PI / 180, 3);
+    await approach(page, -17, -19, .3);
+    await expect.poll(() => observedZ).toBeLessThan(-18.6);
     await page.screenshot({ path: 'test-results/house-interior.png' });
-    await approach(page, 12, -34, .5);
-    await expect.poll(() => observedZ).toBeLessThan(-33);
+    await approach(page, -17, -16.5, .15);
+    await expect.poll(() => observedZ).toBeGreaterThan(-16.8);
+    await page.waitForTimeout(300);
+    await page.keyboard.press('e');
+    await expect(page.locator('#door-interaction')).toContainText('Mở');
+    await expect.poll(() => observedDoorAngle).toBe(0);
     await page.keyboard.press('Escape');
   } finally {
     await guest.close();
@@ -131,7 +143,7 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
   const peers: Socket[] = [];
   const robber = await browser.newPage({ viewport: { width: 960, height: 720 } });
   const rescuer = await browser.newPage({ viewport: { width: 800, height: 600 } });
-  const hash = createHash('sha256').update(readFileSync('../packages/shared/maps/village-v1.json')).digest('hex');
+  const hash = createHash('sha256').update(readFileSync('../packages/shared/maps/vietnam-village.json')).digest('hex');
   let interruptTransport: (() => Promise<void>) | undefined;
   await robber.routeWebSocket(/socket\.io/, client => {
     const upstream = client.connectToServer();
@@ -185,12 +197,14 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
     await page.bringToFront();
     await page.locator('#enter').click();
     await expect.poll(() => page.evaluate(() => document.pointerLockElement?.tagName)).toBe('CANVAS');
-    await approach(page, -5, -13, .8);
-    await approach(page, -23, -12, .8);
-    await approach(page, -23, 0, 1.1);
+    await approach(page, -6, -14, .8);
+    await approach(page, -30, -14, .8);
+    await approach(page, -30, 0, 1.1);
     await expect(page.locator('#action-prompt')).toContainText('BẮT CƯỚP');
     await page.mouse.down();
     await page.mouse.up();
+    await page.waitForTimeout(600);
+    if ((await page.locator('#hud-jailed-count').innerText()) === '0 / 4') await page.keyboard.press('e');
     await expect(page.locator('#hud-jailed-count')).toHaveText('1 / 4');
     await expect(robber.locator('#hud-action')).toContainText('Bạn đang bị giam');
     await expect(robber.locator('#debug')).toHaveAttribute('data-x', '-0.800');
@@ -224,7 +238,7 @@ test('jailed player resumes after reload and a teammate rescues them in a six-pl
 
     await rescuer.bringToFront();
     await rescuer.locator('#enter').click();
-    await approach(rescuer, 23, 3, .7);
+    await approach(rescuer, 30, 3, .7);
     await approach(rescuer, 3, 3, .7);
     await approach(rescuer, 2.7, 0, .55);
     await approach(rescuer, 0, 0, 4);
@@ -299,20 +313,16 @@ test('two players finish by capture and start another match in the same room', a
       if (jail === 'J2') break;
       await page.bringToFront();
       await page.locator('#enter').click();
-      await approach(page, -5, -13, .8);
-      await approach(page, -23, -12, .8);
-      await approach(page, -23, 0, 1.1);
+      await approach(page, -6, -14, .8);
+      await approach(page, -30, -14, .8);
+      await approach(page, -30, 0, 1.1);
       await expect(page.locator('#action-prompt')).toContainText('BẮT CƯỚP');
       await page.screenshot({ path: 'test-results/police-capturing-robber.png' });
       await guest.screenshot({ path: 'test-results/robber-view-of-police.png' });
-      try {
-        const { copyFileSync } = await import('node:fs');
-        const artifactDir = 'C:\\Users\\v3411179\\.gemini\\antigravity\\brain\\56aa1232-d0ed-43f3-820f-33729688864e';
-        copyFileSync('test-results/police-capturing-robber.png', artifactDir + '\\police-capturing-robber.png');
-        copyFileSync('test-results/robber-view-of-police.png', artifactDir + '\\robber-view-of-police.png');
-      } catch {
-        void 0;
-      }
+      // Screenshotting another browser window may release the host's pointer lock.
+      await page.bringToFront();
+      if (!await page.evaluate(() => !!document.pointerLockElement)) await page.locator('#enter').click();
+      await expect.poll(() => page.evaluate(() => !!document.pointerLockElement)).toBe(true);
       await page.mouse.down();
       await page.mouse.up();
       for (const client of [page, guest]) {

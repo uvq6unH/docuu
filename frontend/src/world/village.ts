@@ -47,7 +47,8 @@ export function villagePreview(map = villageMap) {
     const jail = (layout ?? baseLayout)?.jails.find(item => item.id === id);
     jailModel.visible = Boolean(jail);
     if (jail) {
-      jailModel.position.set(jail.x, 0, jail.z);
+      const elevation = map.jails.find(candidate => candidate.id === id)?.center[1] ?? 0;
+      jailModel.position.set(jail.x, elevation, jail.z);
       jailModel.scale.set(jail.width / 4, 1, jail.depth / 4);
     }
   }
@@ -111,6 +112,13 @@ export function villagePreview(map = villageMap) {
   }
   const volumes = new Map([...map.colliders,...map.hideZones].map(item => [item.id,item]));
   for (const object of map.objects) {
+    if (map.terrain) {
+      const placeholder = new Group();
+      placeholder.name = object.id;
+      placeholder.visible = false;
+      village.add(placeholder);
+      continue;
+    }
     const volume = volumes.get(object.id + '_box') ?? volumes.get(object.id + '_hide');
     if (!volume) throw new Error('Missing graybox dimensions for ' + object.id);
     const [w,h,d] = object.footprint ? [object.footprint[0], 5, object.footprint[1]] : volume.size;
@@ -140,6 +148,7 @@ export function villagePreview(map = villageMap) {
   for (const jail of map.jails) {
     const [x,y,z] = jail.center;
     const mesh = shape(jail.id, box, '#ac89b0', x, y+.035, z, jail.size[0], .07, jail.size[1]);
+    if (map.terrain) mesh.visible = false;
     pads.push({mesh,position:mesh.position.clone(),scale:mesh.scale.clone()});
     viewpoints.set(jail.id,{x,z});
   }

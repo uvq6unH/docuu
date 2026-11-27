@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { InstancedMesh, Matrix4 } from 'three';
 import { createObjectDetail } from '../../src/world/object-detail';
 import { disposeScene } from '../../src/core/scene';
@@ -21,4 +21,11 @@ it('batches decorative variants deterministically across scene reloads', () => {
   });
   disposeScene(first);
   disposeScene(second);
+});
+
+// Retain regression coverage for the original flat-map preview.
+vi.mock('../../src/world/shared-map', async () => {
+  const { validateMap } = await import('../../../packages/shared/src/map');
+  const { default: data } = await import('../../../packages/shared/maps/village-v1.json');
+  return { villageMap: validateMap(data) };
 });

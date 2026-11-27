@@ -3,6 +3,7 @@ import {
   InstancedMesh, MeshStandardMaterial, Object3D, SphereGeometry,
 } from 'three';
 import { villageMap } from './shared-map';
+import { terrainHeight } from '../../../packages/shared/src/terrain';
 
 export function createLandscapeDetail() {
   const group = new Group();
@@ -39,6 +40,7 @@ export function createLandscapeDetail() {
         tree.pos[2] + Math.sin(angle) * radius,
       );
       placement.rotation.set(0, angle, 0.15 + (random() - 0.5) * 0.2);
+      placement.position.y += terrainHeight(placement.position.x, placement.position.z, villageMap);
       placement.scale.setScalar(0.7 + random() * 0.7);
       placement.updateMatrix();
       grassMesh.setMatrixAt(bladeIdx, placement.matrix);
@@ -52,6 +54,7 @@ export function createLandscapeDetail() {
       const offset = (random() - 0.5) * 3.8;
       const side = (random() > 0.5 ? 1 : -1) * (0.2 + random() * 0.4);
       placement.position.set(fence.pos[0] + offset, 0.1, fence.pos[2] + side);
+      placement.position.y += terrainHeight(placement.position.x, placement.position.z, villageMap);
       placement.rotation.set(0, random() * Math.PI * 2, 0.12);
       placement.scale.setScalar(0.6 + random() * 0.6);
       placement.updateMatrix();
@@ -83,6 +86,7 @@ export function createLandscapeDetail() {
       parentTree.pos[2] + Math.sin(angle) * radius,
     );
     placement.rotation.set(random() * 0.2, random() * Math.PI, random() * 0.2);
+    placement.position.y += terrainHeight(placement.position.x, placement.position.z, villageMap);
     placement.scale.setScalar(0.8 + random() * 0.6);
     placement.updateMatrix();
     flowerMesh.setMatrixAt(f, placement.matrix);

@@ -14,8 +14,11 @@ This document is authoritative until packages/shared/src/protocol.ts exists; upd
 | room:start | {requestId} | host only, exactly 6 ready |
 | jail:select | {requestId, jailId} | captain only, selection phase |
 | game:input | InputFrame | no per-frame ack; snapshot ackSeq |
+| door:interact | {requestId} | reliable ack; server selects nearest door from authoritative position |
 
 Errors returned as `{ok:false, code, message}`. Codes: BAD_PAYLOAD, RATE_LIMIT, ROOM_NOT_FOUND, ROOM_FULL, MATCH_IN_PROGRESS, NOT_HOST, NOT_CAPTAIN, INVALID_PHASE, MAP_MISMATCH, VERSION_MISMATCH, TOKEN_INVALID, NOT_READY, JAIL_INVALID. Dedupe requestId per session for 60s (bounded cache); duplicate returns same ack, no repeat side effect.
+
+Village kit extension (27/11/2026): `Snapshot.doors?: {id:string, angle:number, target:number}[]`, angles in radians, full room state including join/resume. Maps without doors remain compatible. Server chooses the closest door within 1.5m; no client target/position/elapsed-time is accepted. Only active players in PLAYING or robbers in HEAD_START can interact, never jailed players. Rotation 0–95° over 400ms, swept against all player capsules; blocked doors stop. Shared constants live in `terrain.ts`. E/touch prioritizes a nearby door; away from doors the existing capture/rescue bindings remain. Map hash now comes from actual bytes of `vietnam-village.json`; restart both sides together after this update.
 
 ```ts
 type InputFrame = {

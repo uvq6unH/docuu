@@ -2,6 +2,8 @@
 
 Giao diện người dùng và client WebGL 3D cho trò chơi **Cảnh Sát Bắt Cướp (Folk Tag 3D)**.
 
+Môi trường mặc định từ 27/11/2026 dùng đủ 35 GLB trong Vietnam Village Kit, heightfield shared và cửa bản lề đồng bộ server. Đọc [hướng dẫn tích hợp](docs/VIETNAM_VILLAGE_KIT.md) và [checkpoint mới nhất](docs/TIEN_TRINH.md) trước khi tiếp tục. Kit nguồn nằm trong `vietnam-village-kit/`, bản phục vụ web tại `public/assets/village/`; GLB cũ được giữ cho tương thích và avatar.
+
 ## Cấu trúc thư mục
 
 ```

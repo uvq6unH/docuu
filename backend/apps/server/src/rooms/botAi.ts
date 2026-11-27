@@ -1,5 +1,6 @@
 import {
   fitsAt,
+  surfaceHeight,
   isCapsuleInHideZone,
   canPoliceSeeRobber,
   getDistanceToJailCenter,
@@ -63,15 +64,16 @@ export function findNavigableYaw(
     const testYaw = desiredYaw + offset;
     const testX = pos[0] - Math.sin(testYaw) * probeDistance;
     const testZ = pos[2] - Math.cos(testYaw) * probeDistance;
+    const testY = world.terrain ? surfaceHeight(testX, testZ, pos[1], world) : pos[1];
 
     // Check direct passage at current ground height
-    if (fitsAt([testX, pos[1], testZ], capsuleHeight, world)) {
+    if (fitsAt([testX, testY, testZ], capsuleHeight, world)) {
       return { yaw: testYaw, shouldJump: false };
     }
 
     // Check if obstacle is low (e.g. fence 0.65m) and jumpable
     if (
-      !fitsAt([testX, pos[1], testZ], capsuleHeight, world) &&
+      !fitsAt([testX, testY, testZ], capsuleHeight, world) &&
       fitsAt([testX, pos[1] + 0.75, testZ], capsuleHeight, world)
     ) {
       return { yaw: testYaw, shouldJump: true };

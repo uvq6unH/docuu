@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+const kitAssets = Object.keys(JSON.parse(readFileSync('vietnam-village-kit/manifest.json', 'utf8')));
 
 test('F04 renders a real WebGL canvas, resizes, and has no browser errors', async ({ page }) => {
   const errors: string[] = [];
@@ -131,20 +133,23 @@ test('M03 walks and sprints from spawn, crouches, jumps and lands', async ({ pag
   await page.getByRole('button', { name: 'Vào sân tập' }).click();
   await expect.poll(() => page.evaluate(() => document.pointerLockElement?.tagName)).toBe('CANVAS');
   const debug = page.locator('#debug');
+  const startX = Number(await debug.getAttribute('data-x'));
   await page.keyboard.down('Shift');
   await page.keyboard.down('w');
-  await expect.poll(async () => Number(await debug.getAttribute('data-x'))).toBeGreaterThan(-22);
+  await expect.poll(async () => Number(await debug.getAttribute('data-x'))).toBeGreaterThan(startX + 1);
   await expect(page.locator('#stamina')).not.toHaveText('Thể lực 100/100');
   await page.keyboard.up('w');
   await page.keyboard.up('Shift');
+  await expect(debug).toHaveAttribute('data-grounded', 'true');
+  const eyeAboveGround = async () => Number(await debug.getAttribute('data-eye')) - Number(await debug.getAttribute('data-y'));
   await page.keyboard.down('c');
-  await expect(debug).toHaveAttribute('data-eye', '0.950');
+  await expect.poll(eyeAboveGround).toBeCloseTo(.95, 2);
   await page.keyboard.up('c');
-  await expect(debug).toHaveAttribute('data-eye', '1.550');
+  await expect.poll(eyeAboveGround).toBeCloseTo(1.55, 2);
   await page.keyboard.press('Space');
   await expect(debug).toHaveAttribute('data-grounded', 'false');
   await expect(debug).toHaveAttribute('data-grounded', 'true');
-  await expect(debug).toHaveAttribute('data-eye', '1.550');
+  await expect.poll(eyeAboveGround).toBeCloseTo(1.55, 2);
 });
 
 test('M03 bounds a burst of mouse movement in a locked Chrome frame', async ({ page }) => {
@@ -165,7 +170,7 @@ test('M03 bounds a burst of mouse movement in a locked Chrome frame', async ({ p
   await expect(page.locator('#enter')).toBeFocused();
 });
 
-test('A01 and A02 load all nine village models into the WebGL scene', async ({ page }) => {
+test('village kit loads all models into the WebGL scene', async ({ page }) => {
   const loaded = new Set<string>();
   const issues: string[] = [];
   page.on('response', response => {
@@ -179,7 +184,7 @@ test('A01 and A02 load all nine village models into the WebGL scene', async ({ p
   });
   await page.goto('/');
   await expect(page.locator('#viewport')).toHaveAttribute('aria-busy', 'false');
-  expect([...loaded].sort()).toEqual(['bush','fence_segment','haystack','house_a','house_b','house_c','jail','tree_a','tree_b'].map(n => '/models/' + n + '.glb'));
+  expect([...loaded].sort()).toEqual(kitAssets.map(n => '/assets/village/' + n + '.glb').sort());
   await page.locator('#survey-view').selectOption('overview');
   await page.screenshot({ path: 'test-results/a01-village.png' });
   await page.locator('#survey-view').selectOption('J2');

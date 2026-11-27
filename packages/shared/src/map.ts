@@ -16,6 +16,18 @@ export interface MapBox {
   id: string;
   center: Vec3;
   size: Vec3;
+  yaw?: number;
+}
+export interface TerrainField {
+  columns: number;
+  rows: number;
+  heights: number[];
+}
+export interface VillageDoor {
+  id: string;
+  hinge: Vec3;
+  yaw: number;
+  size: Vec3;
 }
 export interface JailCandidate {
   id: string;
@@ -35,6 +47,8 @@ export interface VillageMap {
   hideZones: MapBox[];
   jails: JailCandidate[];
   spawns: { police: Vec3[]; robber: Vec3[] };
+  terrain?: TerrainField;
+  doors?: VillageDoor[];
 }
 
 function requireMap(ok: unknown, path: string, reason: string): asserts ok {
@@ -73,6 +87,17 @@ export function validateMap(raw: unknown): VillageMap {
   const data = record(raw,'map');
   const id = name(data.id,'map.id');
   const size = dimensions(data.size,'map.size');
+  let terrain: TerrainField | undefined;
+  if (data.terrain !== undefined) {
+    const field = record(data.terrain, 'terrain');
+    const columns = finite(field.columns, 'terrain.columns');
+    const rows = finite(field.rows, 'terrain.rows');
+    requireMap(Number.isInteger(columns) && columns >= 2 && columns <= 257, 'terrain.columns', 'invalid grid');
+    requireMap(Number.isInteger(rows) && rows >= 2 && rows <= 257, 'terrain.rows', 'invalid grid');
+    const heights = list(field.heights, 'terrain.heights', columns * rows).map(h => finite(h, 'terrain.height'));
+    requireMap(heights.every(h => Math.abs(h) <= 10), 'terrain.heights', 'invalid elevation');
+    terrain = { columns, rows, heights };
+  }
   requireMap(size[0] === 80 && size[1] === 80,'map.size','expected an 80 x 80 MVP map');
   const ids = new Set<string>();
   function entityId(rawId: unknown, path: string) {
@@ -111,7 +136,9 @@ export function validateMap(raw: unknown): VillageMap {
       const extent = vec(box.size,path + '.size');
       requireMap(extent.every(n => n > 0),path,'expected positive box dimensions');
       bounds(center,path,extent[0],extent[2]);
-      return {id:entityId(box.id,path),center,size:extent};
+      const parsed: MapBox = {id:entityId(box.id,path),center,size:extent};
+      if (box.yaw !== undefined) parsed.yaw = finite(box.yaw, path + '.yaw');
+      return parsed;
     });
   }
   const colliders = boxes('colliders');
@@ -121,14 +148,16 @@ export function validateMap(raw: unknown): VillageMap {
     return list(value,path,count).map((entry,i) => {
       const field = path + '[' + i + ']';
       const point = position(entry,field);
-      requireMap(point[1] === 0,field,'expected a ground position');
+      requireMap(terrain || point[1] === 0,field,'expected a ground position');
       // Clearance at spawn/teleport points, using the standing footprint in GAMEPLAY.md.
       const { radius, standingHeight: height } = movementRules;
       bounds(point,field,2*radius,2*radius);
       for (const box of colliders) {
-        if (box.center[1]-box.size[1]/2 > height || box.center[1]+box.size[1]/2 < 0) continue;
-        const dx = Math.max(0,Math.abs(point[0]-box.center[0])-box.size[0]/2);
-        const dz = Math.max(0,Math.abs(point[2]-box.center[2])-box.size[2]/2);
+        if (box.center[1]-box.size[1]/2 > point[1] + height || box.center[1]+box.size[1]/2 <= point[1] + .001) continue;
+        const x = point[0] - box.center[0], z = point[2] - box.center[2];
+        const cos = Math.cos(box.yaw ?? 0), sin = Math.sin(box.yaw ?? 0);
+        const dx = Math.max(0,Math.abs(x * cos - z * sin)-box.size[0]/2);
+        const dz = Math.max(0,Math.abs(x * sin + z * cos)-box.size[2]/2);
         requireMap(Math.hypot(dx,dz) > radius,field,'overlaps collider ' + box.id);
       }
       return point;
@@ -164,6 +193,17 @@ export function validateMap(raw: unknown): VillageMap {
     police:standingPoints(spawnData.police,'spawns.police',2),
     robber:standingPoints(spawnData.robber,'spawns.robber',4),
   };
-  return {id,size,objects,colliders,hideZones,jails,spawns};
+  const map: VillageMap = {id,size,objects,colliders,hideZones,jails,spawns};
+  if (terrain) map.terrain = terrain;
+  if (data.doors !== undefined) {
+    map.doors = list(data.doors, 'doors').map((value, index) => {
+      const door = record(value, 'doors[' + index + ']');
+      const extent = vec(door.size, 'door.size');
+      requireMap(extent.every(n => n > 0), 'door.size', 'expected positive dimensions');
+      return { id: entityId(door.id, 'door'), hinge: position(door.hinge, 'door.hinge'),
+        yaw: finite(door.yaw, 'door.yaw'), size: extent };
+    });
+  }
+  return map;
 }
 

@@ -1,0 +1,203 @@
+{
+  "house_tile": {
+    "file": "assets/house_tile.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.18,
+      2.38
+    ],
+    "doorAsset": "door_wood",
+    "roofNode": "roof_removable",
+    "note": "Enterable ground floor"
+  },
+  "house_thatch": {
+    "file": "assets/house_thatch.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.18,
+      1.88
+    ],
+    "doorAsset": "door_wood",
+    "roofNode": "roof_removable",
+    "note": "Enterable ground floor"
+  },
+  "house_brick": {
+    "file": "assets/house_brick.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.18,
+      2.13
+    ],
+    "doorAsset": "door_wood",
+    "roofNode": "roof_removable",
+    "note": "Enterable ground floor"
+  },
+  "house_two_storey": {
+    "file": "assets/house_two_storey.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.18,
+      2.38
+    ],
+    "doorAsset": "door_wood",
+    "roofNode": "roof_removable",
+    "note": "Upper floor decorative; no stairs included"
+  },
+  "shop": {
+    "file": "assets/shop.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.18,
+      1.88
+    ],
+    "doorAsset": "door_wood",
+    "roofNode": "roof_removable",
+    "note": "Enterable ground floor"
+  },
+  "door_wood": {
+    "file": "assets/door_wood.glb",
+    "category": "interactive",
+    "pivot": "hinge at local origin",
+    "openAngleDegrees": 95
+  },
+  "fence_bamboo": {
+    "file": "assets/fence_bamboo.glb",
+    "category": "boundary",
+    "length": 3,
+    "collider": "box"
+  },
+  "fence_wood": {
+    "file": "assets/fence_wood.glb",
+    "category": "boundary",
+    "length": 3,
+    "collider": "box"
+  },
+  "wall_boundary": {
+    "file": "assets/wall_boundary.glb",
+    "category": "boundary",
+    "length": 3,
+    "collider": "box"
+  },
+  "village_gate": {
+    "file": "assets/village_gate.glb",
+    "category": "building"
+  },
+  "tree_banyan": {
+    "file": "assets/tree_banyan.glb",
+    "category": "vegetation"
+  },
+  "tree_mango": {
+    "file": "assets/tree_mango.glb",
+    "category": "vegetation"
+  },
+  "tree_jackfruit": {
+    "file": "assets/tree_jackfruit.glb",
+    "category": "vegetation"
+  },
+  "tree_flower": {
+    "file": "assets/tree_flower.glb",
+    "category": "vegetation"
+  },
+  "tree_banana": {
+    "file": "assets/tree_banana.glb",
+    "category": "vegetation"
+  },
+  "tree_coconut": {
+    "file": "assets/tree_coconut.glb",
+    "category": "vegetation"
+  },
+  "tree_areca": {
+    "file": "assets/tree_areca.glb",
+    "category": "vegetation"
+  },
+  "bamboo_clump": {
+    "file": "assets/bamboo_clump.glb",
+    "category": "vegetation"
+  },
+  "bush": {
+    "file": "assets/bush.glb",
+    "category": "vegetation",
+    "hideable": true
+  },
+  "table": {
+    "file": "assets/table.glb",
+    "category": "interior"
+  },
+  "chair": {
+    "file": "assets/chair.glb",
+    "category": "interior"
+  },
+  "bed": {
+    "file": "assets/bed.glb",
+    "category": "interior"
+  },
+  "cabinet": {
+    "file": "assets/cabinet.glb",
+    "category": "interior"
+  },
+  "bench": {
+    "file": "assets/bench.glb",
+    "category": "interior"
+  },
+  "altar": {
+    "file": "assets/altar.glb",
+    "category": "interior"
+  },
+  "clay_jar": {
+    "file": "assets/clay_jar.glb",
+    "category": "prop"
+  },
+  "haystack": {
+    "file": "assets/haystack.glb",
+    "category": "prop",
+    "hideable": true
+  },
+  "rock": {
+    "file": "assets/rock.glb",
+    "category": "prop"
+  },
+  "well": {
+    "file": "assets/well.glb",
+    "category": "prop"
+  },
+  "bridge": {
+    "file": "assets/bridge.glb",
+    "category": "prop"
+  },
+  "rice_patch": {
+    "file": "assets/rice_patch.glb",
+    "category": "vegetation"
+  },
+  "terrain_80m": {
+    "file": "assets/terrain_80m.glb",
+    "category": "terrain",
+    "size": [
+      80,
+      80
+    ],
+    "collider": "triangle mesh"
+  },
+  "prison": {
+    "file": "assets/prison.glb",
+    "category": "building",
+    "doorSocket": [
+      -0.55,
+      0.15,
+      1.7
+    ],
+    "doorAsset": "door_wood"
+  },
+  "kitchen_stove": {
+    "file": "assets/kitchen_stove.glb",
+    "category": "interior"
+  },
+  "lotus_pond": {
+    "file": "assets/lotus_pond.glb",
+    "category": "prop"
+  }
+}

@@ -2,7 +2,7 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0e1411" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Đồ Cứu — Cảnh Sát Bắt Cướp (Multiplayer FPS)</title>
@@ -14,6 +14,9 @@
   <body>
     <main id="app">
       <div id="viewport" aria-label="Sân thử 3D"></div>
+      <div id="village-loading" role="status">Đang tải cảnh làng…</div>
+      <button id="door-interaction" type="button" hidden>Mở cửa · E</button>
+      <button id="village-pause" type="button" aria-label="Mở menu trò chơi">Menu</button>
       
       <!-- In-game HUD overlay (visible during match) -->
       <div id="hud-overlay" class="hud-overlay" hidden>
@@ -179,7 +182,6 @@
         <div class="brand-crest">
           <div class="folk-seal" aria-hidden="true">ĐỒ<br />CỨU</div>
           <div class="brand-text-block">
-            <div class="brand-eyebrow">TRÒ CHƠI DÂN GIAN</div>
             <a class="wordmark" href="/">CẢNH SÁT <strong>BẮT CƯỚP</strong></a>
           </div>
         </div>
@@ -191,9 +193,13 @@
 
       <!-- Main Game Panel with Ornamental Triện Brass Corners -->
       <section class="panel" aria-labelledby="scene-title">
+        <div class="pause-banner">
+          <div><strong>Đang mở menu</strong><p>Trận trực tuyến vẫn tiếp tục.</p></div>
+          <button id="resume-village" type="button">Tiếp tục chơi</button>
+        </div>
         <div class="panel-header-block">
           <h1 id="scene-title">Cảnh sát bắt cướp</h1>
-          <p class="notice">Multiplayer trực tuyến 30Hz · 2 Cảnh sát vs 4 Cướp</p>
+          <p class="notice">Làng quê Việt Nam · 2 cảnh sát, 4 cướp</p>
         </div>
         
         <!-- GPU Software Rendering Warning Drawer (Refined & Integrated) -->

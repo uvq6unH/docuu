@@ -4,6 +4,33 @@
 
 ## 1. Trạng thái hiện tại
 
+### Hiệu chỉnh mặt tiền nhà theo phản hồi ảnh trong game
+
+- Đối chiếu 5 model nhà và cửa. Các bản GLB phục vụ game giống từng byte với file gốc. `house_two_storey.glb` có tường cao 5,5 m, mái 8 tam giác, màu đỉnh và không có cửa sổ. `reference/assets.png` thể hiện nhiều chi tiết hơn hình học có trong GLB.
+- FE bổ sung khung cửa, cửa chớp, nẹp, gờ chia tầng, nan gỗ nhà tranh và mái hiên sọc cho cửa hàng. Mái giữ hình học GLB và có vân ngói hoặc vân tranh sinh trong runtime. Điều chỉnh bias bóng để giảm sọc trên mép tường. GLB nguồn, collider, map và logic cửa giữ nguyên.
+- Build toàn repo, typecheck, lint, 71 unit test FE và 12 E2E Chrome đạt. Unit test dùng hình học GLB gốc của cả 5 mẫu để kiểm tra lớp trang trí không lấn vào ô cửa. E2E đã vào nhà hai tầng, mở/đóng cửa và chụp `frontend/test-results/vietnam-village-house-facade.png`.
+- Bước tiếp theo là tải lại FE và xem mặt tiền mới trong sân tập. Để khớp đầy đủ với hình tham chiếu, cần bộ GLB chi tiết tương ứng hoặc một đợt dựng lại model từ ảnh mẫu.
+
+### Checkpoint mới nhất — 27/11/2026: Vietnam Village Kit
+
+Checkpoint này thay các trạng thái cũ bên dưới. Người dùng đã yêu cầu tích hợp toàn bộ kit và hỗ trợ điện thoại; phần server/shared được sửa trong phạm vi địa hình/cửa cần thiết, không đổi luật trận. Nhánh làm việc: `codex/vietnam-village-kit`.
+
+- Đã chuyển mặc định FE/BE sang `packages/shared/maps/vietnam-village.json`: 80×80m, 35 GLB, 10 nhà/5 mẫu vào được, 19 cây, ao/cầu/ruộng/giếng/cổng, 268 placements.
+- Đã có heightfield đúng mesh terrain, địa hình ảnh hưởng movement cả hai phía, bước sàn 0.2m, box xoay và ranh giới liên tục; giữ jump/sprint/crouch cũ.
+- Đã có 10 cửa bản lề 400ms, E/tap, collider quét chống kẹp, authority server, snapshot và trạng thái riêng từng phòng. Reset hợp lệ về lobby đóng cửa; restart không hợp lệ giữ nguyên cửa.
+- Đã dùng nội thất GLB với collider riêng, hành lang giữa nhà; InstancedMesh/cache/merge vertex colors, tiến trình tải và báo lỗi.
+- Đã làm mới menu/HUD/pause/nút cửa, touch lock không cần pointer lock, safe area và điều khiển cảm ứng. Desktop giữ phím hiện có.
+- Đã đọc PROMPT/manifest/map và 2 ảnh reference; giữ kit gốc và các model cũ. Chi tiết tại [VIETNAM_VILLAGE_KIT.md](VIETNAM_VILLAGE_KIT.md).
+- Xác minh cuối: root typecheck/lint/build đạt; `npm test` đạt 165/165 (shared 64, backend 35, FE 66). Playwright Chrome đạt 12/12 scene/e2e; showcase cuối chạy lại 1/1 đạt. Integration bản cuối đạt 6/6 kịch bản ngắn; ván đủ 5 phút/rematch đã đạt trong lượt đầy đủ trước đó. Lượt đầy đủ ban đầu 6/7, một test capture/rematch mất focus sau screenshot cửa sổ khác; đã sửa focus trong test và chạy lại đạt. Không bỏ/skip kịch bản lỗi, không thêm bypass production.
+- `npm run test:load` đạt: 5 phòng, 30 client, 2.761 input packets; tick trung bình 0.77ms, p95 2.26ms, max 4.13ms. Không áp số liệu cân bằng 48/52 từ map v0 cho bản mới; chưa chạy lại mô phỏng balance 25 trận.
+- Mẫu renderer cuối: HeadlessChrome 158, Intel UHD/D3D11, 1440×900, 120 frames/1.4363s ≈83.55 rendered FPS, p95 RAF 16ms, 101 draw calls, 126.984 triangles. Đây là mẫu ngắn, không phải cam kết FPS tối thiểu hay hiệu năng mobile. Góc nhìn khác trước đó có 60 draw calls. 35/35 GLB public giống bytes nguồn, tổng 361.028 bytes model.
+- Bằng chứng local (gitignored): `frontend/test-results/vietnam-village-overview.png`, `village-kit-desktop.png`, `village-kit-mobile.png`, `village-kit-house-mobile.png`, `village-kit-frame-sample.json`. Test nguồn ở `frontend/tests/e2e/village-kit.spec.ts`, `frontend/tests/integration/`, `packages/shared/tests/village-kit.test.mjs`, `backend/apps/server/tests/village_doors.test.mjs`.
+- Chưa nghiệm thu trên điện thoại vật lý/Safari và chưa playtest 6 người thật map mới; không suy ra FPS điện thoại từ desktop touch emulation.
+
+Bước tiếp theo: khởi động lại FE/BE từ bản build mới, tải lại mọi máy và tạo phòng mới. Playtest LAN 6 người trên desktop/điện thoại thật để đánh giá đường vòng, cover, AI qua cửa và performance; chỉnh bố cục có review, giữ luật hiện tại. Không tự mở tính năng ngoài đợt nâng cấp này.
+
+### Lịch sử trước lần tích hợp kit
+
 - Cập nhật: 20/11/2026 (Asia/Bangkok).
 - Người phụ trách: bạn — B, frontend/client và art; Đức — A, server/shared.
 - Đã hoàn thành M01–M04. Đã kiểm tra đủ 24 tuyến bằng mô phỏng nhân vật. Sân tập FPS offline dùng collider village-v1 và mô phỏng shared 30 Hz.

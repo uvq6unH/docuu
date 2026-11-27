@@ -1,10 +1,10 @@
 import {
   DataTexture, Float32BufferAttribute, LinearFilter, LinearMipmapLinearFilter,
-  Mesh, MeshStandardMaterial, RepeatWrapping, RGBAFormat, SRGBColorSpace, type Group,
+  Mesh, MeshStandardMaterial, RepeatWrapping, RGBAFormat, SRGBColorSpace, type Object3D,
 } from 'three';
 
 // Texture detail is generated in the client, keeping the Blender source intact.
-export function detailModelSurfaces(model: Group) {
+export function detailModelSurfaces(model: Object3D, roofRidgeAlongZ = false) {
   const textures = new Map<string, DataTexture>();
   model.traverse(part => {
     if (!(part instanceof Mesh) || !(part.material instanceof MeshStandardMaterial)) return;
@@ -51,8 +51,13 @@ export function detailModelSurfaces(model: Group) {
     const uv = new Float32Array(positions.count * 2);
     for (let vertex = 0; vertex < positions.count; vertex++) {
       const horizontal = Math.abs(normals.getY(vertex)) > .5;
-      uv[vertex * 2] = Math.abs(normals.getX(vertex)) > .5 ? positions.getZ(vertex) : positions.getX(vertex);
-      uv[vertex * 2 + 1] = horizontal ? positions.getZ(vertex) : positions.getY(vertex);
+      if (roofRidgeAlongZ && horizontal) {
+        uv[vertex * 2] = positions.getZ(vertex);
+        uv[vertex * 2 + 1] = positions.getX(vertex);
+      } else {
+        uv[vertex * 2] = Math.abs(normals.getX(vertex)) > .5 ? positions.getZ(vertex) : positions.getX(vertex);
+        uv[vertex * 2 + 1] = horizontal ? positions.getZ(vertex) : positions.getY(vertex);
+      }
     }
     part.geometry.setAttribute('uv', new Float32BufferAttribute(uv, 2));
   });

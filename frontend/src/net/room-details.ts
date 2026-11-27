@@ -1,4 +1,4 @@
-import mapUrl from '../../../packages/shared/maps/village-v1.json?url';
+import mapUrl from '../../../packages/shared/maps/vietnam-village.json?url';
 import type { RoomState } from '../../../packages/shared/src/protocol';
 
 export async function readMapDigest() {

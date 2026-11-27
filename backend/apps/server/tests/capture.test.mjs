@@ -69,7 +69,7 @@ test('G02 Capture: Authoritative Room processes capture, teleports robber to J1,
 
     assert.equal(robber1.state, 'JAILED');
     assert.equal(robber1.jailSlotIndex, 0);
-    assert.deepEqual(robber1.movementState.pos, [-0.8, 0, -0.8]); // J1 slot 0
+    assert.deepEqual(robber1.movementState.pos, room.world.jails[0].slots[0]); // J1 slot 0
 
     assert.equal(events.length, 1);
     assert.equal(events[0].type, 'CAPTURE');
@@ -117,7 +117,7 @@ test('G02 Capture: Authoritative Room processes capture, teleports robber to J1,
 
     assert.equal(robber2.state, 'JAILED');
     assert.equal(robber2.jailSlotIndex, 1);
-    assert.deepEqual(robber2.movementState.pos, [0.8, 0, -0.8]); // J1 slot 1
+    assert.deepEqual(robber2.movementState.pos, room.world.jails[0].slots[1]); // J1 slot 1
     assert.equal(events.length, 2);
     assert.equal(events[1].data.robberId, 'robber-2');
     assert.equal(events[1].data.slotIndex, 1);
@@ -136,7 +136,7 @@ test('G02 Capture: Authoritative Room processes capture, teleports robber to J1,
     });
     room.step();
     // Pos remains locked at J1 slot 0
-    assert.deepEqual(robber1.movementState.pos, [-0.8, 0, -0.8]);
+    assert.deepEqual(robber1.movementState.pos, room.world.jails[0].slots[0]);
 
     // 5. Fast forward and capture remaining robbers (robber 3 & 4) to verify POLICE win
     for (let i = 0; i < 35; i++) room.step();

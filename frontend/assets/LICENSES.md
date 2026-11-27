@@ -1,11 +1,12 @@
 # Sổ nguồn và giấy phép tài nguyên frontend
 
-Chưa thêm model/texture/audio bên ngoài. Không coi thư mục giữ chỗ là asset đã hoàn thành.
+Danh mục dưới ghi nguồn tài nguyên đang có; không coi thư mục giữ chỗ là asset đã hoàn thành.
 
 Mỗi model, texture, audio hoặc font được thêm vào phải có một dòng bên dưới. Tài nguyên tự làm ghi tác giả thực tế; không tự nhận quyền sở hữu hoặc gán license thay tác giả. Với nguồn ngoài, kiểm tra quyền phân phối trên web và giữ bản license/attribution đi kèm nếu được yêu cầu.
 
 | File / tài nguyên | Tác giả | URL nguồn | License / quyền sử dụng | Chỉnh sửa | Bằng chứng / attribution |
 |---|---|---|---|---|---|
+| `public/assets/village/*.glb` (35 model) và `manifest.json` | Không được ghi tên trong kit; người dùng cung cấp 27/11/2026 | `frontend/vietnam-village-kit/assets`, `manifest.json`, `README.md` | Người dùng yêu cầu tích hợp vào dự án; kit không kèm LICENSE riêng, không tự gán CC0/MIT | Copy nguyên binary; runtime instance/scale/vertex color; không chỉnh mesh nguồn | Kit gốc giữ nguyên; importer `scripts/import-village-kit.mjs`; ảnh reference chỉ để tham khảo |
 | `public/favicon.svg` | Codex tạo cho dự án, 19/11/2026 | Nội bộ, primitive SVG | Chưa gán license phân phối riêng; theo quyết định license của chủ repo | Hình vuông và tròn, không dùng nguồn ngoài | Source SVG trong repo |
 | house_a (.blend, .glb) | Codex tạo cho dự án | Primitive Blender nội bộ | Chủ repo quyết định license phân phối | Dựng mesh và vật liệu, xuất glTF | blender/build_a01.py |
 | house_b (.blend, .glb) | Codex tạo cho dự án | Primitive Blender nội bộ | Chủ repo quyết định license phân phối | Dựng mesh và vật liệu, xuất glTF | blender/build_a01.py |

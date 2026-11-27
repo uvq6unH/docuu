@@ -64,6 +64,11 @@ export interface RemotePlayerEntity {
 }
 
 export class GameSession {
+  public interactDoor(): Promise<AckResponse> {
+    return this.socket.timeout(3000).emitWithAck(CLIENT_EVENTS.DOOR_INTERACT, {
+      requestId: crypto.randomUUID?.() ?? 'door-' + Date.now() + '-' + Math.random(),
+    });
+  }
   private credentials: Credentials | null = null;
   private resuming = false;
   private socket: Socket;

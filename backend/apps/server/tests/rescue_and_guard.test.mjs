@@ -111,7 +111,8 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     // Cop 1 is at [0, 0, 10]
     p1.movementState.pos = [0, 0, 10];
     // Robber 1 enters R01 haystack at [-16, 0, -16]
-    r1.movementState.pos = [-16, 0, -16];
+    const hide = room.world.hideZones.find(zone => zone.id === 'R01_hide');
+    r1.movementState.pos = [hide.center[0], hide.center[1] - hide.size[1] / 2, hide.center[2]];
 
     // Robber 1 crouches inside hide zone via input frames
     for (let i = 0; i < 15; i++) {
@@ -253,7 +254,7 @@ describe('Rescue, Guard and Stealth Integration (R01, R02, R03)', () => {
     assert.equal(robber3.state, 'IMMUNE');
     assert.ok(robber3.immuneRemainingMs > 0 && robber3.immuneRemainingMs <= 3000);
     // Spawns at releaseAnchor 0: [-3.5, 0, 0]
-    assert.deepEqual(robber3.movementState.pos, [-3.5, 0, 0]);
+    assert.deepEqual(robber3.movementState.pos, room.world.jails[0].releaseAnchors[0]);
 
     // Rescuer does NOT receive immunity
     assert.equal(rescuer.state, 'FREE');

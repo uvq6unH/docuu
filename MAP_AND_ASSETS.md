@@ -1,6 +1,21 @@
 # Map & 3D asset pipeline
 
-## 1. Làng Bắc Bộ — graybox trước
+## Bản đang chạy: Vietnam Village Kit — 27/11/2026
+
+Phần này thay thế bố cục phẳng v0 bên dưới theo yêu cầu nâng cấp của người dùng. Source of truth runtime: `packages/shared/maps/vietnam-village.json`. `village-v1.json` giữ làm fixture tương thích/lịch sử, không còn là map mặc định của client/server.
+
+- 80×80m, Y-up, đơn vị mét; 268 placements, 239 collider tĩnh và 10 collider cửa động theo từng phòng.
+- 10 nhà thuộc 5 mẫu: H01 (-19,16), H02 (0,20), H03 (19,16), H04 (-22,-2), H05 (20,-3), H06 (-17,-20), H07 (4,-22), H08 (22,-23), H09 (-7,-6), H10 (10,-8). H01–03 quay PI, các nhà còn lại quay 0. Nhà hai tầng dùng tầng trệt.
+- 19 cây, 4 rơm + 6 bụi làm hideZones; cổng, giếng, ao sen, cầu, ruộng lúa, rào tre/gỗ và tường biên. Tất cả 35 asset được sử dụng.
+- Police spawn (-2,-18), (0,-18); robber (-30,0), (30,0), (-20,29), (20,29). Y lấy từ terrain.
+- J1 (0,0), J2 (-12,10), J3 (27,26). Slots ở mặt sàn tù, anchors theo cao độ đất; guardRadius vẫn 5m. Chỉ jail được chọn hoạt động.
+- Heightfield 41×41 trích từ vertex terrain GLB trong bước import, dùng đúng đường chéo tam giác của mesh. Cao độ khoảng -0.907…0.902m. Mô phỏng FE/BE dùng chung `terrainHeight` và `moveCapsule`, bước nền tối đa 0.2m, dốc tối đa 0.7 rise/run. Không raycast GLB từ server.
+- Collider tường/sàn/trần/nội thất riêng, cửa có collider xoay; hành lang vào nhà để trống. Hàng rào biên có 4 collider liên tục cao 8m, không nhảy qua cổng/góc được. Ao chặn hai bên, cầu giữ hành lang đi bộ.
+- Import có chủ ý: từ `frontend` chạy `node scripts/import-village-kit.mjs`, sau đó review JSON diff, chạy kiểm thử/build. Không tự chạy import mỗi lần game khởi động. Script chỉ đọc GLB nguồn, không sửa binary.
+
+Chi tiết, quyền nguồn và kiểm thử: `frontend/docs/VIETNAM_VILLAGE_KIT.md`.
+
+## 1. Làng Bắc Bộ — bố cục v0 lưu tham khảo
 
 80×80m, tâm (0,0,0), X đông, Z nam; Y cao (Three.js). Ground phẳng y=0. Biên [-40,40], hàng rào biên không vượt qua được. Nhà một tầng có nội thất và hai cửa đi xuyên được theo nâng cấp ngày 21/11/2026. Lối đi chính rộng ≥4m, ngõ ≥2.5m, không có ngõ cụt dài >8m. Sân trung tâm ~18×18m, hai lối tiếp cận mỗi jail. Không dùng random map.
 

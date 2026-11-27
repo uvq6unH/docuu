@@ -24,8 +24,8 @@ export function createScene() {
   sun.shadow.camera.right = sun.shadow.camera.top = 54;
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 120;
-  sun.shadow.normalBias = .035;
-  sun.shadow.bias = -.0002;
+  sun.shadow.normalBias = .06;
+  sun.shadow.bias = -.00055;
   scene.add(sun);
   const ground = new Mesh(
     new PlaneGeometry(...villageMap.size),
@@ -33,6 +33,7 @@ export function createScene() {
   );
   ground.rotation.x = -Math.PI / 2;
   ground.name = 'render-test-ground';
+  ground.visible = !villageMap.terrain;
   ground.receiveShadow = true;
   ground.matrixAutoUpdate = false;
   ground.updateMatrix();

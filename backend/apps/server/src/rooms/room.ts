@@ -1,3 +1,4 @@
+import { initialDoors, syncDoorColliders, advanceDoors, nearestDoor, VILLAGE_INTERACTION, type DoorState } from '@folk-tag/shared';
 import { Socket } from 'socket.io';
 import {
   GAME_RULES,
@@ -93,6 +94,8 @@ export interface RoomMetrics {
 }
 
 export class Room {
+  public world = structuredClone(officialVillageMap);
+  public doors: DoorState[] = initialDoors(this.world);
   public readonly roomCode: string;
   public hostId: string;
   public phase: Phase = 'LOBBY';
@@ -136,6 +139,7 @@ export class Room {
     this.movementRules = movementRulesFromGameRules(rules);
     this.matchId = `match-${roomCode}-${Date.now()}`;
     this.remainingMs = rules.PHASE_DURATION_PLAYING_MS;
+    syncDoorColliders(this.world, this.doors);
   }
 
   public updateRules(rules: GameRules, version = this.rulesVersion + 1): boolean {
@@ -514,7 +518,7 @@ export class Room {
         this.captainId = p.id;
       }
       p.movementState = initialMovement(
-        officialVillageMap.spawns.police[index] || officialVillageMap.spawns.police[0]!,
+        this.world.spawns.police[index] || this.world.spawns.police[0]!,
         this.movementRules
       );
     });
@@ -531,7 +535,7 @@ export class Room {
       p.hideCrouchMs = 0;
       p.jailSlotIndex = undefined;
       p.movementState = initialMovement(
-        officialVillageMap.spawns.robber[index] || officialVillageMap.spawns.robber[0]!,
+        this.world.spawns.robber[index] || this.world.spawns.robber[0]!,
         this.movementRules
       );
     });
@@ -573,7 +577,7 @@ export class Room {
   public selectJail(playerId: string, jailId: string): boolean {
     if (this.phase !== 'JAIL_SELECTION') return false;
     if (playerId !== this.captainId) return false;
-    const jailExists = officialVillageMap.jails.some((j) => j.id === jailId);
+    const jailExists = this.world.jails.some((j) => j.id === jailId);
     if (!jailExists) return false;
 
     this.selectedJailId = jailId;
@@ -592,6 +596,8 @@ export class Room {
 
   public restartToLobby(): boolean {
     if (this.phase !== 'RESULT') return false;
+    this.doors = initialDoors(this.world);
+    syncDoorColliders(this.world, this.doors);
 
     this.stop();
     this.phase = 'LOBBY';
@@ -765,6 +771,17 @@ export class Room {
     return roomState;
   }
 
+  public interactDoor(playerId: string): boolean {
+    const player = this.players.get(playerId);
+    if (!player || !player.role || player.state === 'JAILED' || !['PLAYING', 'HEAD_START'].includes(this.phase)) return false;
+    if (this.phase === 'HEAD_START' && player.role === 'POLICE') return false;
+    const door = nearestDoor(player.movementState.pos, this.world);
+    const state = this.doors.find(state => state.id === door?.id);
+    if (!state) return false;
+    state.target = state.target > 0 ? 0 : VILLAGE_INTERACTION.doorAngle;
+    return true;
+  }
+
   public startSimulation(): void {
     if (this.simTimer) return;
     this.tick = 0;
@@ -791,15 +808,21 @@ export class Room {
     bot: PlayerSession,
     dtMs: number,
     captureAttempts: { policeId: string; yaw: number }[],
-    activeJail: typeof officialVillageMap.jails[0]
+    activeJail: typeof this.world.jails[0]
   ): void {
+    if (this.phase === 'PLAYING' && bot.state !== 'JAILED') {
+      const door = nearestDoor(bot.movementState.pos, this.world);
+      const state = this.doors.find(state => state.id === door?.id);
+      if (state && state.target === 0) state.target = VILLAGE_INTERACTION.doorAngle;
+    }
     executeBotBehavior({
+      // Bot navigation uses the same animated door colliders as real players.
       bot,
       allPlayers: this.players.values(),
       phase: this.phase,
       activeJail,
       guardId: this.guardId,
-      map: officialVillageMap,
+      map: this.world,
       movementRules: this.movementRules,
       capsuleHeight: this.movementRules.standingHeight,
       capsuleHeightCrouch: this.movementRules.crouchHeight,
@@ -822,6 +845,10 @@ export class Room {
   public step(stepDtMs?: number): void {
     const t0 = performance.now();
     const dtMs = stepDtMs ?? this.rules.SIMULATION_TIMESTEP_MS;
+    advanceDoors(this.world, this.doors, dtMs, [...this.players.values()].map(player => ({
+      pos: player.movementState.pos,
+      height: player.movementState.crouched ? this.movementRules.crouchHeight : this.movementRules.standingHeight,
+    })));
     const now = Date.now();
     this.tick++;
 
@@ -860,7 +887,7 @@ export class Room {
       }
     }
 
-    const activeJail = officialVillageMap.jails.find((j) => j.id === (this.selectedJailId || 'J1'))!;
+    const activeJail = this.world.jails.find((j) => j.id === (this.selectedJailId || 'J1'))!;
 
     // 2. Input / movement / stealth / guard zone update
     const captureAttempts: { policeId: string; yaw: number }[] = [];
@@ -934,7 +961,7 @@ export class Room {
                 session.movementState,
                 frameIntent,
                 session.role as MovementRole,
-                officialVillageMap,
+                this.world,
                 this.movementRules
               );
             }
@@ -972,7 +999,7 @@ export class Room {
               session.movementState,
               idleIntent,
               session.role as MovementRole,
-              officialVillageMap,
+              this.world,
               this.movementRules
             );
           }
@@ -987,7 +1014,7 @@ export class Room {
           isCapsuleInHideZone(
             session.movementState.pos,
             this.rules.CAPSULE_HEIGHT_CROUCHING,
-            officialVillageMap.hideZones
+            this.world.hideZones
           );
 
         if (inZone) {
@@ -1153,7 +1180,7 @@ export class Room {
           const captureResult = validateCapture(
             policeActor,
             robbers,
-            officialVillageMap.colliders,
+            this.world.colliders,
             activeJail,
             occupiedSlots,
             networkCaptureRules
@@ -1276,7 +1303,7 @@ export class Room {
           const eligibility = checkRescueEligibility(
             rescuerActor,
             activeJail,
-            officialVillageMap.colliders,
+            this.world.colliders,
             networkRescueRules
           );
 
@@ -1309,7 +1336,7 @@ export class Room {
             const releasePos = determineReleasePosition(
               winner.anchorIndex,
               activeJail,
-              officialVillageMap
+              this.world
             );
 
             if (releasedSession) {
@@ -1462,6 +1489,7 @@ export class Room {
     ).length;
 
     const snapshot: Snapshot = {
+      doors: this.doors.map(door => ({ ...door })),
       protocolVersion: 1,
       matchId: this.matchId,
       tick: this.tick,

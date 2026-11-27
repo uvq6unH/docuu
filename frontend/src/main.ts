@@ -14,6 +14,9 @@ import { TouchController } from './input/touch';
 import { initialMovement, stepMovement, type MovementState } from '../../packages/shared/src/movement';
 import { movementRules } from '../../packages/shared/src/rules';
 import { villageMap } from './world/shared-map';
+import { advanceDoors, initialDoors, nearestDoor, syncDoorColliders, type DoorState } from '../../packages/shared/src/doors';
+import { VILLAGE_INTERACTION } from '../../packages/shared/src/terrain';
+import { updateKitDoors } from './world/kit-models';
 import { loadVillageModels } from './world/load-village-models';
 import { mountRoomDetails } from './net/room-details';
 import { GameSession } from './net/game-session';
@@ -51,6 +54,7 @@ const connectionInfo = requireElement('#connection-info');
 
 // Lobby & Room UI Elements
 const menuView = requireElement('#menu-view');
+const doorButton = requireElement<HTMLButtonElement>('#door-interaction');
 const roomView = requireElement('#room-view');
 const playerNameInput = requireElement<HTMLInputElement>('#player-name');
 const btnCreateRoom = requireElement<HTMLButtonElement>('#btn-create-room');
@@ -186,6 +190,34 @@ try {
   let lastFrame: number | undefined;
   let accumulated = 0;
   let isOffline = true;
+  let doorStates: DoorState[] = initialDoors(villageMap);
+  syncDoorColliders(villageMap, doorStates);
+  let lastDoorPress = 0;
+  function interactWithDoor(): boolean {
+    if (!playing || isSpectating || latestSnapshot?.self.state === 'JAILED') return false;
+    const door = nearestDoor(player.pos, villageMap);
+    if (!door) return false;
+    if (performance.now() - lastDoorPress < VILLAGE_INTERACTION.doorDurationMs) return true;
+    lastDoorPress = performance.now();
+    controls.input.release('KeyE');
+    if (isOffline) {
+      const state = doorStates.find(state => state.id === door.id)!;
+      state.target = state.target > 0 ? 0 : VILLAGE_INTERACTION.doorAngle;
+    } else {
+      void session.interactDoor().then(ack => {
+        if (!ack.ok) showToast(ack.message ?? 'Chưa thể mở cửa.');
+      }).catch(() => showToast('Chưa nhận được phản hồi cửa. Hãy thử lại.'));
+    }
+    return true;
+  }
+  const doorKey = (event: KeyboardEvent) => {
+    if (event.code === 'KeyE' && !event.repeat && interactWithDoor()) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+  window.addEventListener('keydown', doorKey, true);
+  doorButton.addEventListener('click', interactWithDoor);
   let isReady = false;
   let toastTimer: number | null = null;
   let latestSnapshot: Snapshot | null = null;
@@ -330,6 +362,7 @@ try {
   function toggleHelp(open?: boolean) {
     const shouldOpen = open !== undefined ? open : helpModal.hidden;
     helpModal.hidden = !shouldOpen;
+    if (shouldOpen && playing) controls.unlock();
   }
   btnToggleHelp.addEventListener('click', () => toggleHelp(true));
   btnCloseHelp.addEventListener('click', () => toggleHelp(false));
@@ -562,6 +595,7 @@ try {
       hudOverlay.hidden = true;
     },
     onRoom(room) {
+      if (room?.phase !== 'PLAYING') document.body.classList.remove('paused');
       if (!room || room.phase === 'LOBBY') {
         latestSnapshot = null;
         predictionHistory.length = 0;
@@ -579,6 +613,10 @@ try {
       updateRoomUI(room);
     },
     onSnapshot(snapshot) {
+      if (snapshot.doors) {
+        doorStates = snapshot.doors;
+        syncDoorColliders(villageMap, doorStates);
+      }
       latestSnapshot = snapshot;
       if (snapshot.phase === 'RESULT') {
         if (snapshot.result && resultShown !== snapshot.matchId) {
@@ -1498,7 +1536,7 @@ try {
     sceneLabel.textContent = 'Sân tập offline';
     notice.textContent = 'Chế độ luyện tập offline · WASD di chuyển, C cúi, Shift chạy';
     status.textContent = 'Sân tập offline sẵn sàng. Nhấn Vào sân tập để khóa chuột.';
-    void controls.lock();
+    enter();
   });
 
   // Public Room Browser
@@ -1604,7 +1642,7 @@ try {
     tutorialTitle.textContent = 'Vượt chướng ngại vật';
     tutorialDesc.textContent = 'Dùng phím W, A, S, D di chuyển, giữ Shift chạy nhanh và bấm Space để nhảy qua hàng rào gỗ.';
     tutorialProgressFill.style.width = '33%';
-    void controls.lock();
+    enter();
   });
 
   btnExitTutorial.addEventListener('click', () => {
@@ -1673,7 +1711,10 @@ try {
         camera.position.copy(surveyPosition);
         camera.rotation.copy(surveyRotation);
       }
+      if (locked) document.body.classList.remove('paused');
+      else if (playing && session.currentRoom?.phase !== 'RESULT') document.body.classList.add('paused');
       playing = locked;
+      if (!locked) touchController.reset();
       viewmodel.setVisible(locked && !isSpectating);
       if (locked) {
         prevCameraYaw = camera.rotation.y;
@@ -1701,30 +1742,41 @@ try {
   // Touch Controller Initialization for Mobile / Tablet Devices
   const touchController = new TouchController({
     onMovement(moveX, moveZ) {
+      if (!playing) return;
       if (moveX === 1) controls.pressVirtual('KeyD');
       else if (moveX === -1) controls.pressVirtual('KeyA');
       else { controls.releaseVirtual('KeyD'); controls.releaseVirtual('KeyA'); }
+      if (moveX !== 1) controls.releaseVirtual('KeyD');
+      if (moveX !== -1) controls.releaseVirtual('KeyA');
 
       if (moveZ === 1) controls.pressVirtual('KeyW');
       else if (moveZ === -1) controls.pressVirtual('KeyS');
       else { controls.releaseVirtual('KeyW'); controls.releaseVirtual('KeyS'); }
+      if (moveZ !== 1) controls.releaseVirtual('KeyW');
+      if (moveZ !== -1) controls.releaseVirtual('KeyS');
     },
     onLook(dx, dy) {
+      if (!playing) return;
       controls.addLookDelta(dx, dy);
     },
     onSprint(sprinting) {
+      if (!playing) return;
       if (sprinting) controls.pressVirtual('ShiftLeft');
       else controls.releaseVirtual('ShiftLeft');
     },
     onCrouch(crouched) {
+      if (!playing) return;
       if (crouched) controls.pressVirtual('KeyC');
       else controls.releaseVirtual('KeyC');
     },
     onJump() {
+      if (!playing) return;
       controls.pressVirtual('Space');
       setTimeout(() => controls.releaseVirtual('Space'), 120);
     },
     onAction(held) {
+      if (!playing) return;
+      if (held && interactWithDoor()) return;
       if (currentRole === 'POLICE') {
         if (held) controls.triggerCapture();
       } else {
@@ -1739,9 +1791,7 @@ try {
   function toggleSettings(open?: boolean) {
     const shouldOpen = open !== undefined ? open : settingsModal.hidden;
     settingsModal.hidden = !shouldOpen;
-    if (shouldOpen && document.pointerLockElement) {
-      document.exitPointerLock();
-    }
+    if (shouldOpen && playing) controls.unlock();
   }
   btnToggleSettings.addEventListener('click', () => toggleSettings(true));
   btnCloseSettings.addEventListener('click', () => toggleSettings(false));
@@ -1970,15 +2020,34 @@ try {
     });
   }
   container.setAttribute('aria-busy', 'true');
-  void loadVillageModels(world.village, world.jailModel, () => disposed).finally(() => {
+  button.disabled = true;
+  const loadingVillage = requireElement('#village-loading');
+  void loadVillageModels(world.village, world.jailModel, () => disposed, (loaded, total) => {
+    loadingVillage.textContent = 'Đang tải cảnh làng… ' + loaded + '/' + total;
+  }).catch(error => {
+    status.textContent = error instanceof Error ? error.message : 'Không tải được cảnh làng. Hãy tải lại trang.';
+    loadingVillage.textContent = status.textContent;
+    container.dataset.assetError = 'true';
+  }).finally(() => {
     if (!disposed) {
+      loadingVillage.hidden = !container.dataset.assetError;
+      button.disabled = Boolean(container.dataset.assetError);
       renderer.shadowMap.needsUpdate = true;
       container.setAttribute('aria-busy', 'false');
     }
   });
 
-  const enter = () => { void controls.lock(); };
+  const enter = () => {
+    if (container.getAttribute('aria-busy') === 'true' || container.dataset.assetError) return;
+    if (touchController.enabled && matchMedia('(pointer: coarse)').matches) controls.lockTouch();
+    else void controls.lock();
+  };
   button.addEventListener('click', enter);
+  const resumeVillage = requireElement<HTMLButtonElement>('#resume-village');
+  resumeVillage.addEventListener('click', enter);
+  const pauseVillage = requireElement<HTMLButtonElement>('#village-pause');
+  const pauseFromTouch = () => controls.unlock();
+  pauseVillage.addEventListener('click', pauseFromTouch);
 
   const resize = () => resizeScene(renderer, camera, container.clientWidth, container.clientHeight);
   const observer = new ResizeObserver(resize);
@@ -2031,6 +2100,7 @@ try {
       while (accumulated >= tickMs && steps < 3) {
         previous = { ...player, pos: [player.pos[0], player.pos[1], player.pos[2]] };
         const input = controls.input.consume();
+        if (isOffline) advanceDoors(villageMap, doorStates, tickMs, [{ pos: player.pos, height: player.crouched ? movementRules.crouchHeight : movementRules.standingHeight }]);
 
         // Immediate Client-Side Prediction: Step physics locally at 30Hz!
         const role = currentRole || 'ROBBER';
@@ -2317,6 +2387,13 @@ try {
       quickChatHints.hidden = !playing || isSpectating;
     }
 
+    const nearbyDoor = playing && !isSpectating && latestSnapshot?.self.state !== 'JAILED' ? nearestDoor(player.pos, villageMap) : undefined;
+    doorButton.hidden = !nearbyDoor;
+    if (nearbyDoor) {
+      const state = doorStates.find(state => state.id === nearbyDoor.id);
+      doorButton.textContent = (state && state.target > 0 ? 'Đóng cửa' : 'Mở cửa') + ' · E';
+    }
+    updateKitDoors(doorStates, 1 / 30);
     renderer.render(scene, camera);
 
     if (time - lastDebugUpdate >= 100) { // 10Hz debug UI updates
@@ -2324,6 +2401,8 @@ try {
       const input = controls.input.peek();
       debug.dataset.x = player.pos[0].toFixed(3);
       debug.dataset.yaw = String(camera.rotation.y);
+      debug.dataset.y = String(player.pos[1]);
+      debug.dataset.z = String(player.pos[2]);
       debug.dataset.eye = camera.position.y.toFixed(3);
       debug.dataset.grounded = String(player.grounded);
       debug.textContent = `X/Z: ${player.pos[0].toFixed(2)}/${player.pos[2].toFixed(2)} · Sprint: ${Number(input.sprint)} · Cúi: ${Number(input.crouch)} · Cứu: ${Number(input.rescueHeld)} · Input X/Z ${input.moveX}/${input.moveZ} · E ${Number(input.rescueHeld)} · Yaw ${camera.rotation.y.toFixed(2)} · Pitch ${camera.rotation.x.toFixed(2)}`;
@@ -2342,6 +2421,10 @@ try {
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    pauseVillage.removeEventListener('click', pauseFromTouch);
+    resumeVillage.removeEventListener('click', enter);
+    window.removeEventListener('keydown', doorKey, true);
+    doorButton.removeEventListener('click', interactWithDoor);
     viewmodel.dispose();
     removePreview?.();
     mockDetails.dispose();

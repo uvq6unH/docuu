@@ -1,5 +1,11 @@
 # Bàn giao backend để ghép với frontend
 
+## Bản tích hợp 27/11/2026 — Vietnam Village Kit
+
+Phần này thay các tọa độ/hash v0 trong lịch sử bên dưới. FE/BE hiện cùng đọc `packages/shared/maps/vietnam-village.json` và tính SHA-256 từ bytes thực. Các luật bắt/cứu, thời gian, vai và input cũ được giữ. Shared đã bổ sung heightfield, box có yaw, step offset và trạng thái cửa. Room có bản sao world riêng, cập nhật góc/collider cửa trước movement và LOS; không lấy GLB hoặc tọa độ client làm authority. `door:interact` nhận requestId, server chọn cửa gần vị trí thật; snapshot có `doors` tùy chọn.
+
+Khi ghép nhánh: build shared → server → client bằng `npm run build` ở gốc; restart backend, tải lại FE mọi máy, tạo phòng mới. Không giữ server dist/map hash cũ. Backend tiếp theo cần ưu tiên playtest bot tại ngõ/cửa và đo tick khi đủ 6 người trên map mới, sau đó điều chỉnh bố cục có review FE/BE; chưa thay luật để xử lý vấn đề đồ họa. Chi tiết tại `frontend/docs/VIETNAM_VILLAGE_KIT.md` và `NETWORK_PROTOCOL.md`.
+
 ## Quyết định ngày 19/11/2026
 
 Nhóm chọn **map, va chạm và mô phỏng di chuyển của sân tập FE** làm bản chuẩn cho cả hai phía. Server vẫn quyết định toàn bộ trạng thái trận. Protocol v1 mà FE đang dùng với F06 tiếp tục là hợp đồng mạng. Bản backend đã đối chiếu là commit `66695d1`. Các bước bên dưới là việc cần triển khai.

@@ -1,4 +1,5 @@
 import type { GameRules } from './rules.ts';
+import type { DoorState } from './doors.ts';
 
 export const PROTOCOL_VERSION = 1;
 
@@ -58,6 +59,7 @@ export interface MatchResult {
 }
 
 export interface Snapshot {
+  doors?: DoorState[];
   protocolVersion: 1;
   matchId: string;
   tick: number;
@@ -170,6 +172,7 @@ export interface GameEvent {
 }
 
 export const CLIENT_EVENTS = {
+  DOOR_INTERACT: 'door:interact',
   ROOM_CREATE: 'room:create',
   ROOM_JOIN: 'room:join',
   ROOM_RESUME: 'room:resume',

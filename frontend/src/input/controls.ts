@@ -104,6 +104,7 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
   }, options);
 
   const onMouseDown = (event: MouseEvent) => {
+    if (event.target instanceof Element && event.target.closest('button, input, select, textarea')) return;
     if (locked && event.button === 0) input.capture();
   };
   canvas.addEventListener('mousedown', onMouseDown, options);
@@ -114,6 +115,14 @@ export function createControls({ canvas, camera, onLockChange, onError, onToggle
   }, options);
 
   return {
+    unlock: release,
+    lockTouch() {
+      if (disposed || locked) return;
+      wantsLock = true;
+      locked = true;
+      input.clear();
+      onLockChange(true);
+    },
     input,
     setSensitivity(multiplier: number) {
       if (Number.isFinite(multiplier) && multiplier > 0) {

@@ -528,10 +528,10 @@ button {
 .btn-folk-tool,
 .btn-tool {
   flex: 1;
-  background: rgba(20, 28, 23, 0.9) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: #765535 !important;
+  border: 1px solid #5c402a !important;
   border-radius: var(--radius-sm) !important;
-  color: var(--text-body) !important;
+  color: #fff5df !important;
   font-size: 11px !important;
   font-weight: 600 !important;
   padding: 8px 12px !important;
@@ -543,8 +543,8 @@ button {
 .btn-folk-tool:hover:not(:disabled),
 .btn-tool:hover:not(:disabled) {
   border-color: var(--gold-primary) !important;
-  color: var(--gold-light) !important;
-  background: rgba(30, 42, 34, 0.95) !important;
+  color: #fff5df !important;
+  background: #5c402a !important;
   transform: translateY(-1px);
 }
 
@@ -2195,4 +2195,146 @@ fieldset button {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+/* Village kit surface: warm plaster menus, timber controls and compact field HUD. */
+:root {
+  --jade-green: #326444;
+  --jade-green-light: #487a48;
+  --vermilion-primary: #a44832;
+}
+#app, #viewport { height: 100dvh; }
+.panel, .help-content {
+  --bg-panel: #f5eddb;
+  --bg-card: #eae1ca;
+  --bg-card-inner: #fff8e9;
+  --bg-card-hover: #dfd5ba;
+  --text-hero: #263d2d;
+  --text-body: #354334;
+  --text-muted: #58614d;
+  --text-dim: #62634f;
+  --gold-primary: #886333;
+  --gold-light: #765326;
+  --border-gold: #c5b58e;
+  --border-gold-bright: #96835b;
+  color: var(--text-body);
+  background: var(--bg-panel);
+}
+.panel {
+  top: 112px; left: 28px; transform: none;
+  width: min(470px, calc(100vw - 40px));
+  max-height: calc(100dvh - 140px);
+  padding: 25px;
+  border: 1px solid #b9a784;
+  border-top: 5px solid #a44832;
+  border-radius: 5px 5px 12px 12px;
+  backdrop-filter: none;
+  box-shadow: 0 18px 45px #27392238;
+}
+.panel::before, .panel::after { display: none; }
+.panel h1 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.025em; line-height: 1.12; }
+.panel .notice { color: #62634f; font-size: 12px; }
+.panel .menu-tabs-bar { gap: 0; border-bottom: 1px solid #c5b58e; }
+.panel .menu-tab-btn { color: #4f5945; padding: 12px 6px; font-size: 11px; }
+.panel .menu-tab-btn.active { color: #f8f1de; background: #326444; border-color: #326444; }
+.panel .action-cards-grid { grid-template-columns: 1fr; gap: 12px; }
+.panel .action-card, .panel .guide-tab-card, .panel .customization-card {
+  background: #eee5cf; border-color: #cbbd9d; box-shadow: none; padding: 16px;
+}
+.panel .card-tag { color: #77582e; }
+.panel .card-heading { color: #2c432f; font-size: 17px; }
+.panel input, .panel select { background: #fffaf0; color: #2c3a2b; border-color: #b6a888; }
+.panel input::placeholder { color: #78715b; }
+.panel button { min-height: 42px; }
+.panel .btn-folk-primary, .panel .btn-ready, .panel .btn-folk-join {
+  color: #fff6e3; background: #326444; border-color: #244b32; box-shadow: 0 3px 0 #244b32;
+}
+.panel .btn-folk-secondary, .panel .btn-secondary, .panel .btn-folk-tool {
+  color: #fff5df; background: #765535; border-color: #5c402a;
+}
+.panel .btn-danger { color: #fff6e3; background: #a44832; border-color: #7f3324; }
+.panel button:disabled { opacity: .6; box-shadow: none; }
+.panel:has(#room-view:not([hidden])) { width: min(760px, calc(100vw - 40px)); }
+.masthead { top: max(18px, env(safe-area-inset-top)); left: 28px; right: 28px; }
+.brand-crest { background: #f6efddec; padding: 10px 16px; border-radius: 5px; box-shadow: 0 6px 18px #283a2020; }
+.wordmark { color: #2d4932; text-shadow: none; font-size: 19px; }
+.wordmark strong { color: #9b4933; }
+.folk-seal { color: #fff4da; background: #a44832; border-color: #a44832; }
+.server-status-pill { color: #f8efda; background: #314b34eb; border-color: #7b8e61; }
+.hud-card, .hud-compass, .hud-chip {
+  color: #f9efd9; background: #304834ed; border: 1px solid #a7986e; border-radius: 6px;
+  backdrop-filter: none; box-shadow: 0 4px 12px #263a2525;
+}
+.hud-time { color: #f7d17b; font-variant-numeric: tabular-nums; }
+.hud-minimap-container { border-color: #ab9665; border-radius: 6px; }
+.pause-banner { display: none; }
+.paused .pause-banner {
+  display: flex; align-items: center; gap: 16px; justify-content: space-between;
+  margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #c5b58e;
+}
+.pause-banner strong { font-size: 18px; color: #2c432f; }
+.pause-banner p { font-size: 12px; margin: 4px 0 0; color: #62634f; }
+.pause-banner button { padding: 10px 15px; color: #fff4de; background: #326444; border: 1px solid #244b32; border-radius: 5px; cursor: pointer; }
+#door-interaction {
+  position: fixed; z-index: 120; left: 50%; bottom: max(28px, env(safe-area-inset-bottom));
+  transform: translateX(-50%); padding: 13px 22px; min-height: 48px; min-width: 180px;
+  color: #fff6df; background: #765535; border: 2px solid #e4c58d; border-radius: 7px;
+  font: 600 15px var(--font-body); box-shadow: 0 5px 16px #1d2e2340; cursor: pointer;
+}
+.touch-btn { min-width: 50px; min-height: 50px; color: #fff5dc; background: #37523de8; border-color: #cfba8b; }
+@media (max-width: 700px) {
+  .masthead { top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px; }
+  .brand-crest { padding: 7px 10px; }
+  .wordmark { font-size: 14px; }
+  .server-status-pill { max-width: 45%; font-size: 10px; overflow-wrap: anywhere; }
+  .panel, .panel:has(#room-view:not([hidden])) {
+    top: max(85px, calc(env(safe-area-inset-top) + 75px)); left: 10px; width: calc(100vw - 20px);
+    max-height: calc(100dvh - 100px - env(safe-area-inset-top)); padding: 18px;
+  }
+  .panel h1 { font-size: 29px; }
+  .panel button, .panel input, .panel select { min-height: 46px; }
+  .hud-top-bar { flex-wrap: wrap; gap: 4px; max-width: calc(100vw - 105px); margin-right: 96px; }
+  .hud-card { font-size: 11px; padding: 6px 8px; }
+  #hud-action { font-size: 11px; max-width: 210px; }
+  #hud-minimap-container { width: 88px; height: 104px; right: 8px; top: 52px; }
+  #hud-minimap { width: 80px; height: 80px; }
+  #door-interaction { bottom: calc(170px + env(safe-area-inset-bottom)); font-size: 14px; }
+  .touch-joystick-zone, .touch-buttons { bottom: max(26px, env(safe-area-inset-bottom)); }
+}
+@media (max-height: 500px) and (pointer: coarse) {
+  .panel, .panel:has(#room-view:not([hidden])) { top: 65px; max-height: calc(100dvh - 75px); width: min(560px, calc(100vw - 20px)); }
+  #door-interaction { bottom: calc(100px + env(safe-area-inset-bottom)); }
+}
+
+.panel h1, .panel .card-heading { text-shadow: none; color: #2c432f; }
+.panel .card-tag { background: transparent; border: 0; box-shadow: none; padding: 0; color: #765326; }
+body:not(.looking) #touch-controls { display: none !important; }
+body:not(.looking) .hud-corner-bl, body:not(.looking) .hud-corner-br { display: none; }
+#village-pause { display: none; }
+@media (pointer: coarse) {
+  .looking #village-pause {
+    display: block; position: fixed; z-index: 130; left: 50%; bottom: max(20px, env(safe-area-inset-bottom));
+    transform: translateX(-50%); min-height: 48px; padding: 10px 16px; border-radius: 6px;
+    background: #f4ead3; border: 1px solid #987d52; color: #304834; font: 600 14px var(--font-body);
+  }
+  #debug { display: none; }
+  .hud-corner-br { max-width: 42vw; bottom: 82px; font-size: 10px; }
+}
+
+#village-loading {
+  position: fixed; z-index: 160; bottom: max(20px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+  max-width: calc(100vw - 32px); padding: 12px 22px; border-radius: 6px; border: 1px solid #cab78b;
+  background: #f5eddb; color: #304834; font: 600 14px var(--font-body); box-shadow: 0 6px 20px #28382030;
+}
+
+#hud-action { font-size: 12px; line-height: 1.4; color: #fff3d4; padding: 6px 10px; background: #304834ed; border-radius: 5px; }
+#hud-action:empty { display: none; }
+.looking .hud-top-bar { max-width: calc(100vw - 350px); }
+@media (max-width: 700px) {
+  .looking .hud-top-bar { max-width: calc(100vw - 110px); }
+  .hud-compass { width: min(280px, calc(100vw - 110px)); margin-right: 96px; }
+  #hud-action { font-size: 11px; }
+}
+@media (pointer: coarse) {
+  #quick-chat-hints, .hud-corner-br { display: none; }
 }

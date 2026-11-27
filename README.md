@@ -2,6 +2,12 @@
 
 Game dân gian Việt Nam, multiplayer FPS 3D trên trình duyệt, đồ họa low-poly. Không súng, không sát thương, không cướp tiền. Trọng tâm: chạy đuổi, cắt đuôi, nấp rơm/bụi cỏ và giải cứu đồng đội khỏi nhà giam.
 
+## Cập nhật môi trường 27/11/2026
+
+Bản đồ đang chạy là `packages/shared/maps/vietnam-village.json`, dùng đủ 35 GLB do người dùng cung cấp trong `frontend/vietnam-village-kit`. Có 10 nhà vào được, nội thất, 10 cửa bản lề đồng bộ theo phòng, địa hình cao thấp thực và ranh giới 80×80m. Các số liệu nghiệm thu bên dưới là lịch sử trước lần nâng cấp này; kết quả và giới hạn kiểm thử mới ghi tại [tiến trình FE](frontend/docs/TIEN_TRINH.md) và [hướng dẫn kit](frontend/docs/VIETNAM_VILLAGE_KIT.md).
+
+Sau khi lấy code mới, chạy `npm run build` tại gốc, khởi động lại backend, rồi tải lại FE trên mọi máy và tạo phòng mới. Hai phía phải dùng cùng bytes map để ready thành công. Không cần import kit lại khi chỉ chạy game.
+
 ## Tổng quan tính năng đã hoàn thiện
 
 - **Quy mô ván chơi**: 6 người (2 Cảnh sát + 4 Cướp) hoặc linh hoạt từ 2–6 người với hệ thống **Bot AI tự động bù slot**.

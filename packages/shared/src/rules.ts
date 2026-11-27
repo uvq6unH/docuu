@@ -531,3 +531,12 @@ export function movementRulesFromGameRules(gameRules: GameRules): MovementRules 
     },
   };
 }
+/** Village geometry/controller tunables, shared by authoritative server and prediction. */
+export const VILLAGE_INTERACTION = Object.freeze({
+  stepHeight: .2,
+  maxSlope: .7,
+  doorReach: 1.5,
+  doorDurationMs: 400,
+  doorAngle: 95 * Math.PI / 180,
+  doorSweepStep: .025,
+});

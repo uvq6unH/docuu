@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { villagePreview } from '../../src/world/village';
 
 it('builds the documented layout with all three inspection points', () => {
@@ -80,4 +80,11 @@ it('previews one jail offline and follows only the server choice in a session', 
   setServerJail(null);
   inspectJail('J1');
   expect(jailModel.visible).toBe(false);
+});
+
+// Retain regression coverage for the original flat-map preview.
+vi.mock('../../src/world/shared-map', async () => {
+  const { validateMap } = await import('../../../packages/shared/src/map');
+  const { default: data } = await import('../../../packages/shared/maps/village-v1.json');
+  return { villageMap: validateMap(data) };
 });

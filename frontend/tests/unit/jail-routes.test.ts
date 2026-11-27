@@ -1,6 +1,6 @@
 import { clear, surveyRoute } from '../../src/world/survey-route';
 import { Box3, Vector3 } from 'three';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { villagePreview } from '../../src/world/village';
 import { initialMovement, stepMovement } from '../../../packages/shared/src/movement';
 import { movementRules } from '../../../packages/shared/src/rules';
@@ -47,3 +47,10 @@ it('detects a thin obstacle between clear endpoints', () => {
 
 
 
+
+// Retain regression coverage for the original flat-map preview.
+vi.mock('../../src/world/shared-map', async () => {
+  const { validateMap } = await import('../../../packages/shared/src/map');
+  const { default: data } = await import('../../../packages/shared/maps/village-v1.json');
+  return { villageMap: validateMap(data) };
+});

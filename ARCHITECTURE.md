@@ -4,7 +4,7 @@
 
 TypeScript cả frontend/backend để dùng chung contract và mô phỏng. Client Vite + Three.js + DOM/CSS (không cần React cho MVP); Node.js + Express + Socket.IO server; npm workspaces; Vitest cho unit/integration, Playwright cho smoke. Chọn Node LTS được Vite hỗ trợ, pin exact version trong .nvmrc, commit package-lock.json. Không chọn phiên bản thư viện tùy tiện; xác nhận tương thích khi bootstrap.
 
-Three.js chỉ render, không làm authority. Mô phỏng shared thuần TS, capsule/AABB static, timestep cố định. Không đưa GLB mesh vào server và không cần physics engine cho map chỉ có mặt đất phẳng và hộp; nếu cần Rapier sau MVP, thay adapter và test parity. Không dùng đồng thời hai physics engine.
+Three.js chỉ render, không làm authority. Mô phỏng shared thuần TS, capsule/box có yaw, timestep cố định. Từ 27/11/2026, map mặc định là `packages/shared/maps/vietnam-village.json`: heightfield trích từ terrain GLB, collider tĩnh và định nghĩa bản lề cửa. Server đọc JSON, không đọc GLB và không cần thêm physics engine. `terrain.ts` lấy cao độ đúng tam giác; `doors.ts` tính góc/collider cửa và dừng animation khi gặp capsule. Mỗi Room clone world và DoorState riêng, cập nhật trước movement/LOS, gửi góc trong snapshot. Client prediction dùng cùng hàm với trạng thái cửa server; Three.js chỉ nội suy hình ảnh.
 
 ```mermaid
 flowchart TD

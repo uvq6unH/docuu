@@ -51,6 +51,18 @@ export class TouchController {
     }
   }
 
+  public reset(): void {
+    this.joystickTouchId = null;
+    this.lookTouchId = null;
+    this.sprinting = this.crouched = false;
+    if (this.joystickKnob) this.joystickKnob.style.transform = 'translate(-50%, -50%)';
+    document.querySelectorAll('#touch-controls .active').forEach(button => button.classList.remove('active'));
+    this.callbacks.onMovement(0, 0);
+    this.callbacks.onSprint(false);
+    this.callbacks.onCrouch(false);
+    this.callbacks.onAction(false);
+  }
+
   private setupListeners(): void {
     // Joystick Touch
     if (this.joystickZone) {
@@ -104,7 +116,7 @@ export class TouchController {
         if (touch.clientX > window.innerWidth * 0.45 && touch.clientY > 80 && this.lookTouchId === null) {
           // Avoid tapping action buttons directly
           const target = document.elementFromPoint(touch.clientX, touch.clientY);
-          if (target && target.closest('.touch-btn')) continue;
+          if (target && target.closest('button, input, select, textarea, .help-modal, .panel')) continue;
 
           this.lookTouchId = touch.identifier;
           this.lastLookPos = { x: touch.clientX, y: touch.clientY };

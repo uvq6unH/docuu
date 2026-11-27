@@ -5,8 +5,10 @@ import { villageMap } from './shared-map';
 import { detailModelSurfaces } from './surface-detail';
 import { createObjectDetail } from './object-detail';
 import { createEnterableHouses } from './enterable-houses';
+import { loadKitModels } from './kit-models';
 
-export async function loadVillageModels(village: Group, jailModel: Group, isDisposed: () => boolean) {
+export async function loadVillageModels(village: Group, jailModel: Group, isDisposed: () => boolean, onProgress?: (loaded: number, total: number) => void) {
+  if (villageMap.terrain) return loadKitModels(village, jailModel, isDisposed, onProgress);
   const loader = new GLTFLoader();
   const objects = villageMap.objects;
   const assets = new Set([...objects.map(o => o.asset), 'jail']);
